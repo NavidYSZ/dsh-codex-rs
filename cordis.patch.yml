@@ -1,0 +1,8 @@
+# Root-level row: the client half themes every view, the host half adds the
+# macOS tools "computer", "app" and "browser". Defaults live in index.js; to
+# change them, add a row with `id: dsh-codex` and a `config:` block to your
+# profile's cordis.patch.yml (see README).
+- insert:
+    - id: dsh-codex
+      name: '@yousufzai/dsh-codex'
+      config: {}

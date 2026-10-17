@@ -1,0 +1,48 @@
+{
+  "name": "@yousufzai/dsh-codex",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Codex look for DeepSeek Harness plus macOS computer use, background app control and a background browser with a floating mini window",
+  "homepage": "https://github.com/NavidYSZ/dsh-codex#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NavidYSZ/dsh-codex.git"
+  },
+  "bugs": "https://github.com/NavidYSZ/dsh-codex/issues",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/*.js",
+    "cordis.patch.yml",
+    "helper/Sources/*.swift",
+    "helper/Info.plist",
+    "helper/build.sh",
+    "README.md",
+    "README.de.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-theme",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-tool",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "license": "MIT"
+}

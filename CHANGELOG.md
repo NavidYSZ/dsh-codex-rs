@@ -1,0 +1,85 @@
+# Changelog
+
+## 0.2.0 – 2026-10-17
+
+First public release.
+
+### Added
+
+- **Codex-style composer.** Model name in ink, effort level and chevrons in
+  grey, "Full access" in orange, a larger "+" button. The stats line stays
+  faint until hovered.
+- **New-session start page.** A grey whale mark and "What should we work on
+  in ‹workspace›?" sit in the middle. The workspace name opens the picker.
+  The composer sits at the bottom, with workspace and mode in a grey tray
+  behind it.
+- **`browser` tool.** Headless Chrome with its own profile, driven over
+  `--remote-debugging-pipe`. Highlights:
+  - numbered element outlines, screenshots and page text;
+  - tabs, `show`/`hide` for signing in, popup handling;
+  - downloads blocked, password fields refused, idle exit after 15 minutes.
+- **`app` tool.** Operates one app window in the background through
+  Accessibility. Highlights:
+  - AXPress, AXValue, insertion at the caret, menu bar and AX actions;
+  - window-only screenshots, even when the window is covered;
+  - falls back to events posted straight to the app's process;
+  - window chrome buttons, right-click menus and password fields are
+    excluded.
+- **Mini window.** A floating glass panel (`NSGlassEffectView` on macOS 26)
+  with:
+  - title, current step, live preview and agent cursor;
+  - Stop, collapse and drag;
+  - exclusion from screenshots.
+- **Transcript rows for `app` and `browser`,** with a preview and the name
+  of the target element.
+- **Language follows macOS** (German or English). Set `computerUse.locale`
+  to override it.
+
+### Changed
+
+- **Helper 0.2.0:**
+  - new `app_*` and `mini_*` socket commands;
+  - Stop in the mini window locks all actions for 20 seconds, as Esc does;
+  - Esc acts only in foreground mode.
+- The `computer` tool description points the model to `browser` for
+  websites and to `app` for single apps.
+- `presentationMeta` now carries `tool`, `place` (app or host) and `target`
+  (element name).
+- New config sections: `apps`, `browser` and `mini`.
+- `lib/cua-client.js` has a `launch: false` option, so preview images do
+  not start the helper.
+- Defaults are English. The bundle's own `cordis.patch.yml` sets no
+  strings.
+
+### Tested
+
+On macOS 26 with Apple silicon:
+
+- **DSH 0.2.0-rc.2:**
+  - `app` with Calculator: background launch, 7 × 6 = 42 through AXPress,
+    menu listing, Escape;
+  - `browser` with example.com and a Wikipedia search, using a throwaway
+    profile;
+  - the mini window, the tool schemas against DSH's validator, and light
+    and dark themes.
+- **DSH 0.2.1-rc.2:** in an isolated web instance, the bundle loads, and the
+  start page, composer and plugin page render without console errors.
+
+### Known gaps
+
+- **No end-to-end run with a live model yet.** Untested: how the model
+  picks tools, outlines inside a real conversation, and the mini window
+  during a real session.
+- **`app` is only tested with Calculator.** Apps with web content
+  (Electron, Safari) and text insertion through `AXSelectedText` are
+  untested.
+
+## 0.1.0 – 2026-10-17
+
+Not published.
+
+- Codex colors, layout, "DeepSeek" wordmark and a flat sidebar.
+- `computer` tool with:
+  - the Swift helper, overlay cursor and banner;
+  - Esc to cancel;
+  - a guard for permission dialogs, System Settings and password apps.

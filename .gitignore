@@ -1,0 +1,5 @@
+node_modules/
+helper/build/
+.DS_Store
+# Personal notes (install log, local paths) stay out of git.
+*.local.md
