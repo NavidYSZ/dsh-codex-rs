@@ -1,0 +1,444 @@
+{
+ "description": "Real dsh log: a 503 is retried, then the provider rejects the API key (AUTH).",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-3f5d1053-6313-462e-889c-db8d47c6dba1",
+   "createdAt": 1792487640000,
+   "cwd": "/Users/alex/code/timeparse",
+   "isSeeded": false,
+   "delegationDepth": 0
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792487640005,
+    "data": {
+     "preset": "workspace-write"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792487640010,
+    "data": {
+     "mode": "workspace-write"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792487640015,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 3,
+    "time": 1792487640020,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "inserted": [
+      {
+       "content": [
+        {
+         "type": "text",
+         "text": "Refactor the date parsing in src/parse.rs"
+        }
+       ],
+       "source": {
+        "kind": "user"
+       },
+       "role": "user",
+       "id": "f3eb5478-4064-4a9c-83da-d87ec997c0eb"
+      }
+     ]
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 4,
+    "time": 1792487640020,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 5,
+    "time": 1792487640025,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "removedCount": 1,
+     "inserted": []
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 6,
+    "time": 1792487640275,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "system/message",
+    "seq": 7,
+    "time": 1792487640280,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "You are an AI agent powered by DeepSeek Harness.\n\n[… system prompt trimmed for the fixture …]"
+       }
+      ],
+      "source": {
+       "kind": "system-prompt"
+      },
+      "id": "bebac328-1fe4-48e8-9e95-ed6e409352b1"
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 8,
+    "time": 1792487640285,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Refactor the date parsing in src/parse.rs"
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "f3eb5478-4064-4a9c-83da-d87ec997c0eb"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 9,
+    "time": 1792487640290,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/Users/alex/code/timeparse\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed."
+      }
+     ],
+     "source": {
+      "kind": "runtime-context",
+      "form": "snapshot",
+      "sections": [
+       {
+        "name": "sandbox:policy",
+        "text": "Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/Users/alex/code/timeparse\". Some platform temporary areas may also be writable."
+       },
+       {
+        "name": "approval:policy",
+        "text": "Approval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed."
+       }
+      ]
+     },
+     "role": "user",
+     "id": "85dba9f7-1cb7-456c-8b85-4b26024105d7"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/header",
+    "seq": 10,
+    "time": 1792487640295,
+    "data": {
+     "header": {
+      "config": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "maxTokens": 256000,
+       "reasoningEffort": "high"
+      },
+      "adapterDefaults": {
+       "reasoningEffort": true,
+       "maxTokens": true
+      },
+      "tools": [
+       {
+        "name": "bash"
+       },
+       {
+        "name": "create_goal"
+       },
+       {
+        "name": "edit"
+       },
+       {
+        "name": "exit_plan_mode"
+       },
+       {
+        "name": "get_goal"
+       },
+       {
+        "name": "glob"
+       },
+       {
+        "name": "grep"
+       },
+       {
+        "name": "interrupt_agent"
+       },
+       {
+        "name": "job_kill"
+       },
+       {
+        "name": "job_list"
+       },
+       {
+        "name": "job_output"
+       },
+       {
+        "name": "list_agents"
+       },
+       {
+        "name": "read"
+       },
+       {
+        "name": "read_image"
+       },
+       {
+        "name": "send_message"
+       },
+       {
+        "name": "skill"
+       },
+       {
+        "name": "subagent"
+       },
+       {
+        "name": "subagent_fork"
+       },
+       {
+        "name": "todo_write"
+       },
+       {
+        "name": "update_goal"
+       },
+       {
+        "name": "web_fetch"
+       },
+       {
+        "name": "web_search"
+       },
+       {
+        "name": "workflow"
+       },
+       {
+        "name": "write"
+       }
+      ]
+     },
+     "reason": "initial"
+    }
+   },
+   {
+    "type": "request/context",
+    "seq": 11,
+    "time": 1792487640300,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000,
+     "systemPromptUpdate": "in-history"
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 12,
+    "time": 1792487640305,
+    "data": {
+     "title": "Refactor the date parsing in",
+     "messageSeqs": [
+      8
+     ],
+     "source": {
+      "kind": "fallback"
+     }
+    }
+   },
+   {
+    "type": "session/title-llm-request",
+    "seq": 13,
+    "time": 1792487640310,
+    "data": {
+     "titleProvider": "session-title-first-prompt-llm",
+     "messageSeqs": [
+      8
+     ],
+     "route": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash"
+     },
+     "system": "Create a concise title for an AI coding-assistant session from the supplied huma…",
+     "messages": [
+      {
+       "content": [
+        {
+         "type": "text",
+         "text": "Generate the session title from this JSON array of human messages:\n[{\"seq\":8,\"text\":\"Refactor the date parsing in src/parse.rs\"}]"
+        }
+       ],
+       "source": {
+        "kind": "dsh-session-title-llm"
+       },
+       "role": "user",
+       "id": "b014ecb3-f7f5-45b7-9471-ac77d3cffb25"
+      }
+     ],
+     "maxTokens": 64
+    }
+   },
+   {
+    "type": "assistant/attempt",
+    "seq": 14,
+    "time": 1792487640315,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792528994415,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "error",
+         "failure": {
+          "message": "Server is busy, please retry later.",
+          "code": "SERVER",
+          "status": 503
+         }
+        }
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "llm/retry",
+    "seq": 15,
+    "time": 1792487640320,
+    "data": {
+     "retryId": "ce355546-365c-4001-aa6e-caba411b0bd3",
+     "turn": 1,
+     "step": 1,
+     "provider": "deepseek-official",
+     "mode": "normal",
+     "policyKey": "[\"normal\",5,[\"EMPTY_RESPONSE\",\"RATE_LIMIT\",\"SERVER\",\"TIMEOUT\",\"TRANSPORT\"],500,10000,0.1]",
+     "retry": 1,
+     "maxRetries": 5,
+     "delayMs": 485.8980895576957,
+     "failure": {
+      "message": "Server is busy, please retry later.",
+      "code": "SERVER",
+      "status": 503
+     }
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 16,
+    "time": 1792487640325,
+    "data": {
+     "title": "Refactor date parsing",
+     "messageSeqs": [
+      8
+     ],
+     "source": {
+      "kind": "provider",
+      "provider": "session-title-first-prompt-llm",
+      "model": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     }
+    }
+   },
+   {
+    "type": "llm/retry-started",
+    "seq": 17,
+    "time": 1792487640925,
+    "data": {
+     "retryId": "ce355546-365c-4001-aa6e-caba411b0bd3",
+     "turn": 1,
+     "step": 1,
+     "retry": 1
+    }
+   },
+   {
+    "type": "assistant/attempt",
+    "seq": 18,
+    "time": 1792487640930,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792528994919,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "error",
+         "failure": {
+          "message": "Authentication Fails, Your api key: ****mock is invalid",
+          "code": "AUTH",
+          "status": 401
+         }
+        }
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 19,
+    "time": 1792487640935,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 20,
+    "time": 1792487640940,
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "message": "Authentication Fails, Your api key: ****mock is invalid",
+       "code": "AUTH",
+       "status": 401
+      }
+     }
+    }
+   }
+  ]
+ },
+ "live": 14
+}

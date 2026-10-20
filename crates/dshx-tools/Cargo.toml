@@ -1,0 +1,36 @@
+[package]
+name = "dshx-tools"
+description = "Model-facing tools of dsh-codex: bash, jobs, file tools, search, todo, web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dshx-core.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+reqwest.workspace = true
+tempfile.workspace = true
+encoding_rs = "0.8"
+globset = "0.4"
+grep-matcher = "0.1"
+grep-regex = "0.1"
+grep-searcher = "0.1"
+htmd = "0.5"
+html5ever = "0.38"
+markup5ever_rcdom = "0.38"
+ignore = "0.4"
+libc = "0.2"
+sha2 = "0.10"
+similar = "2"
+url = "2"
+
+[dev-dependencies]

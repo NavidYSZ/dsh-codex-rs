@@ -25,8 +25,8 @@
     "helper/Sources/*.swift",
     "helper/Info.plist",
     "helper/build.sh",
-    "README.md",
-    "README.de.md",
+    "PLUGIN.md",
+    "PLUGIN.de.md",
     "CHANGELOG.md",
     "LICENSE"
   ],

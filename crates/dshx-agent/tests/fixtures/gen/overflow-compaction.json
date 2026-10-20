@@ -1,0 +1,5 @@
+{"sequential": true, "responses": [
+ {"blocks": [{"text": "First answer."}], "stop": "end_turn"},
+ {"blocks": [{"text": "unused"}], "stop": "end_turn", "fail": [400], "fail_message": "This model's maximum context length is 65536 tokens. However, you requested 70000 tokens."},
+ {"blocks": [{"text": "After compaction."}], "stop": "end_turn"}
+]}

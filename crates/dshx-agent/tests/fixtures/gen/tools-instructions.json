@@ -1,0 +1,59 @@
+[
+ {
+  "blocks": [
+   {
+    "thinking": "Let me look.",
+    "signature": "sig-1"
+   },
+   {
+    "text": "Checking files."
+   },
+   {
+    "tool": "read",
+    "args": "{\"file_path\": \"@@CWD@@/a.txt\"}"
+   },
+   {
+    "tool": "glob",
+    "args": "{\"pattern\": \"*.txt\"}"
+   },
+   {
+    "tool": "read",
+    "args": "{\"file_path\": \"@@CWD@@/b.txt\"}"
+   },
+   {
+    "tool": "bash",
+    "args": "{\"command\": \"echo hi\", \"description\": \"say hi\"}"
+   },
+   {
+    "tool": "nope",
+    "args": "{}"
+   },
+   {
+    "tool": "todo_write",
+    "args": "{\"todos\": [{\"content\": \"Do it\", \"status\": \"in_progress\", \"activeForm\": \"Doing it\"}]}"
+   },
+   {
+    "tool": "todo_write",
+    "args": "{\"todos\": [{\"content\": \"Do it\", \"status\": \"in_progress\"}, {\"content\": \"Then that\", \"status\": \"pending\"}]}"
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "blocks": [
+   {
+    "tool": "read",
+    "args": "{\"file_path\": \"@@CWD@@/sub/x.txt\"}"
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "blocks": [
+   {
+    "text": "All done."
+   }
+  ],
+  "stop": "end_turn"
+ }
+]

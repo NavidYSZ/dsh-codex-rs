@@ -1,0 +1,45 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.3.0-alpha.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/NavidYSZ/dsh-codex-rs"
+rust-version = "1.88"
+
+[workspace.dependencies]
+dshx-core = { path = "crates/dshx-core" }
+dshx-llm = { path = "crates/dshx-llm" }
+dshx-session = { path = "crates/dshx-session" }
+dshx-tools = { path = "crates/dshx-tools" }
+dshx-agent = { path = "crates/dshx-agent" }
+dshx-browser = { path = "crates/dshx-browser" }
+dshx-macos = { path = "crates/dshx-macos" }
+dshx-server = { path = "crates/dshx-server" }
+dshx-testkit = { path = "crates/dshx-testkit" }
+
+anyhow = "1"
+async-trait = "0.1"
+base64 = "0.22"
+bytes = "1"
+clap = { version = "4", features = ["derive", "env"] }
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+zstd = "0.13"
+toml = "0.9"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true

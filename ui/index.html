@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="referrer" content="no-referrer" />
+  <title>dsh-codex</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/app.css" />
+  <script src="src/boot-theme.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "./vendor/preact.mjs",
+        "preact/hooks": "./vendor/hooks.mjs",
+        "htm": "./vendor/htm.mjs",
+        "marked": "./vendor/marked.mjs"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

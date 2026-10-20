@@ -1,0 +1,996 @@
+{
+ "description": "Real dsh log: two turns, the second a long Markdown answer with code blocks and a table.",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-89b9d110-593b-4c06-881d-fca8b3dacf4d",
+   "createdAt": 1792487640000,
+   "cwd": "/Users/alex/code/dsh-codex",
+   "isSeeded": false,
+   "delegationDepth": 0
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792487640005,
+    "data": {
+     "preset": "workspace-write"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792487640010,
+    "data": {
+     "mode": "workspace-write"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792487640015,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 3,
+    "time": 1792487640020,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "inserted": [
+      {
+       "content": [
+        {
+         "type": "text",
+         "text": "Short question first: what does fsync guarantee?"
+        }
+       ],
+       "source": {
+        "kind": "user"
+       },
+       "role": "user",
+       "id": "7b74fc44-1ad0-44b4-87e0-9aee03968276"
+      }
+     ]
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 4,
+    "time": 1792487640020,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 5,
+    "time": 1792487640025,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "removedCount": 1,
+     "inserted": []
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 6,
+    "time": 1792487640275,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "system/message",
+    "seq": 7,
+    "time": 1792487640280,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "You are an AI agent powered by DeepSeek Harness.\n\n[… system prompt trimmed for the fixture …]"
+       }
+      ],
+      "source": {
+       "kind": "system-prompt"
+      },
+      "id": "6ee10427-04ab-41a8-9c32-45d066f26c35"
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 8,
+    "time": 1792487640285,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Short question first: what does fsync guarantee?"
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "7b74fc44-1ad0-44b4-87e0-9aee03968276"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 9,
+    "time": 1792487640290,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/Users/alex/code/dsh-codex\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed."
+      }
+     ],
+     "source": {
+      "kind": "runtime-context",
+      "form": "snapshot",
+      "sections": [
+       {
+        "name": "sandbox:policy",
+        "text": "Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/Users/alex/code/dsh-codex\". Some platform temporary areas may also be writable."
+       },
+       {
+        "name": "approval:policy",
+        "text": "Approval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed."
+       }
+      ]
+     },
+     "role": "user",
+     "id": "355f4e02-6fba-482c-b1d5-ed5c8afcf516"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/header",
+    "seq": 10,
+    "time": 1792487640295,
+    "data": {
+     "header": {
+      "config": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "maxTokens": 256000,
+       "reasoningEffort": "high"
+      },
+      "adapterDefaults": {
+       "reasoningEffort": true,
+       "maxTokens": true
+      },
+      "tools": [
+       {
+        "name": "bash"
+       },
+       {
+        "name": "create_goal"
+       },
+       {
+        "name": "edit"
+       },
+       {
+        "name": "exit_plan_mode"
+       },
+       {
+        "name": "get_goal"
+       },
+       {
+        "name": "glob"
+       },
+       {
+        "name": "grep"
+       },
+       {
+        "name": "interrupt_agent"
+       },
+       {
+        "name": "job_kill"
+       },
+       {
+        "name": "job_list"
+       },
+       {
+        "name": "job_output"
+       },
+       {
+        "name": "list_agents"
+       },
+       {
+        "name": "read"
+       },
+       {
+        "name": "read_image"
+       },
+       {
+        "name": "send_message"
+       },
+       {
+        "name": "skill"
+       },
+       {
+        "name": "subagent"
+       },
+       {
+        "name": "subagent_fork"
+       },
+       {
+        "name": "todo_write"
+       },
+       {
+        "name": "update_goal"
+       },
+       {
+        "name": "web_fetch"
+       },
+       {
+        "name": "web_search"
+       },
+       {
+        "name": "workflow"
+       },
+       {
+        "name": "write"
+       }
+      ]
+     },
+     "reason": "initial"
+    }
+   },
+   {
+    "type": "request/context",
+    "seq": 11,
+    "time": 1792487640300,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000,
+     "systemPromptUpdate": "in-history"
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 12,
+    "time": 1792487640305,
+    "data": {
+     "title": "Short question first: what does",
+     "messageSeqs": [
+      8
+     ],
+     "source": {
+      "kind": "fallback"
+     }
+    }
+   },
+   {
+    "type": "session/title-llm-request",
+    "seq": 13,
+    "time": 1792487640310,
+    "data": {
+     "titleProvider": "session-title-first-prompt-llm",
+     "messageSeqs": [
+      8
+     ],
+     "route": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash"
+     },
+     "system": "Create a concise title for an AI coding-assistant session from the supplied huma…",
+     "messages": [
+      {
+       "content": [
+        {
+         "type": "text",
+         "text": "Generate the session title from this JSON array of human messages:\n[{\"seq\":8,\"text\":\"Short question first: what does fsync guarantee?\"}]"
+        }
+       ],
+       "source": {
+        "kind": "dsh-session-title-llm"
+       },
+       "role": "user",
+       "id": "7e012205-b703-4574-9412-0cdb33957215"
+      }
+     ],
+     "maxTokens": 64
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 14,
+    "time": 1792487640315,
+    "data": {
+     "title": "Session log storage explained",
+     "messageSeqs": [
+      8
+     ],
+     "source": {
+      "kind": "provider",
+      "provider": "session-title-first-prompt-llm",
+      "model": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     }
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 15,
+    "time": 1792487648625,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Weighing what to say about fsync: durability of file data and metadata on return, but not of the directory entry."
+       },
+       {
+        "type": "text",
+        "text": "`fsync(fd)` returns only after the file's data **and** metadata have reached stable storage. It does not cover the directory entry, so after creating a file you also `fsync` the parent directory."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "reasoning",
+          "signature": "sig0"
+         },
+         {
+          "type": "text"
+         }
+        ]
+       }
+      },
+      "id": "c6975aa1-e195-48d8-88ad-7eb76172ca34"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 512,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13616
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792487641015,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "reasoning"
+       }
+      },
+      {
+       "type": "reasoning-chunks",
+       "time0": 1792487641015,
+       "index": 0,
+       "dt": [
+        0,
+        1,
+        0,
+        0
+       ],
+       "texts": [
+        "Weighing what to say abo",
+        "ut fsync: durability of ",
+        "file data and metadata o",
+        "n return, but not of the",
+        " directory entry."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792487647230,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "reasoning",
+         "text": "Weighing what to say about fsync: durability of file data and metadata on return, but not of the directory entry."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792487647230,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792487647230,
+       "index": 1,
+       "dt": [
+        0,
+        1,
+        0,
+        0
+       ],
+       "texts": [
+        "`fsync(fd)` returns only after the file'",
+        "s data **and** metadata have reached sta",
+        "ble storage. It does not cover the direc",
+        "tory entry, so after creating a file you",
+        " also `fsync` the parent directory."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792487648595,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "text",
+         "text": "`fsync(fd)` returns only after the file's data **and** metadata have reached stable storage. It does not cover the directory entry, so after creating a file you also `fsync` the parent directory."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792487648595,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 512,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13616
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792487648595,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "stop"
+        },
+        "replayState": {
+         "response": {
+          "kind": "deepseek-messages",
+          "version": 1,
+          "model": "deepseek-flash"
+         },
+         "blocks": [
+          {
+           "type": "reasoning",
+           "signature": "sig0"
+          },
+          {
+           "type": "text"
+          }
+         ]
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 16,
+    "time": 1792487648630,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 17,
+    "time": 1792487648635,
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   },
+   {
+    "type": "session/end-seed",
+    "seq": 18,
+    "time": 1792487648640,
+    "data": {}
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 19,
+    "time": 1792487648645,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "inserted": [
+      {
+       "content": [
+        {
+         "type": "text",
+         "text": "Now explain how the session log is stored on disk, with a small reader in Rust."
+        }
+       ],
+       "source": {
+        "kind": "user"
+       },
+       "role": "user",
+       "id": "59e524c1-7996-4612-9770-0ca86c4ee5f1"
+      }
+     ]
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 20,
+    "time": 1792487693645,
+    "data": {
+     "turn": 2
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 21,
+    "time": 1792487693650,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "removedCount": 1,
+     "inserted": []
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 22,
+    "time": 1792487693900,
+    "data": {
+     "turn": 2,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 23,
+    "time": 1792487693905,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Now explain how the session log is stored on disk, with a small reader in Rust."
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "59e524c1-7996-4612-9770-0ca86c4ee5f1"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/header",
+    "seq": 24,
+    "time": 1792487693910,
+    "data": {
+     "header": {
+      "config": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "maxTokens": 256000,
+       "reasoningEffort": "high"
+      },
+      "adapterDefaults": {
+       "reasoningEffort": true,
+       "maxTokens": true
+      },
+      "tools": [
+       {
+        "name": "bash"
+       },
+       {
+        "name": "create_goal"
+       },
+       {
+        "name": "edit"
+       },
+       {
+        "name": "exit_plan_mode"
+       },
+       {
+        "name": "get_goal"
+       },
+       {
+        "name": "glob"
+       },
+       {
+        "name": "grep"
+       },
+       {
+        "name": "interrupt_agent"
+       },
+       {
+        "name": "job_kill"
+       },
+       {
+        "name": "job_list"
+       },
+       {
+        "name": "job_output"
+       },
+       {
+        "name": "list_agents"
+       },
+       {
+        "name": "read"
+       },
+       {
+        "name": "read_image"
+       },
+       {
+        "name": "send_message"
+       },
+       {
+        "name": "skill"
+       },
+       {
+        "name": "subagent"
+       },
+       {
+        "name": "subagent_fork"
+       },
+       {
+        "name": "todo_write"
+       },
+       {
+        "name": "update_goal"
+       },
+       {
+        "name": "web_fetch"
+       },
+       {
+        "name": "web_search"
+       },
+       {
+        "name": "workflow"
+       },
+       {
+        "name": "write"
+       }
+      ]
+     },
+     "reason": "resume"
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 25,
+    "time": 1792487717440,
+    "data": {
+     "turn": 2,
+     "step": 1,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "They want a full explanation of the v4 log. Cover layout, framing, recovery, and give a compact Rust reader. Keep it practical; mention the lock and torn tails."
+       },
+       {
+        "type": "text",
+        "text": "## How the session log is stored\n\nEach session lives in its own folder under the workspace key:\n\n```text\n~/.dsh/sessions/--Users-alex-code-tally--/session-6ce9…/\n├── session.lock\n└── session.v4.jsonl.zstd\n```\n\nThe file is **append-only**. Every append writes one independent zstd frame, and every frame holds one or more JSON lines. The first line is the header, every later line is one event.\n\n### Event envelope\n\n| Field | Type | Meaning |\n|---|---|---|\n| `type` | string | event name, e.g. `assistant/message` |\n| `seq` | integer | monotonic, starts at 0 |\n| `time` | integer | Unix epoch in milliseconds |\n| `data` | object | the payload |\n| `surfaceOp` | string or object | only on surface events |\n\n### Reading it back\n\n1. Decode frame after frame until the input ends.\n2. Split each frame on `\\n` and parse every line.\n3. Drop a damaged last frame (a *torn tail*) instead of failing.\n4. Refuse unknown event types unless they are marked `ignorable`.\n\nA small reader in Rust:\n\n```rust\nuse std::{fs::File, io::{BufRead, BufReader}};\n\nfn read_events(path: &str) -> anyhow::Result<Vec<serde_json::Value>> {\n    let decoder = zstd::stream::read::Decoder::new(File::open(path)?)?;\n    let mut events = Vec::new();\n    for line in BufReader::new(decoder).lines() {\n        let line = line?;\n        if line.trim().is_empty() { continue; }\n        events.push(serde_json::from_str(&line)?);\n    }\n    Ok(events)\n}\n```\n\nAnd the same idea from the shell:\n\n```bash\nzstdcat session.v4.jsonl.zstd | jq -c 'select(.type == \"tool/call\") | .data.name'\n```\n\n> **Note:** the lock file is advisory. Two writers on the same session would interleave frames, so the harness refuses to open a session another process holds.\n\n### Why one frame per append\n\n- A crash can only damage the frame that was being written.\n- Readers never need an index; the log is replayed from the start.\n- Compression stays good because events in one batch share keys.\n\nFor the TypeScript side, the equivalent check is short:\n\n```ts\nexport function isSurface(type: string): boolean {\n  return ['system/message', 'user/message', 'assistant/message', 'tool/result'].includes(type)\n}\n```\n\nThat is all a client needs to rebuild the conversation: replay the events, keep the surface ones in order, and fold the rest into state."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "reasoning",
+          "signature": "sig0"
+         },
+         {
+          "type": "text"
+         }
+        ]
+       }
+      },
+      "id": "8817feee-d31a-422c-8634-1e9f850abbfd"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 512,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13616
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792487694610,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "reasoning"
+       }
+      },
+      {
+       "type": "reasoning-chunks",
+       "time0": 1792487694610,
+       "index": 0,
+       "dt": [
+        0,
+        1,
+        3,
+        0,
+        1,
+        0
+       ],
+       "texts": [
+        "They want a full explana",
+        "tion of the v4 log. Cove",
+        "r layout, framing, recov",
+        "ery, and give a compact ",
+        "Rust reader. Keep it pra",
+        "ctical; mention the lock",
+        " and torn tails."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792487703410,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "reasoning",
+         "text": "They want a full explanation of the v4 log. Cover layout, framing, recovery, and give a compact Rust reader. Keep it practical; mention the lock and torn tails."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792487703410,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792487703410,
+       "index": 1,
+       "dt": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       "texts": [
+        "## How the session log is stored\n\nEach s",
+        "ession lives in its own folder under the",
+        " workspace key:\n\n```text\n~/.dsh/sessions",
+        "/--Users-alex-code-tally--/session-6ce9…",
+        "/\n├── session.lock\n└── session.v4.jsonl.",
+        "zstd\n```\n\nThe file is **append-only**. E",
+        "very append writes one independent zstd ",
+        "frame, and every frame holds one or more",
+        " JSON lines. The first line is the heade",
+        "r, every later line is one event.\n\n### E",
+        "vent envelope\n\n| Field | Type | Meaning ",
+        "|\n|---|---|---|\n| `type` | string | even",
+        "t name, e.g. `assistant/message` |\n| `se",
+        "q` | integer | monotonic, starts at 0 |\n",
+        "| `time` | integer | Unix epoch in milli",
+        "seconds |\n| `data` | object | the payloa",
+        "d |\n| `surfaceOp` | string or object | o",
+        "nly on surface events |\n\n### Reading it ",
+        "back\n\n1. Decode frame after frame until ",
+        "the input ends.\n2. Split each frame on `",
+        "\\n` and parse every line.\n3. Drop a dama",
+        "ged last frame (a *torn tail*) instead o",
+        "f failing.\n4. Refuse unknown event types",
+        " unless they are marked `ignorable`.\n\nA ",
+        "small reader in Rust:\n\n```rust\nuse std::",
+        "{fs::File, io::{BufRead, BufReader}};\n\nf",
+        "n read_events(path: &str) -> anyhow::Res",
+        "ult<Vec<serde_json::Value>> {\n    let de",
+        "coder = zstd::stream::read::Decoder::new",
+        "(File::open(path)?)?;\n    let mut events",
+        " = Vec::new();\n    for line in BufReader",
+        "::new(decoder).lines() {\n        let lin",
+        "e = line?;\n        if line.trim().is_emp",
+        "ty() { continue; }\n        events.push(s",
+        "erde_json::from_str(&line)?);\n    }\n    ",
+        "Ok(events)\n}\n```\n\nAnd the same idea from",
+        " the shell:\n\n```bash\nzstdcat session.v4.",
+        "jsonl.zstd | jq -c 'select(.type == \"too",
+        "l/call\") | .data.name'\n```\n\n> **Note:** ",
+        "the lock file is advisory. Two writers o",
+        "n the same session would interleave fram",
+        "es, so the harness refuses to open a ses",
+        "sion another process holds.\n\n### Why one",
+        " frame per append\n\n- A crash can only da",
+        "mage the frame that was being written.\n-",
+        " Readers never need an index; the log is",
+        " replayed from the start.\n- Compression ",
+        "stays good because events in one batch s",
+        "hare keys.\n\nFor the TypeScript side, the",
+        " equivalent check is short:\n\n```ts\nexpor",
+        "t function isSurface(type: string): bool",
+        "ean {\n  return ['system/message', 'user/",
+        "message', 'assistant/message', 'tool/res",
+        "ult'].includes(type)\n}\n```\n\nThat is all ",
+        "a client needs to rebuild the conversati",
+        "on: replay the events, keep the surface ",
+        "ones in order, and fold the rest into st",
+        "ate."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792487717410,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "text",
+         "text": "## How the session log is stored\n\nEach session lives in its own folder under the workspace key:\n\n```text\n~/.dsh/sessions/--Users-alex-code-tally--/session-6ce9…/\n├── session.lock\n└── session.v4.jsonl.zstd\n```\n\nThe file is **append-only**. Every append writes one independent zstd frame, and every frame holds one or more JSON lines. The first line is the header, every later line is one event.\n\n### Event envelope\n\n| Field | Type | Meaning |\n|---|---|---|\n| `type` | string | event name, e.g. `assistant/message` |\n| `seq` | integer | monotonic, starts at 0 |\n| `time` | integer | Unix epoch in milliseconds |\n| `data` | object | the payload |\n| `surfaceOp` | string or object | only on surface events |\n\n### Reading it back\n\n1. Decode frame after frame until the input ends.\n2. Split each frame on `\\n` and parse every line.\n3. Drop a damaged last frame (a *torn tail*) instead of failing.\n4. Refuse unknown event types unless they are marked `ignorable`.\n\nA small reader in Rust:\n\n```rust\nuse std::{fs::File, io::{BufRead, BufReader}};\n\nfn read_events(path: &str) -> anyhow::Result<Vec<serde_json::Value>> {\n    let decoder = zstd::stream::read::Decoder::new(File::open(path)?)?;\n    let mut events = Vec::new();\n    for line in BufReader::new(decoder).lines() {\n        let line = line?;\n        if line.trim().is_empty() { continue; }\n        events.push(serde_json::from_str(&line)?);\n    }\n    Ok(events)\n}\n```\n\nAnd the same idea from the shell:\n\n```bash\nzstdcat session.v4.jsonl.zstd | jq -c 'select(.type == \"tool/call\") | .data.name'\n```\n\n> **Note:** the lock file is advisory. Two writers on the same session would interleave frames, so the harness refuses to open a session another process holds.\n\n### Why one frame per append\n\n- A crash can only damage the frame that was being written.\n- Readers never need an index; the log is replayed from the start.\n- Compression stays good because events in one batch share keys.\n\nFor the TypeScript side, the equivalent check is short:\n\n```ts\nexport function isSurface(type: string): boolean {\n  return ['system/message', 'user/message', 'assistant/message', 'tool/result'].includes(type)\n}\n```\n\nThat is all a client needs to rebuild the conversation: replay the events, keep the surface ones in order, and fold the rest into state."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792487717410,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 512,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13616
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792487717410,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "stop"
+        },
+        "replayState": {
+         "response": {
+          "kind": "deepseek-messages",
+          "version": 1,
+          "model": "deepseek-flash"
+         },
+         "blocks": [
+          {
+           "type": "reasoning",
+           "signature": "sig0"
+          },
+          {
+           "type": "text"
+          }
+         ]
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 26,
+    "time": 1792487717445,
+    "data": {
+     "turn": 2,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 27,
+    "time": 1792487717450,
+    "data": {
+     "turn": 2,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   }
+  ]
+ },
+ "live": 25
+}

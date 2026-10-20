@@ -1,0 +1,86 @@
+{
+ "description": "Sidebar and workspace list shared by all fixtures. Each session opens its fixture.",
+ "workspaces": [
+  {
+   "path": "/Users/alex/code/tally",
+   "name": "tally",
+   "lastUsedAgo": 0
+  },
+  {
+   "path": "/Users/alex/code/dsh-codex",
+   "name": "dsh-codex",
+   "lastUsedAgo": 3600000
+  },
+  {
+   "path": "/Users/alex/code/storefront",
+   "name": "storefront",
+   "lastUsedAgo": 7200000
+  },
+  {
+   "path": "/Users/alex/code/timeparse",
+   "name": "timeparse",
+   "lastUsedAgo": 10800000
+  },
+  {
+   "path": "/Users/alex",
+   "name": "alex",
+   "lastUsedAgo": 14400000
+  }
+ ],
+ "sessions": [
+  {
+   "id": "session-5e0b3f8d-1c27-4a96-b4d3-8f2e6a1c9d70",
+   "title": "Calculator: 7 × 6",
+   "cwd": "/Users/alex",
+   "createdAt": 1792581240000,
+   "updatedAgo": 240000,
+   "status": "idle",
+   "fixture": "computer"
+  },
+  {
+   "id": "session-2b8e5d0c-7a41-4c9e-9f36-5e1a0c3d7b42",
+   "title": "Install deps and run tests",
+   "cwd": "/Users/alex/code/storefront",
+   "createdAt": 1792498440000,
+   "updatedAgo": 2280000,
+   "status": "idle",
+   "fixture": "approval"
+  },
+  {
+   "id": "session-91c4e7a2-5d38-4b1f-8e60-3a9b2c7d1f05",
+   "title": "Brindle 2.4 CLI changes",
+   "cwd": "/Users/alex/code/dsh-codex",
+   "createdAt": 1792494840000,
+   "updatedAgo": 7200000,
+   "status": "idle",
+   "fixture": "browser"
+  },
+  {
+   "id": "session-89b9d110-593b-4c06-881d-fca8b3dacf4d",
+   "title": "Session log storage explained",
+   "cwd": "/Users/alex/code/dsh-codex",
+   "createdAt": 1792487640000,
+   "updatedAgo": 10800000,
+   "status": "idle",
+   "fixture": "markdown"
+  },
+  {
+   "id": "session-4ec522fd-b66a-4ac2-aa13-3c746daa6a77",
+   "title": "Add --top flag to tally",
+   "cwd": "/Users/alex/code/tally",
+   "createdAt": 1792487640000,
+   "updatedAgo": 93600000,
+   "status": "idle",
+   "fixture": "coding"
+  },
+  {
+   "id": "session-3f5d1053-6313-462e-889c-db8d47c6dba1",
+   "title": "Refactor date parsing",
+   "cwd": "/Users/alex/code/timeparse",
+   "createdAt": 1792487640000,
+   "updatedAgo": 259200000,
+   "status": "error",
+   "fixture": "error"
+  }
+ ]
+}

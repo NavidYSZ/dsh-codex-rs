@@ -1,0 +1,1514 @@
+{
+ "description": "The computer tool takes over the screen: screenshot, open an app, four clicks.",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-5e0b3f8d-1c27-4a96-b4d3-8f2e6a1c9d70",
+   "createdAt": 1792581240000,
+   "cwd": "/Users/alex",
+   "isSeeded": false,
+   "delegationDepth": 0
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792581240000,
+    "data": {
+     "preset": "danger-full-access"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792581240005,
+    "data": {
+     "mode": "danger-full-access"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792581240010,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 3,
+    "time": 1792581240015,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 4,
+    "time": 1792581240075,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "system/message",
+    "seq": 5,
+    "time": 1792581240080,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "You are an AI agent powered by DeepSeek Harness.\n\n[… system prompt trimmed for the fixture …]"
+       }
+      ],
+      "source": {
+       "kind": "system-prompt"
+      },
+      "id": "c630b054-7a33-5d32-9c8a-0af7271ffdc2"
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 6,
+    "time": 1792581240085,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Open Calculator and work out 7 × 6."
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "49380d7a-37b8-583e-8e19-426bd134e4bd"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 7,
+    "time": 1792581240090,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Session workspace: \"/Users/alex\"."
+      }
+     ],
+     "source": {
+      "kind": "runtime-context",
+      "form": "snapshot",
+      "sections": []
+     },
+     "role": "user",
+     "id": "2e256d4d-3ef9-5539-a1da-25ade45b63e7"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 8,
+    "time": 1792581240095,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000,
+     "systemPromptUpdate": "in-history"
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 9,
+    "time": 1792581240100,
+    "data": {
+     "title": "Open Calculator and work out",
+     "messageSeqs": [
+      6
+     ],
+     "source": {
+      "kind": "fallback"
+     }
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 10,
+    "time": 1792581240500,
+    "data": {
+     "title": "Calculator: 7 × 6",
+     "messageSeqs": [
+      6
+     ],
+     "source": {
+      "kind": "provider",
+      "provider": "session-title-first-prompt-llm",
+      "model": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     }
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 11,
+    "time": 1792581245668,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Look at the screen first, then open Calculator and press 7, ×, 6, =."
+       },
+       {
+        "type": "text",
+        "text": "Taking a look at the screen first."
+       },
+       {
+        "type": "tool-call",
+        "id": "toolu_3e1c50a67d",
+        "name": "computer",
+        "arguments": "{\"action\": \"screenshot\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "reasoning",
+          "signature": "sig"
+         },
+         {
+          "type": "text"
+         },
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "5aa4d724-f81d-5c63-a3b1-77262a901b8d"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792581241200,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "reasoning"
+       }
+      },
+      {
+       "type": "reasoning-chunks",
+       "time0": 1792581241200,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "Look at the screen first, then open Calculator and press 7, ×, 6, =."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792581244940,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "reasoning",
+         "text": "Look at the screen first, then open Calculator and press 7, ×, 6, =."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581244940,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792581244940,
+       "index": 1,
+       "dt": [],
+       "texts": [
+        "Taking a look at the screen first."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792581245340,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "text",
+         "text": "Taking a look at the screen first."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581245340,
+       "chunk": {
+        "type": "block-start",
+        "index": 2,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581245638,
+       "chunk": {
+        "type": "block-end",
+        "index": 2,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_3e1c50a67d",
+         "name": "computer",
+         "arguments": "{\"action\": \"screenshot\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581245638,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581245638,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 12,
+    "time": 1792581245678,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "callId": "toolu_3e1c50a67d",
+     "name": "computer",
+     "arguments": "{\"action\": \"screenshot\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 13,
+    "time": 1792581246978,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_3e1c50a67d"
+      },
+      "toolCallId": "toolu_3e1c50a67d",
+      "content": [
+       {
+        "type": "text",
+        "text": "Took a screenshot of the main display (1280×800). (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-desktop",
+         "mediaType": "image/jpeg",
+         "bytes": 14533,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "05e8a954-bc96-5b27-b137-5aae22700aaa"
+     },
+     "meta": {
+      "tool": "computer",
+      "action": "screenshot",
+      "label": "Screenshot",
+      "x": null,
+      "y": null,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": null,
+      "place": null,
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     12
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 14,
+    "time": 1792581246983,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 15,
+    "time": 1792581247233,
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 16,
+    "time": 1792581248301,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_2856a53cd1",
+        "name": "computer",
+        "arguments": "{\"action\": \"open_app\", \"text\": \"Calculator\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "7ff73916-ba12-58fb-896f-8d915aa935d8"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792581247933,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581248271,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_2856a53cd1",
+         "name": "computer",
+         "arguments": "{\"action\": \"open_app\", \"text\": \"Calculator\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581248271,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581248271,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 17,
+    "time": 1792581248311,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "callId": "toolu_2856a53cd1",
+     "name": "computer",
+     "arguments": "{\"action\": \"open_app\", \"text\": \"Calculator\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 18,
+    "time": 1792581249611,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_2856a53cd1"
+      },
+      "toolCallId": "toolu_2856a53cd1",
+      "content": [
+       {
+        "type": "text",
+        "text": "Opened Calculator and brought it to the front. (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-calc-0",
+         "mediaType": "image/jpeg",
+         "bytes": 23357,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "9a935b4d-5151-50a2-abd4-72b121e761a5"
+     },
+     "meta": {
+      "tool": "computer",
+      "action": "open_app",
+      "label": "Open Calculator",
+      "x": null,
+      "y": null,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": null,
+      "place": "Calculator",
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     17
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 19,
+    "time": 1792581249616,
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 20,
+    "time": 1792581249866,
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 21,
+    "time": 1792581255049,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Calculator is open and shows 0. The 7 key is in the second row on the left."
+       },
+       {
+        "type": "tool-call",
+        "id": "toolu_89223fe920",
+        "name": "computer",
+        "arguments": "{\"action\": \"click\", \"x\": 550, \"y\": 374}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "reasoning",
+          "signature": "sig"
+         },
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "3e6dffaf-6b58-515a-a6ca-b903b4636971"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792581250566,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "reasoning"
+       }
+      },
+      {
+       "type": "reasoning-chunks",
+       "time0": 1792581250566,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "Calculator is open and shows 0. The 7 key is in the second row on the left."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792581254691,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "reasoning",
+         "text": "Calculator is open and shows 0. The 7 key is in the second row on the left."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581254691,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581255019,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_89223fe920",
+         "name": "computer",
+         "arguments": "{\"action\": \"click\", \"x\": 550, \"y\": 374}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581255019,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581255019,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 22,
+    "time": 1792581255059,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "callId": "toolu_89223fe920",
+     "name": "computer",
+     "arguments": "{\"action\": \"click\", \"x\": 550, \"y\": 374}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 23,
+    "time": 1792581256359,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_89223fe920"
+      },
+      "toolCallId": "toolu_89223fe920",
+      "content": [
+       {
+        "type": "text",
+        "text": "Clicked at (550, 374). (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-calc-7",
+         "mediaType": "image/jpeg",
+         "bytes": 23253,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "90a2324f-a202-5e52-a559-7e280d3d3205"
+     },
+     "meta": {
+      "tool": "computer",
+      "action": "click",
+      "label": "Click (550, 374)",
+      "x": 550,
+      "y": 374,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": {
+       "x": 550,
+       "y": 374
+      },
+      "place": "Calculator",
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     22
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 24,
+    "time": 1792581256364,
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 25,
+    "time": 1792581256614,
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 26,
+    "time": 1792581257672,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_f7cee34a33",
+        "name": "computer",
+        "arguments": "{\"action\": \"click\", \"x\": 730, \"y\": 374}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "d1c2fa0f-2562-5e9a-98d9-debc9cd65825"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792581257314,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581257642,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_f7cee34a33",
+         "name": "computer",
+         "arguments": "{\"action\": \"click\", \"x\": 730, \"y\": 374}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581257642,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581257642,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 27,
+    "time": 1792581257682,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "callId": "toolu_f7cee34a33",
+     "name": "computer",
+     "arguments": "{\"action\": \"click\", \"x\": 730, \"y\": 374}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 28,
+    "time": 1792581258982,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_f7cee34a33"
+      },
+      "toolCallId": "toolu_f7cee34a33",
+      "content": [
+       {
+        "type": "text",
+        "text": "Clicked at (730, 374). (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-calc-7x",
+         "mediaType": "image/jpeg",
+         "bytes": 23295,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "ad2f8fa6-7bec-5b79-8f7b-e17d0ea9d6ce"
+     },
+     "meta": {
+      "tool": "computer",
+      "action": "click",
+      "label": "Click (730, 374)",
+      "x": 730,
+      "y": 374,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": {
+       "x": 730,
+       "y": 374
+      },
+      "place": "Calculator",
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     27
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 29,
+    "time": 1792581258987,
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 30,
+    "time": 1792581259237,
+    "data": {
+     "turn": 1,
+     "step": 5
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 31,
+    "time": 1792581260295,
+    "data": {
+     "turn": 1,
+     "step": 5,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_4db16ed758",
+        "name": "computer",
+        "arguments": "{\"action\": \"click\", \"x\": 670, \"y\": 430}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "4167203b-d722-53da-92b1-7da8bb958483"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792581259937,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581260265,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_4db16ed758",
+         "name": "computer",
+         "arguments": "{\"action\": \"click\", \"x\": 670, \"y\": 430}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581260265,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581260265,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 32,
+    "time": 1792581260305,
+    "data": {
+     "turn": 1,
+     "step": 5,
+     "callId": "toolu_4db16ed758",
+     "name": "computer",
+     "arguments": "{\"action\": \"click\", \"x\": 670, \"y\": 430}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 33,
+    "time": 1792581261605,
+    "data": {
+     "turn": 1,
+     "step": 5,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_4db16ed758"
+      },
+      "toolCallId": "toolu_4db16ed758",
+      "content": [
+       {
+        "type": "text",
+        "text": "Clicked at (670, 430). (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-calc-6",
+         "mediaType": "image/jpeg",
+         "bytes": 23359,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "730fb690-39c0-516b-9cd0-fc092dd955a3"
+     },
+     "meta": {
+      "tool": "computer",
+      "action": "click",
+      "label": "Click (670, 430)",
+      "x": 670,
+      "y": 430,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": {
+       "x": 670,
+       "y": 430
+      },
+      "place": "Calculator",
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     32
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 34,
+    "time": 1792581261610,
+    "data": {
+     "turn": 1,
+     "step": 5
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 35,
+    "time": 1792581261860,
+    "data": {
+     "turn": 1,
+     "step": 6
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 36,
+    "time": 1792581262918,
+    "data": {
+     "turn": 1,
+     "step": 6,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_ebc672f8ce",
+        "name": "computer",
+        "arguments": "{\"action\": \"click\", \"x\": 730, \"y\": 542}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "f57518c8-d341-561a-b781-e153efd2d47d"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792581262560,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581262888,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_ebc672f8ce",
+         "name": "computer",
+         "arguments": "{\"action\": \"click\", \"x\": 730, \"y\": 542}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581262888,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581262888,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 37,
+    "time": 1792581262928,
+    "data": {
+     "turn": 1,
+     "step": 6,
+     "callId": "toolu_ebc672f8ce",
+     "name": "computer",
+     "arguments": "{\"action\": \"click\", \"x\": 730, \"y\": 542}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 38,
+    "time": 1792581264228,
+    "data": {
+     "turn": 1,
+     "step": 6,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_ebc672f8ce"
+      },
+      "toolCallId": "toolu_ebc672f8ce",
+      "content": [
+       {
+        "type": "text",
+        "text": "Clicked at (730, 542). (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-calc-42",
+         "mediaType": "image/jpeg",
+         "bytes": 23635,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "b05f47a0-8790-56e6-a8cc-6ab52f85cea4"
+     },
+     "meta": {
+      "tool": "computer",
+      "action": "click",
+      "label": "Click (730, 542)",
+      "x": 730,
+      "y": 542,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": {
+       "x": 730,
+       "y": 542
+      },
+      "place": "Calculator",
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     37
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 39,
+    "time": 1792581264233,
+    "data": {
+     "turn": 1,
+     "step": 6
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 40,
+    "time": 1792581264483,
+    "data": {
+     "turn": 1,
+     "step": 7
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 41,
+    "time": 1792581265613,
+    "data": {
+     "turn": 1,
+     "step": 7,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "7 × 6 = **42**. Calculator is still open on your screen."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "text"
+         }
+        ]
+       }
+      },
+      "id": "7895f0ac-54bb-5046-a4b4-73799b499625"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792581265183,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792581265183,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "7 × 6 = **42**. Calculator is still open on your screen."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792581265583,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "text",
+         "text": "7 × 6 = **42**. Calculator is still open on your screen."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581265583,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792581265583,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "stop"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 42,
+    "time": 1792581265618,
+    "data": {
+     "turn": 1,
+     "step": 7
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 43,
+    "time": 1792581265623,
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   }
+  ]
+ },
+ "live": 11,
+ "attachments": {
+  "att-desktop": "img/desktop.jpg",
+  "att-calc-0": "img/calc-0.jpg",
+  "att-calc-7": "img/calc-7.jpg",
+  "att-calc-7x": "img/calc-7x.jpg",
+  "att-calc-6": "img/calc-6.jpg",
+  "att-calc-42": "img/calc-42.jpg"
+ }
+}

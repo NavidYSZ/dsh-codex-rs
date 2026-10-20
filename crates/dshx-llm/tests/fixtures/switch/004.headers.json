@@ -1,0 +1,10 @@
+{
+ "path": "/anthropic/v1/messages",
+ "headers": {
+  "user-agent": "deepseek-harness/0.2.0-rc.2 (+https://github.com/deepseek-ai/deepseek-harness)",
+  "content-type": "application/json",
+  "accept": "text/event-stream",
+  "anthropic-version": "2023-06-01",
+  "x-deepseek-harness-session-id": "session-fa1a4cef-8fc3-4bb5-873c-f0d0ac0bdbdd"
+ }
+}

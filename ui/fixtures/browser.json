@@ -1,0 +1,1273 @@
+{
+ "description": "The browser tool opens a site, searches, clicks a result and reads it.",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-91c4e7a2-5d38-4b1f-8e60-3a9b2c7d1f05",
+   "createdAt": 1792494840000,
+   "cwd": "/Users/alex/code/dsh-codex",
+   "isSeeded": false,
+   "delegationDepth": 0
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792494840000,
+    "data": {
+     "preset": "workspace-write"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792494840005,
+    "data": {
+     "mode": "workspace-write"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792494840010,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 3,
+    "time": 1792494840015,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 4,
+    "time": 1792494840075,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "system/message",
+    "seq": 5,
+    "time": 1792494840080,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "You are an AI agent powered by DeepSeek Harness.\n\n[… system prompt trimmed for the fixture …]"
+       }
+      ],
+      "source": {
+       "kind": "system-prompt"
+      },
+      "id": "7eb383a5-0d52-5a00-9ee4-4e72248514e9"
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 6,
+    "time": 1792494840085,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Check the Brindle 2.4 release notes on example.org and tell me what changed in the CLI."
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "241280bf-8d06-5c81-9d35-c389c08c0637"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 7,
+    "time": 1792494840090,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Session workspace: \"/Users/alex/code/dsh-codex\"."
+      }
+     ],
+     "source": {
+      "kind": "runtime-context",
+      "form": "snapshot",
+      "sections": []
+     },
+     "role": "user",
+     "id": "9ca6cec6-7d1a-51bc-b88d-825fde397f4b"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 8,
+    "time": 1792494840095,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000,
+     "systemPromptUpdate": "in-history"
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 9,
+    "time": 1792494840100,
+    "data": {
+     "title": "Check the Brindle 2.4 releas",
+     "messageSeqs": [
+      6
+     ],
+     "source": {
+      "kind": "fallback"
+     }
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 10,
+    "time": 1792494840500,
+    "data": {
+     "title": "Brindle 2.4 CLI changes",
+     "messageSeqs": [
+      6
+     ],
+     "source": {
+      "kind": "provider",
+      "provider": "session-title-first-prompt-llm",
+      "model": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     }
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 11,
+    "time": 1792494847225,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Try a plain fetch of the changelog first; fall back to the browser if the page is rendered client-side."
+       },
+       {
+        "type": "tool-call",
+        "id": "toolu_6af9345e38",
+        "name": "web_fetch",
+        "arguments": "{\"url\": \"https://example.org/changelog\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "reasoning",
+          "signature": "sig"
+         },
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "731181e6-da05-5a9b-b3be-d2c7f5e37fa1"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792494841200,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "reasoning"
+       }
+      },
+      {
+       "type": "reasoning-chunks",
+       "time0": 1792494841200,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "Try a plain fetch of the changelog first; fall back to the browser if the page is rendered client-side."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792494846865,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "reasoning",
+         "text": "Try a plain fetch of the changelog first; fall back to the browser if the page is rendered client-side."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494846865,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494847195,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_6af9345e38",
+         "name": "web_fetch",
+         "arguments": "{\"url\": \"https://example.org/changelog\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494847195,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494847195,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 12,
+    "time": 1792494847235,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "callId": "toolu_6af9345e38",
+     "name": "web_fetch",
+     "arguments": "{\"url\": \"https://example.org/changelog\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 13,
+    "time": 1792494847935,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_6af9345e38"
+      },
+      "toolCallId": "toolu_6af9345e38",
+      "content": [
+       {
+        "type": "text",
+        "text": "# Changelog · Brindle\n\nThis page needs JavaScript to show the release list.\n\n[Docs](https://example.org/docs) · [Guides](https://example.org/guides)"
+       }
+      ],
+      "isError": false,
+      "id": "4fe37622-6b4b-557b-86b2-ef9bfec4b7ff"
+     }
+    },
+    "sourceEventSeqs": [
+     12
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 14,
+    "time": 1792494847940,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 15,
+    "time": 1792494848190,
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 16,
+    "time": 1792494849798,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "The changelog is rendered in the page, so I will use the background browser."
+       },
+       {
+        "type": "tool-call",
+        "id": "toolu_69f214cc6c",
+        "name": "browser",
+        "arguments": "{\"action\": \"open\", \"url\": \"https://example.org\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "text"
+         },
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "60053ecf-9403-5a6c-bdbd-45d2414f5c64"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792494848890,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792494848890,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "The changelog is rendered in the page, so I will use the background browser."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792494849422,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "text",
+         "text": "The changelog is rendered in the page, so I will use the background browser."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494849422,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494849768,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_69f214cc6c",
+         "name": "browser",
+         "arguments": "{\"action\": \"open\", \"url\": \"https://example.org\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494849768,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494849768,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 17,
+    "time": 1792494849808,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "callId": "toolu_69f214cc6c",
+     "name": "browser",
+     "arguments": "{\"action\": \"open\", \"url\": \"https://example.org\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 18,
+    "time": 1792494852008,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_69f214cc6c"
+      },
+      "toolCallId": "toolu_69f214cc6c",
+      "content": [
+       {
+        "type": "text",
+        "text": "Opened https://example.org/ — \"Brindle · Static sites from Markdown\"\n[1] link \"Brindle\" @(118,42)\n[2] link \"Docs\" @(228,42)\n[3] link \"Guides\" @(296,42)\n[4] link \"Changelog\" @(382,42)\n[5] link \"Community\" @(482,42)\n[6] textbox \"Search docs\" @(1096,42)\n[7] link \"Get started\" @(124,428)\n[8] link \"Install\" @(238,428) (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-browser-home",
+         "mediaType": "image/jpeg",
+         "bytes": 31718,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "53e34b7b-262e-5c04-8333-48ad079a4e68"
+     },
+     "meta": {
+      "tool": "browser",
+      "action": "open",
+      "label": "Open https://example.org",
+      "x": null,
+      "y": null,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": null,
+      "place": "example.org",
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     17
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 19,
+    "time": 1792494852013,
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 20,
+    "time": 1792494852263,
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 21,
+    "time": 1792494853393,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_e2b8d403b0",
+        "name": "browser",
+        "arguments": "{\"action\": \"type\", \"index\": 6, \"text\": \"release notes 2.4\", \"submit\": true}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "286e3c8e-3611-5ae3-a558-dccc94d302ca"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792494852963,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494853363,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_e2b8d403b0",
+         "name": "browser",
+         "arguments": "{\"action\": \"type\", \"index\": 6, \"text\": \"release notes 2.4\", \"submit\": true}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494853363,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494853363,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 22,
+    "time": 1792494853403,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "callId": "toolu_e2b8d403b0",
+     "name": "browser",
+     "arguments": "{\"action\": \"type\", \"index\": 6, \"text\": \"release notes 2.4\", \"submit\": true}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 23,
+    "time": 1792494855603,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_e2b8d403b0"
+      },
+      "toolCallId": "toolu_e2b8d403b0",
+      "content": [
+       {
+        "type": "text",
+        "text": "Typed into [6] and pressed Enter. Now at https://example.org/search?q=release+notes+2.4 — \"Search · Brindle\"\n[1] link \"Release notes 2.4\" @(141,249)\n[2] link \"Release notes 2.3\" @(141,354)\n[3] link \"Upgrading to 2.4\" @(138,459) (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-browser-search",
+         "mediaType": "image/jpeg",
+         "bytes": 22355,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "b8a123da-25f9-5fbd-9f7a-6f8ccd7c9a42"
+     },
+     "meta": {
+      "tool": "browser",
+      "action": "type",
+      "label": "Type “release notes 2.4” [6]",
+      "x": null,
+      "y": null,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": {
+       "x": 1096,
+       "y": 42
+      },
+      "place": "example.org",
+      "target": "Search docs"
+     }
+    },
+    "sourceEventSeqs": [
+     22
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 24,
+    "time": 1792494855608,
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 25,
+    "time": 1792494855858,
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 26,
+    "time": 1792494856900,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_f8f2462a60",
+        "name": "browser",
+        "arguments": "{\"action\": \"click\", \"index\": 1}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "791b6859-0957-59b5-8e8c-cdb5b15539fa"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792494856558,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494856870,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_f8f2462a60",
+         "name": "browser",
+         "arguments": "{\"action\": \"click\", \"index\": 1}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494856870,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494856870,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 27,
+    "time": 1792494856910,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "callId": "toolu_f8f2462a60",
+     "name": "browser",
+     "arguments": "{\"action\": \"click\", \"index\": 1}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 28,
+    "time": 1792494859110,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_f8f2462a60"
+      },
+      "toolCallId": "toolu_f8f2462a60",
+      "content": [
+       {
+        "type": "text",
+        "text": "Clicked [1]. Now at https://example.org/changelog/2.4 — \"Release notes 2.4 · Brindle\" (The attached image is scaled to 960×600; keep using coordinates of the 1280×800 screenshot.)"
+       },
+       {
+        "type": "image",
+        "attachment": {
+         "attachmentId": "att-browser-article",
+         "mediaType": "image/jpeg",
+         "bytes": 22054,
+         "width": 960,
+         "height": 600,
+         "name": "screen.jpg",
+         "originalDimensions": {
+          "width": 1280,
+          "height": 800
+         }
+        }
+       }
+      ],
+      "isError": false,
+      "id": "8d1adc09-e93b-5301-841e-769ebd67c317"
+     },
+     "meta": {
+      "tool": "browser",
+      "action": "click",
+      "label": "Click [1]",
+      "x": null,
+      "y": null,
+      "toX": null,
+      "toY": null,
+      "screen": {
+       "width": 1280,
+       "height": 800
+      },
+      "cursor": {
+       "x": 141,
+       "y": 249
+      },
+      "place": "example.org",
+      "target": "Release notes 2.4"
+     }
+    },
+    "sourceEventSeqs": [
+     27
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 29,
+    "time": 1792494859115,
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 30,
+    "time": 1792494859365,
+    "data": {
+     "turn": 1,
+     "step": 5
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 31,
+    "time": 1792494860381,
+    "data": {
+     "turn": 1,
+     "step": 5,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_582fb97acd",
+        "name": "browser",
+        "arguments": "{\"action\": \"read\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "768e6720-f85e-5fb8-b4e4-09a76b011c5d"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792494860065,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494860351,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_582fb97acd",
+         "name": "browser",
+         "arguments": "{\"action\": \"read\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494860351,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494860351,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 32,
+    "time": 1792494860391,
+    "data": {
+     "turn": 1,
+     "step": 5,
+     "callId": "toolu_582fb97acd",
+     "name": "browser",
+     "arguments": "{\"action\": \"read\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 33,
+    "time": 1792494862591,
+    "data": {
+     "turn": 1,
+     "step": 5,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_582fb97acd"
+      },
+      "toolCallId": "toolu_582fb97acd",
+      "content": [
+       {
+        "type": "text",
+        "text": "Release notes 2.4\nOctober 14 · 6 min read\n\nCLI\n- brindle check finds broken links and missing images before you publish.\n- brindle serve --json prints build events as JSON lines for editors.\n- Incremental builds are up to 3× faster on large sites.\n\nConfig\n- output is now out_dir; the old key still works with a warning."
+       }
+      ],
+      "isError": false,
+      "id": "6ec856d7-2763-5a2b-ab9f-3856e30b86a9"
+     },
+     "meta": {
+      "tool": "browser",
+      "action": "read",
+      "label": "Read",
+      "x": null,
+      "y": null,
+      "toX": null,
+      "toY": null,
+      "screen": null,
+      "cursor": null,
+      "place": "example.org",
+      "target": null
+     }
+    },
+    "sourceEventSeqs": [
+     32
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 34,
+    "time": 1792494862596,
+    "data": {
+     "turn": 1,
+     "step": 5
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 35,
+    "time": 1792494862846,
+    "data": {
+     "turn": 1,
+     "step": 6
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 36,
+    "time": 1792494870763,
+    "data": {
+     "turn": 1,
+     "step": 6,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Summarise the CLI section; mention the config rename since it can break builds."
+       },
+       {
+        "type": "text",
+        "text": "Brindle **2.4** changes three things in the CLI:\n\n- **`brindle check`** is new. It finds broken links and missing images before you publish.\n- **`brindle serve --json`** prints build events as JSON lines, so editors can follow a build.\n- **Incremental builds** are up to 3× faster on large sites.\n\nOne config key was renamed as well: `output` is now `out_dir`. The old key still works but prints a warning."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "reasoning",
+          "signature": "sig"
+         },
+         {
+          "type": "text"
+         }
+        ]
+       }
+      },
+      "id": "53f8a387-9c68-5a60-ad73-7b9a0afd27ac"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792494863546,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "reasoning"
+       }
+      },
+      {
+       "type": "reasoning-chunks",
+       "time0": 1792494863546,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "Summarise the CLI section; mention the config rename since it can break builds."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792494867891,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "reasoning",
+         "text": "Summarise the CLI section; mention the config rename since it can break builds."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494867891,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792494867891,
+       "index": 1,
+       "dt": [],
+       "texts": [
+        "Brindle **2.4** changes three things in the CLI:\n\n- **`brindle check`** is new. It finds broken links and missing images before you publish.\n- **`brindle serve --json`** prints build events as JSON lines, so editors can follow a build.\n- **Incremental builds** are up to 3× faster on large sites.\n\nOne config key was renamed as well: `output` is now `out_dir`. The old key still works but prints a warning."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792494870733,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "text",
+         "text": "Brindle **2.4** changes three things in the CLI:\n\n- **`brindle check`** is new. It finds broken links and missing images before you publish.\n- **`brindle serve --json`** prints build events as JSON lines, so editors can follow a build.\n- **Incremental builds** are up to 3× faster on large sites.\n\nOne config key was renamed as well: `output` is now `out_dir`. The old key still works but prints a warning."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494870733,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792494870733,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "stop"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 37,
+    "time": 1792494870768,
+    "data": {
+     "turn": 1,
+     "step": 6
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 38,
+    "time": 1792494870773,
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   }
+  ]
+ },
+ "live": 11,
+ "attachments": {
+  "att-browser-home": "img/browser-home.jpg",
+  "att-browser-search": "img/browser-search.jpg",
+  "att-browser-article": "img/browser-article.jpg"
+ }
+}

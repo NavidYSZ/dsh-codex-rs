@@ -1,0 +1,168 @@
+[
+  {
+    "name": "computer",
+    "description": "Operate the user's whole Mac screen like a person: look at the screen, move a visible agent cursor, click, type and press keys. This takes over the user's real mouse and keyboard while it runs, so prefer \"browser\" for websites and \"app\" for a single native app; both work in the background. Use \"computer\" when those cannot do the job (several apps at once, drag and drop, context menus) or when the user wants to watch on their own screen.\n\nWorkflow:\n- Start with action \"screenshot\". All x/y coordinates are pixels in the most recent screenshot.\n- Every pointer, keyboard and app action returns a fresh screenshot of the result, so you rarely need a separate screenshot call.\n- Prefer keyboard shortcuts and \"open_app\" over hunting for icons. Use \"key\" for shortcuts (\"cmd+l\", \"Return\", \"cmd+shift+t\") and \"type\" for text.\n- Click the centre of controls. After typing into a search or address field, press \"Return\" with \"key\".\n- Scroll with dy > 0 to move content down (reveal what is below), dy < 0 to go up.\n- The user sees your cursor and can press Esc at any time; if a result says the user cancelled, stop immediately and ask how to continue.\n- Never enter passwords, payment data or other secrets, and ask before sending, buying, deleting or publishing anything.\n- macOS permission prompts (\"Allow\"/\"Erlauben\"), login or Touch ID dialogs, System Settings, keychains and password managers are off limits: never click or type there. If one appears or blocks you, stop and ask the user to handle it. The helper refuses such targets anyway.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "screenshot",
+            "click",
+            "double_click",
+            "right_click",
+            "move",
+            "drag",
+            "scroll",
+            "type",
+            "key",
+            "open_app",
+            "wait",
+            "cursor_position"
+          ],
+          "description": "What to do."
+        },
+        "x": {
+          "type": "number",
+          "description": "X in screenshot pixels (click, move, drag start, scroll)."
+        },
+        "y": {
+          "type": "number",
+          "description": "Y in screenshot pixels."
+        },
+        "to_x": {
+          "type": "number",
+          "description": "Drag end X."
+        },
+        "to_y": {
+          "type": "number",
+          "description": "Drag end Y."
+        },
+        "text": {
+          "type": "string",
+          "description": "Text for \"type\"; key combination for \"key\" (e.g. \"cmd+c\", \"Return\", \"Escape\"); app name or bundle id for \"open_app\"."
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "cmd",
+              "shift",
+              "alt",
+              "ctrl"
+            ]
+          },
+          "description": "Modifier keys held during a click."
+        },
+        "dx": {
+          "type": "number",
+          "description": "Horizontal scroll in pixels."
+        },
+        "dy": {
+          "type": "number",
+          "description": "Vertical scroll in pixels (positive = further down the page)."
+        },
+        "seconds": {
+          "type": "number",
+          "description": "For \"wait\": seconds to wait (max 10)."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "app",
+    "description": "Operate a Mac app in the BACKGROUND like a person, without taking over the screen. The app stays behind the user's windows, their pointer and keyboard are untouched, and a small floating mini window shows the app live with your cursor and a Stop button. Prefer this tool over \"computer\" for native apps. Use \"browser\" for websites.\n\nWorkflow:\n- Start with action \"state\" and \"app\" (name or bundle id, e.g. \"Notes\", \"Rechner\", \"com.apple.Notes\"). It launches the app in the background if needed and returns a screenshot of its window plus an outline: [index] role \"title\" value=\"…\" @(x,y).\n- Act with element indices from the latest outline: \"click\", \"type\" (with index it focuses that field first, then inserts \"text\" at the caret), \"set_value\" (replace a field's whole value), \"scroll\", \"action\" (an action listed for that element, e.g. AXIncrement, AXOpen). Every action returns a fresh state; indices change, so always use the newest outline.\n- Menu bar: \"menu\" with \"path\" in the app's language, e.g. [\"Ablage\", \"Neue Notiz\"]. A one-entry path lists that menu's items. Prefer menus over ⌘ shortcuts, which background apps often ignore.\n- \"key\" sends keys to the app (\"Return\", \"Escape\", \"Tab\", \"Down\"). Return and Escape use Accessibility when the focused element supports it.\n- x/y are screenshot pixels of the app window; use them only when the element is not in the outline. \"window\" picks another window by id or title. Right-click menus are not available in the background.\n- \"show\" brings the app to the front, only when the user wants to see it. \"list_apps\" lists running apps.\n- Never type passwords or payment data; password fields are refused. System Settings, permission and login dialogs, keychains and password managers are off limits, and the helper refuses them. Ask the user before sending, deleting, buying or publishing anything.\n- If a result says the user stopped the agent, stop immediately and ask how to continue.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "state",
+            "click",
+            "type",
+            "set_value",
+            "key",
+            "scroll",
+            "menu",
+            "action",
+            "list_apps",
+            "show"
+          ],
+          "description": "What to do."
+        },
+        "app": {
+          "type": "string",
+          "description": "For \"state\": app name or bundle id. Later actions use the app of the latest state."
+        },
+        "window": {
+          "type": "string",
+          "description": "For \"state\": window id or part of its title (default: main window)."
+        },
+        "index": {
+          "type": "integer",
+          "description": "Element [index] from the latest outline."
+        },
+        "x": {
+          "type": "number",
+          "description": "X in screenshot pixels when no index fits."
+        },
+        "y": {
+          "type": "number",
+          "description": "Y in screenshot pixels when no index fits."
+        },
+        "text": {
+          "type": "string",
+          "description": "For \"type\": text to insert."
+        },
+        "value": {
+          "type": "string",
+          "description": "For \"set_value\": the new value."
+        },
+        "keys": {
+          "type": "string",
+          "description": "For \"key\": e.g. \"Return\", \"Escape\", \"Tab\", \"Down\", \"cmd+s\"."
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "description": "For \"scroll\" (default down)."
+        },
+        "amount": {
+          "type": "number",
+          "description": "For \"scroll\": steps (default 1)."
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "For \"menu\": titles from the menu bar down."
+        },
+        "name": {
+          "type": "string",
+          "description": "For \"action\": the AX action name shown in the outline."
+        },
+        "count": {
+          "type": "integer",
+          "description": "For \"click\": 2 for a double-click."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

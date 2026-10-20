@@ -1,0 +1,1055 @@
+{
+ "description": "A bash call asks for full access; the approval card waits for an answer.",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-2b8e5d0c-7a41-4c9e-9f36-5e1a0c3d7b42",
+   "createdAt": 1792498440000,
+   "cwd": "/Users/alex/code/storefront",
+   "isSeeded": false,
+   "delegationDepth": 0
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792498440000,
+    "data": {
+     "preset": "workspace-write"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792498440005,
+    "data": {
+     "mode": "workspace-write"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792498440010,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 3,
+    "time": 1792498440015,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 4,
+    "time": 1792498440075,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "system/message",
+    "seq": 5,
+    "time": 1792498440080,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "You are an AI agent powered by DeepSeek Harness.\n\n[… system prompt trimmed for the fixture …]"
+       }
+      ],
+      "source": {
+       "kind": "system-prompt"
+      },
+      "id": "e4203191-eb60-55ce-8c3f-aa5188a73695"
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 6,
+    "time": 1792498440085,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Install the dependencies and run the test suite."
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "02e862f0-fea9-5f54-a621-98ee340a4945"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 7,
+    "time": 1792498440090,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Session workspace: \"/Users/alex/code/storefront\"."
+      }
+     ],
+     "source": {
+      "kind": "runtime-context",
+      "form": "snapshot",
+      "sections": []
+     },
+     "role": "user",
+     "id": "3f0c4a04-b05d-53dc-904b-0086f57b564d"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 8,
+    "time": 1792498440095,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000,
+     "systemPromptUpdate": "in-history"
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 9,
+    "time": 1792498440100,
+    "data": {
+     "title": "Install the dependencies and",
+     "messageSeqs": [
+      6
+     ],
+     "source": {
+      "kind": "fallback"
+     }
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 10,
+    "time": 1792498440500,
+    "data": {
+     "title": "Install deps and run tests",
+     "messageSeqs": [
+      6
+     ],
+     "source": {
+      "kind": "provider",
+      "provider": "session-title-first-prompt-llm",
+      "model": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     }
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 11,
+    "time": 1792498446268,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "There is a package-lock.json, so npm ci is the right install. Check the scripts first."
+       },
+       {
+        "type": "tool-call",
+        "id": "toolu_0003ed8486",
+        "name": "read",
+        "arguments": "{\"file_path\": \"package.json\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "reasoning",
+          "signature": "sig"
+         },
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "6a47518a-6de6-5755-b3a9-a2febd7f877f"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792498441200,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "reasoning"
+       }
+      },
+      {
+       "type": "reasoning-chunks",
+       "time0": 1792498441200,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "There is a package-lock.json, so npm ci is the right install. Check the scripts first."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792498445930,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "reasoning",
+         "text": "There is a package-lock.json, so npm ci is the right install. Check the scripts first."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498445930,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498446238,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_0003ed8486",
+         "name": "read",
+         "arguments": "{\"file_path\": \"package.json\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498446238,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498446238,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 12,
+    "time": 1792498446278,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "callId": "toolu_0003ed8486",
+     "name": "read",
+     "arguments": "{\"file_path\": \"package.json\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 13,
+    "time": 1792498446338,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_0003ed8486"
+      },
+      "toolCallId": "toolu_0003ed8486",
+      "content": [
+       {
+        "type": "text",
+        "text": "<path>/Users/alex/code/storefront/package.json</path>\n<type>file</type>\n<content>\n1: {\n2:   \"name\": \"storefront\",\n3:   \"version\": \"1.4.0\",\n4:   \"private\": true,\n5:   \"type\": \"module\",\n6:   \"scripts\": {\n7:     \"dev\": \"vite\",\n8:     \"build\": \"vite build\",\n9:     \"test\": \"vitest run\"\n10:   },\n11:   \"devDependencies\": {\n12:     \"vite\": \"^7.1.0\",\n13:     \"vitest\": \"^4.0.2\"\n14:   }\n15: }\n\n(End of file - total 15 lines)\n</content>"
+       }
+      ],
+      "isError": false,
+      "id": "bd3fabbe-a5d6-5310-b46a-12494f56954d"
+     },
+     "meta": {
+      "path": "/Users/alex/code/storefront/package.json",
+      "offset": 1,
+      "lines": [
+       {
+        "number": 1,
+        "text": "{"
+       },
+       {
+        "number": 2,
+        "text": "  \"name\": \"storefront\","
+       },
+       {
+        "number": 3,
+        "text": "  \"version\": \"1.4.0\","
+       },
+       {
+        "number": 4,
+        "text": "  \"private\": true,"
+       },
+       {
+        "number": 5,
+        "text": "  \"type\": \"module\","
+       },
+       {
+        "number": 6,
+        "text": "  \"scripts\": {"
+       },
+       {
+        "number": 7,
+        "text": "    \"dev\": \"vite\","
+       },
+       {
+        "number": 8,
+        "text": "    \"build\": \"vite build\","
+       },
+       {
+        "number": 9,
+        "text": "    \"test\": \"vitest run\""
+       },
+       {
+        "number": 10,
+        "text": "  },"
+       },
+       {
+        "number": 11,
+        "text": "  \"devDependencies\": {"
+       },
+       {
+        "number": 12,
+        "text": "    \"vite\": \"^7.1.0\","
+       },
+       {
+        "number": 13,
+        "text": "    \"vitest\": \"^4.0.2\""
+       },
+       {
+        "number": 14,
+        "text": "  }"
+       },
+       {
+        "number": 15,
+        "text": "}"
+       }
+      ],
+      "totalLines": 15,
+      "lang": "json"
+     }
+    },
+    "sourceEventSeqs": [
+     12
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 14,
+    "time": 1792498446343,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 15,
+    "time": 1792498446593,
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 16,
+    "time": 1792498448626,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "The tests run with Vitest. Installing needs network access, so I am asking for it once."
+       },
+       {
+        "type": "tool-call",
+        "id": "toolu_df2c139038",
+        "name": "bash",
+        "arguments": "{\"command\": \"npm ci\", \"description\": \"Install dependencies\", \"sandbox_permissions\": \"danger-full-access\", \"justification\": \"npm has to download packages from the registry, and the workspace sandbox blocks network access.\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "text"
+         },
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "3699e0e5-c87b-54b6-ac27-7ce33255ac9a"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792498447293,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792498447293,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "The tests run with Vitest. Installing needs network access, so I am asking for it once."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792498447902,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "text",
+         "text": "The tests run with Vitest. Installing needs network access, so I am asking for it once."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498447902,
+       "chunk": {
+        "type": "block-start",
+        "index": 1,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498448596,
+       "chunk": {
+        "type": "block-end",
+        "index": 1,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_df2c139038",
+         "name": "bash",
+         "arguments": "{\"command\": \"npm ci\", \"description\": \"Install dependencies\", \"sandbox_permissions\": \"danger-full-access\", \"justification\": \"npm has to download packages from the registry, and the workspace sandbox blocks network access.\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498448596,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498448596,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 17,
+    "time": 1792498448636,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "callId": "toolu_df2c139038",
+     "name": "bash",
+     "arguments": "{\"command\": \"npm ci\", \"description\": \"Install dependencies\", \"sandbox_permissions\": \"danger-full-access\", \"justification\": \"npm has to download packages from the registry, and the workspace sandbox blocks network access.\"}"
+    }
+   },
+   {
+    "type": "approval/asked",
+    "seq": 18,
+    "time": 1792498448641,
+    "data": {
+     "id": "approval-1",
+     "toolName": "bash",
+     "callId": "toolu_df2c139038",
+     "reason": "npm has to download packages from the registry, and the workspace sandbox blocks network access."
+    }
+   }
+  ]
+ },
+ "live": 11,
+ "approval": {
+  "callId": "toolu_df2c139038",
+  "tool": "bash",
+  "summary": "npm ci",
+  "justification": "npm has to download packages from the registry, and the workspace sandbox blocks network access."
+ },
+ "onApproval": {
+  "allowed-once": [
+   {
+    "type": "approval/decided",
+    "data": {
+     "id": "approval-1",
+     "outcome": "allowed-once"
+    }
+   },
+   {
+    "type": "tool/result",
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_df2c139038"
+      },
+      "toolCallId": "toolu_df2c139038",
+      "content": [
+       {
+        "type": "text",
+        "text": "added 214 packages, and audited 215 packages in 6s\n\n41 packages are looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities\n"
+       }
+      ],
+      "isError": false,
+      "id": "58795f4d-3f30-5195-98ef-c09f5100c5e3"
+     }
+    },
+    "sourceEventSeqs": [
+     17
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "step/start",
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "assistant/message",
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_9fdba5a02f",
+        "name": "bash",
+        "arguments": "{\"command\": \"npm test\", \"description\": \"Run the test suite\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "tool-call"
+         }
+        ]
+       }
+      },
+      "id": "52ffaf87-1ba9-50ce-b7a8-83c8702c9837"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792498451001,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "tool-call"
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498451371,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "tool-call",
+         "id": "toolu_9fdba5a02f",
+         "name": "bash",
+         "arguments": "{\"command\": \"npm test\", \"description\": \"Run the test suite\"}"
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498451371,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498451371,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "tool-calls"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "callId": "toolu_9fdba5a02f",
+     "name": "bash",
+     "arguments": "{\"command\": \"npm test\", \"description\": \"Run the test suite\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_9fdba5a02f"
+      },
+      "toolCallId": "toolu_9fdba5a02f",
+      "content": [
+       {
+        "type": "text",
+        "text": "\n> storefront@1.4.0 test\n> vitest run\n\n RUN  v4.0.2 /Users/alex/code/storefront\n\n ✓ src/cart.test.ts (6 tests) 12ms\n ✓ src/price.test.ts (4 tests) 5ms\n\n Test Files  2 passed (2)\n      Tests  10 passed (10)\n   Duration  1.21s\n"
+       }
+      ],
+      "isError": false,
+      "id": "0be526b2-0135-58a3-be0c-facee0d7144a"
+     }
+    },
+    "sourceEventSeqs": [
+     24
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "step/start",
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "assistant/message",
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "Dependencies are installed and all **10 tests** pass (`src/cart.test.ts`, `src/price.test.ts`)."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "text"
+         }
+        ]
+       }
+      },
+      "id": "b6434166-8ff1-5d0f-86e6-5fb62710f2d9"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792498453766,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792498453766,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "Dependencies are installed and all **10 tests** pass (`src/cart.test.ts`, `src/price.test.ts`)."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792498454431,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "text",
+         "text": "Dependencies are installed and all **10 tests** pass (`src/cart.test.ts`, `src/price.test.ts`)."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498454431,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498454431,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "stop"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "turn/end",
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   }
+  ],
+  "rejected": [
+   {
+    "type": "approval/decided",
+    "data": {
+     "id": "approval-1",
+     "outcome": "rejected"
+    }
+   },
+   {
+    "type": "tool/result",
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "role": "tool",
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_df2c139038"
+      },
+      "toolCallId": "toolu_df2c139038",
+      "content": [
+       {
+        "type": "text",
+        "text": "Error: The user did not allow this command to run with danger-full-access."
+       }
+      ],
+      "isError": true,
+      "id": "58795f4d-3f30-5195-98ef-c09f5100c5e3"
+     },
+     "error": {
+      "name": "ApprovalError",
+      "code": "APPROVAL_REJECTED",
+      "reason": "Not allowed by the user"
+     }
+    },
+    "sourceEventSeqs": [
+     17
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "step/start",
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "assistant/message",
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "Understood, I will not install anything. Run `npm ci` yourself when you are ready and I will take it from there."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "replayState": {
+        "response": {
+         "kind": "deepseek-messages",
+         "version": 1,
+         "model": "deepseek-flash"
+        },
+        "blocks": [
+         {
+          "type": "text"
+         }
+        ]
+       }
+      },
+      "id": "52ffaf87-1ba9-50ce-b7a8-83c8702c9837"
+     },
+     "usage": {
+      "inputTokens": 1840,
+      "outputTokens": 380,
+      "cacheReadTokens": 11264,
+      "totalTokens": 13484
+     },
+     "stream": [
+      {
+       "type": "chunk",
+       "time": 1792498451001,
+       "chunk": {
+        "type": "block-start",
+        "index": 0,
+        "blockType": "text"
+       }
+      },
+      {
+       "type": "text-chunks",
+       "time0": 1792498451001,
+       "index": 0,
+       "dt": [],
+       "texts": [
+        "Understood, I will not install anything. Run `npm ci` yourself when you are ready and I will take it from there."
+       ]
+      },
+      {
+       "type": "chunk",
+       "time": 1792498451785,
+       "chunk": {
+        "type": "block-end",
+        "index": 0,
+        "block": {
+         "type": "text",
+         "text": "Understood, I will not install anything. Run `npm ci` yourself when you are ready and I will take it from there."
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498451785,
+       "chunk": {
+        "type": "usage",
+        "usage": {
+         "inputTokens": 1840,
+         "outputTokens": 380,
+         "cacheReadTokens": 11264,
+         "totalTokens": 13484
+        }
+       }
+      },
+      {
+       "type": "chunk",
+       "time": 1792498451785,
+       "chunk": {
+        "type": "finish",
+        "reason": {
+         "kind": "stop"
+        }
+       }
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "turn/end",
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   }
+  ]
+ }
+}

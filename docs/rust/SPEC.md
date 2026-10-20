@@ -1,0 +1,265 @@
+# dsh-codex in Rust — specification (contract for all crates)
+
+Status: v0 (2026-10-20). Branch `rust`. Owner of this file: the orchestrator.
+Workers propose changes in their final report instead of editing this file.
+
+## 1. Goal
+
+`dsh-codex` is a standalone coding agent for DeepSeek, written in Rust, that
+
+1. **behaves like DeepSeek Harness (dsh) towards the model**: same tool names, descriptions and
+   schemas, same system prompt and runtime-context messages, same Anthropic-Messages wire format
+   (`POST {base}/v1/messages`, SSE), same reasoning replay — so model quality and DeepSeek prefix-cache
+   hits match dsh;
+2. **writes dsh session format v4**, so a session can be opened and continued by the official `dsh`
+   (and vice versa) for the event subset we emit;
+3. **carries the dsh-codex product**: the Codex-style look (now as our own web UI) and the special
+   tools `browser`, `app`, `computer` with the floating mini window (Swift helper, unchanged);
+4. is **fast and lean**: start < 100 ms, < 40 MB RSS idle, one binary (UI assets embedded);
+5. **sends nothing extra**: no `dsh_session_log`, no `dsh_plugin_packages`, no anonymous user id,
+   no telemetry. Only what the model request needs.
+
+Non-goals: Cordis/JS plugin compatibility, the official DSH web API, Electron desktop, voice,
+office, workflow/PTC (`run_code`, `workflow`), agent teams, schedules, goals (later maybe).
+
+## 2. Reference material (read-only)
+
+| What | Where |
+|---|---|
+| Upstream source, pinned 0.2.1-rc.2 (commit 687f282e) | `../ref/deepseek-harness` (a checkout of github.com/deepseek-ai/deepseek-harness at 687f282e, next to this repo) |
+| Upstream docs: tool catalog, persistence catalog/schema, wire extensions, config catalog | `ref/deepseek-harness/docs/{tool-catalog.md,persistence-catalog.md,persistence-schema.json,deepseek-llm-api-wire-extensions.md,config-catalog.md}` |
+| Installed official dsh 0.2.0-rc.2 (runnable: `dsh --profile headless "..."`) | `/usr/lib/node_modules/@deepseek-ai/dsh` |
+| Exact request header (24 tools, full descriptions + schemas) of dsh 0.2.0-rc.2 headless | `docs/rust/upstream/request-header-0.2.0-rc.2.json` |
+| System prompt of dsh 0.2.0-rc.2 headless | `docs/rust/upstream/system-prompt-0.2.0-rc.2.txt` |
+| Captured wire requests of dsh (4 calls: agent step, title, 2 more steps) | `docs/rust/upstream/wire-0.2.0-rc.2/*.json` |
+| Instant DeepSeek stand-in that can dump requests | `tools/dev/mock_deepseek.py` |
+| Original dsh-codex plugin (JS + Swift), the product to carry over | repo root: `client.js`, `index.js`, `lib/*.js`, `helper/` |
+
+To produce more golden data: start `python3 tools/dev/mock_deepseek.py 18xxx N /dev/null <dumpdir>`,
+then run the official dsh with `DEEPSEEK_API_KEY=sk-mock DEEPSEEK_BASE_URL=http://127.0.0.1:18xxx/anthropic dsh --profile headless "..."`
+in a scratch directory. Its session lands in `~/.dsh/sessions/--<cwd with / as ->--/<id>/session.v4.jsonl.zstd`
+(read with `zstdcat`). Delete scratch sessions you create. **Never use a real API key.** No real DeepSeek
+calls in this phase.
+
+## 3. Repository layout and ownership
+
+```
+Cargo.toml                 workspace (orchestrator)
+crates/dshx-core           shared types and traits (orchestrator; additive changes only, list them)
+crates/dshx-llm            DeepSeek adapter                                   (worker: llm)
+crates/dshx-testkit        scripted mock DeepSeek server for Rust tests        (worker: llm)
+crates/dshx-session        v4 log store, reader, listing, attachments, derive  (worker: session)
+crates/dshx-tools          bash, read, write, edit, glob, grep, read_image,
+                           todo_write, web_fetch, web_search, sandbox          (worker: tools)
+crates/dshx-agent          agent loop, scheduler, retries, prompt, context,
+                           AGENTS.md, compaction, subagents                    (worker: agent)
+crates/dshx-browser        background Chrome over CDP pipe + `browser` tool    (worker: browser)
+crates/dshx-macos          Swift-helper client + `computer`, `app` tools, mini (worker: macos)
+crates/dshx-server         HTTP/WebSocket server for the UI                    (wave 2)
+crates/dsh-codex           the binary: CLI (headless, web, sdk)                (wave 2)
+ui/                        Codex-style web UI, no build step                   (worker: ui)
+helper/                    Swift helper — unchanged except additive commands   (worker: macos)
+client.js index.js lib/ package.json cordis.patch.yml
+                           the original DSH plugin; stays working, do not move
+.github/workflows/         CI (worker: macos)
+docs/rust/                 SPEC, plan, notes
+```
+
+Each worker edits only its own crate/dir (plus `Cargo.toml` of that crate). Need something in
+`dshx-core`? Make the smallest additive change, keep it compiling for everyone, and list it in the
+final report. Never edit another worker's crate.
+
+## 4. Core contracts (`crates/dshx-core`)
+
+Read the source; it is short. Summary:
+
+- `Message { id, role, content: Vec<ContentBlock>, source, toolCallId?, isError?, ..extra }` and
+  `ContentBlock` (`text`, `reasoning`, `image`, `tool-call`, `tool-addition`, `tool-removal`,
+  unknown preserved) serialize **exactly** like dsh (`tests/serde_compat.rs`).
+- `LlmClient::stream(GenerateRequest, CancellationToken) -> BoxStream<StreamChunk>`; one terminal
+  `Finish { reason, replay_state }`; errors are `FinishReason::Error { failure: LlmFailure }` with
+  dsh codes. Retries are done by the agent, not the adapter.
+- `Tool` trait: `schema()`, `concurrency_safe()`, `timeout()`, `describe(args)`, `execute(args, ToolContext)`
+  → `ToolOutput { content: Vec<ToolResultPart>, is_error, value, meta }`. `ToolError` becomes an error
+  result for the model, never a crash.
+- `ToolContext` gives cwd, sandbox mode, cancel token, `AttachmentStore`, `model_accepts_images`,
+  `Approver`, and per-session shared `state`.
+- `SessionLog` trait: `append(Vec<NewEvent>) -> Vec<SessionEvent>`, `flush()`, `events()`, `subscribe()`.
+  `SessionEvent { type, seq, time, data, ..extra }`, header `SessionHeader`. Event names in `kinds`.
+- `Config` (`~/.dsh-codex/config.toml`, `$DSHX_HOME`), incl. `[codex]` = the plugin's
+  `computerUse/apps/browser/mini` settings with the same defaults.
+
+## 5. Crate specs
+
+### 5.1 `dshx-llm` + `dshx-testkit` (worker: llm)
+- `DeepSeekClient` implements `LlmClient` for route `deepseek-official`. Base URL from config/
+  `DEEPSEEK_BASE_URL` (default `https://api.deepseek.com/anthropic`), key from `DEEPSEEK_API_KEY` or
+  the credentials file of `dshx-session`/config (keep a `ApiKeySource` trait so the server can set it).
+- Request body: byte-for-byte the same structure dsh sends (see `wire-0.2.0-rc.2/`): `model`, `stream:true`,
+  `max_tokens`, `thinking`, `output_config.effort`, `system` (string), `tools` (Anthropic `input_schema`),
+  messages mapped from canonical messages (system messages in history, tool results as `tool_result`
+  user blocks, images, thinking blocks with signatures replayed from `replayState`). Mirror
+  `ref/.../packages/llm/llm-deepseek/src/{serialize,translate,sse,replay,transport,wire-types}.ts`.
+  Headers: `anthropic-version: 2023-06-01`, `x-api-key`, `content-type`, `user-agent: dsh-codex/<ver>`.
+  **Do not send** `dsh_session_log`, `dsh_plugin_packages`, `x-deepseek-harness-user-id`.
+- SSE → `StreamChunk` incl. `thinking_delta`, `signature_delta`, `input_json_delta`, usage mapping
+  (cache read/write disjoint like dsh), `replay_state` with kind `deepseek-messages` v1 identical to dsh
+  so dsh can continue our sessions.
+- Error classification like dsh `transport.ts` (status → code, `retry-after`), `RetryPolicy` struct
+  with dsh defaults (5 retries, 500 ms → 10 s, jitter 0.1, codes EMPTY_RESPONSE/RATE_LIMIT/SERVER/
+  TIMEOUT/TRANSPORT) exported for the agent.
+- Images: inline base64 `image` blocks (Files API is optional/later). Model catalog: `deepseek-flash`
+  (text+image, 1M), `deepseek-v4-pro` (text, 1M), efforts off/low/high/max as dsh.
+- `dshx-testkit`: `MockDeepSeek` (axum or hyper) on 127.0.0.1:0 with scripted turns
+  (text, thinking, tool calls, errors 429/500/overflow, slow streams), records requests for assertions.
+- Tests: golden comparison of our request bodies with `wire-0.2.0-rc.2` (modulo ids/telemetry fields).
+
+### 5.2 `dshx-session` (worker: session)
+- File-backed `FileLog: SessionLog`, layout and framing **identical to dsh v4**:
+  `<root>/--<cwd encoded>--/<session-id>/session.v4.jsonl.zstd` (+ `session.lock`), one zstd frame per
+  append batch, fsync on `flush`, advisory lock, torn-tail recovery on open. Root default
+  `~/.dsh-codex/sessions`; configurable so tests can point at `~/.dsh/sessions` for interop.
+- Reader for dsh-written v4 logs (reject unknown non-ignorable event types like dsh; ignore the rest).
+- `derive_messages(events)` faithful to `ref/.../packages/core/session/src/surface.ts`
+  (surfaceOp append/replace, compaction summaries, inbox splices, interrupted-turn repair).
+- Session listing (id, title from `session/title`, cwd, created/updated, last status), delete.
+- `FileAttachments: AttachmentStore` storing images like dsh `attachment-local` (path layout, ids,
+  dimension probing, optional downscale to a pixel budget).
+- Credentials file for the API key (`~/.dsh-codex/credentials.toml`, mode 0600).
+- **Interop acceptance**: a session written by `FileLog` (scripted events of a 2-step turn) is resumed by
+  the official dsh (`dsh --profile headless --session-id <id> "continue"` against the mock, with the
+  session copied under `~/.dsh/sessions`), and a dsh-written session is read and derived by us.
+
+### 5.3 `dshx-tools` (worker: tools)
+- Implement with the **exact** names, descriptions and JSON schemas from
+  `docs/rust/upstream/request-header-0.2.0-rc.2.json`: `bash`, `read`, `write`, `edit`, `glob`, `grep`,
+  `read_image`, `todo_write`, `web_fetch`, `web_search`, `job_list`, `job_output`, `job_kill`.
+  Output text formats (line numbers, truncation notes, `[exit code: N]`, spill notices) like dsh —
+  read the TS implementations.
+- bash: fresh `bash -c` per call, env as dsh (`NO_COLOR`, `TERM=dumb`, `PAGER=cat`, strip
+  KEY/TOKEN/SECRET/PASSWORD vars), timeout default 120 s max 600 s, 64 KB tail per stream with spill
+  file, `run_in_background` → job, process-group kill on cancel/timeout.
+- Sandbox (`SandboxMode`): Linux bubblewrap like dsh `sandbox-local` (`--ro-bind / /`, workspace rw,
+  `--tmpfs /tmp`, `--unshare-pid`, `--die-with-parent`), fallback none + warning; macOS `sandbox-exec`
+  profile like dsh. `sandbox_permissions`/`justification` → `Approver`.
+- fs observation policy: read-before-write/edit, freshness check (mtime/size), like
+  `fs-observation-policy`; path checks keep writes inside the workspace in `workspace-write`.
+- glob/grep natively (crates `ignore`, `globset`, `grep-searcher`/`grep-regex`), same limits/sorting.
+- web_fetch: public-IP-only, same-origin redirects, HTML → Markdown; web_search via DeepSeek's
+  `web_search_20250305` server tool through `dshx-llm` is optional (stub returning a clear error is ok).
+- `pub fn default_tools(config) -> Vec<Arc<dyn Tool>>`.
+
+### 5.4 `dshx-agent` (worker: agent)
+- `Agent::run_turn(user input) ` over `LlmClient`, `ToolRegistry`, `SessionLog`, mirroring
+  `ref/.../packages/core/agent-loop` (turn/step lifecycle and the exact events it logs, see a dsh
+  session), tool scheduler (concurrency-safe calls in a pool of 10, others exclusive, results committed
+  in model order), cancellation semantics (interrupted assistant message, `ABORTED_BEFORE_DISPATCH` etc.),
+  tool timeout, retries with `RetryPolicy` (`llm/retry` events), checkpoints (flush before request/dispatch).
+- Prompt assembly identical to dsh: system prompt sections (`system-prompt-0.2.0-rc.2.txt` is the target
+  output for the default tool set), runtime-context snapshot user message, AGENTS.md/CLAUDE.md chain
+  (`context/agent-instructions`), admission rules that keep the DeepSeek prefix cache warm
+  (agent-loop README). Codex tools add their own prompt lines if dsh-codex had any (it has none; the tool
+  descriptions carry the guidance).
+- Compaction: pressure compaction + tool-result pruner like `compaction-basic`, overflow recovery once.
+- Session title: first-prompt fallback title + one LLM title request like dsh (`session/title*` events).
+- Subagents (`subagent`, `subagent_fork`, `send_message`, `interrupt_agent`, `list_agents` as in-process
+  tasks with child sessions and `delegationDepth`, like `packages/subagent`) are **wave 2**; design the loop
+  so a child agent is just another `Agent` with its own `SessionLog`.
+- Events out: everything the UI needs is in the session log; live text/reasoning deltas additionally go
+  through an `AgentObserver` callback (not persisted).
+- Tests with `dshx-testkit` (or an in-crate fake `LlmClient`) and `dshx_session::MemoryLog`.
+
+### 5.5 `dshx-browser` (worker: browser)
+- Port `lib/browser.js` + `lib/browser-tool.js`: Chrome/Chromium headless with its own profile dir
+  (`~/.dsh-codex/browser-profile`; macOS: keep `~/Library/Application Support/dsh-codex/browser-profile`),
+  DevTools protocol over `--remote-debugging-pipe` (fds 3/4, no port), same actions, element outline
+  format `[3] button "Search" @(x,y)`, screenshots (JPEG quality), `read`, tabs, `show`/`hide`, password
+  refusal, downloads blocked, idle exit. Tool name/description/schema **verbatim** from `lib/browser-tool.js`.
+- Output through `ToolOutput`: text summary + screenshot via `AttachmentStore` when
+  `model_accepts_images`, `value`/`meta` exactly like `index.js` (`summary`, `image`, `screen`,
+  `cursor`, `place`, `target`; presentationMeta fields `tool, action, label, x, y, toX, toY, screen,
+  cursor, place, target`).
+- On macOS also drive the mini window through `dshx-macos`'s helper client (feature-gated call, no hard
+  dependency cycle: expose a `MiniSink` trait in `dshx-browser` that `dshx-macos` implements).
+- Tests on Linux with Chromium at `/root/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome` against a local test HTTP server.
+
+### 5.6 `dshx-macos` (worker: macos)
+- Unix-socket client for the helper (`~/Library/Application Support/dsh-codex/cua.sock`, JSON lines,
+  start via `open -g` on ENOENT/ECONNREFUSED) = port of `lib/cua-client.js`.
+- `computer` and `app` tools: names, descriptions, schemas, `describe`, activity strings (de/en), request
+  mapping and result text **verbatim** from `lib/computer-tool.js`, `lib/app-tool.js`; output shape like
+  `index.js` (attachments, scaling note, text-only hint). `configure` once per process with the
+  `[codex]` settings and localized mini strings (`STRINGS` in `index.js`), system locale detection.
+- Implements `dshx_browser::MiniSink` for the browser's mini-window updates.
+- Compiles on every OS; tools only registered on macOS. Tests on Linux with a fake helper on a temp socket.
+- CI: `.github/workflows/rust.yml` — fmt, clippy, test on ubuntu-latest and macos-latest; build the Swift
+  helper on macOS (`helper/build.sh` without install/sign); cache cargo.
+- The Swift helper stays as is. Only additive socket commands if the Rust side truly needs them.
+
+### 5.7 `ui/` (worker: ui)
+- Codex-style web UI served by `dshx-server`, **no build step**: plain ES modules, vendored
+  `preact` + `htm` (+ `marked` for Markdown, small highlighter optional) under `ui/vendor/`.
+- Visual spec = `client.js` (tokens, layout, composer, hero start page, transcript rows with screenshot +
+  gliding agent cursor) translated from "theme on top of DSH" into our own components. Light/dark/system,
+  de/en from `navigator.language`. Respect `ref/deepseek-harness/BRAND_GUIDELINES.md` for any DeepSeek
+  mark; if a whale mark is not allowed outside DSH, use a neutral glyph.
+- Screens: sidebar (wordmark, new chat, sessions grouped by workspace), conversation (768 px column,
+  dark user bubble, Markdown answers, collapsible reasoning, Codex-like tool rows: bash command +
+  output, read/edit with diff, todo list, browser/app/computer rows with preview), hero start page
+  ("What should we work on in ‹workspace›?"), composer (model chip, effort, access mode in orange when
+  full access, image attach, send/stop), approval card, settings (API key, model, effort, sandbox),
+  stats line under composer.
+- Renders **only from session events** (same envelope as on disk) plus live deltas; protocol in §6.
+  Ship `ui/fixtures/*.json` (event logs incl. browser/computer rows) and a fixture mode
+  (`index.html?fixture=name`) so it can be developed and screenshotted without a server.
+- Verify visually with headless Chromium (Playwright venv `/root/.venvs/playwright`, Chrome `/root/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome`; `webshot --help` takes screenshots + console errors),
+  light and dark, desktop and narrow width, no console errors.
+
+### 5.8 `dshx-server` + `dsh-codex` binary (wave 2, orchestrator)
+CLI: `dsh-codex "task"` (headless; flags `--json` NDJSON like dsh, `--session-id`, `--model`, `--effort`,
+`--sandbox`, `-C dir`), `dsh-codex web [--port] [--no-open]`, `dsh-codex sdk` (dsh SDK JSON-RPC over stdio:
+`initialize`, `session/prompt`, `session/resume`, `session/wait`, `session/working-directory/{get,set}`,
+`shutdown`; notifications `session.event`, `session.status`, `subagent.started`, `subagent.finished`).
+
+## 6. UI ↔ server protocol
+
+Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI then sends
+`Authorization: Bearer <token>` (HTTP) and `?token=` (WebSocket).
+
+| Method | Path | Body → Response |
+|---|---|---|
+| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], settings:{model, effort, sandbox, approval}, apiKeyConfigured, tools:{browser, app, computer}}` |
+| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?}` → `/api/info` shape |
+| GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
+| POST | `/api/workspaces` | `{path}` → workspace |
+| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status}]` (newest first) |
+| POST | `/api/sessions` | `{cwd}` → `{id}` |
+| GET | `/api/sessions/:id` | → `{header, events:[SessionEvent], status}` |
+| POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?}` → 202 |
+| POST | `/api/sessions/:id/cancel` | → 202 |
+| DELETE | `/api/sessions/:id` | → 204 |
+| POST | `/api/approvals/:callId` | `{decision:"allowed-once"\|"rejected"}` → 204 |
+| POST | `/api/attachments` | raw image body, `Content-Type` → `ImageAttachmentRef` |
+| GET | `/api/attachments/:id` | → image bytes |
+| WS | `/api/stream?session=:id&after=:seq` | server → client messages below |
+
+WebSocket messages (JSON):
+- `{"kind":"event","sessionId","event":SessionEvent}` — every appended event, in order, after `after`.
+- `{"kind":"delta","sessionId","turn","step","index","blockType":"text"|"reasoning","text"}` — live
+  streaming text, not persisted; the final `assistant/message` event replaces it.
+- `{"kind":"status","sessionId","status":"idle"|"running"|"waiting-approval"|"error","error"?}`
+- `{"kind":"approval","sessionId","callId","tool","summary","justification"}` — pending approval.
+
+## 7. Conventions
+- Rust 2024, stable toolchain in `~/.cargo/bin` (`export PATH=$HOME/.cargo/bin:$PATH`). `cargo fmt`,
+  `cargo clippy -- -D warnings` clean for your crate. No `unsafe` except where unavoidable (pipe fds,
+  `pre_exec` for process groups), each with a `// SAFETY:` comment.
+- Libraries: `thiserror` for typed errors, `anyhow` at edges, `tracing` for logs. Prefer few, well-known
+  dependencies; add them to your crate's `Cargo.toml` (workspace-level only if shared).
+- Code comments and identifiers in English; comment density like the existing JS (short, why not what).
+- **Build politely**: this server also runs production services. Always build/test with
+  `nice -n 10 cargo ... -j 4`.
+- Tests offline only. Use `tempfile` dirs; never touch `~/.dsh-codex` or `~/.dsh` except scratch
+  sessions you delete again.
+- Commit on your worktree branch with clear messages; do not push, do not merge. End commit messages with
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.

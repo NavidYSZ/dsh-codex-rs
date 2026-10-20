@@ -1,6 +1,6 @@
-# dsh-codex
+# dsh-codex: Plugin für DeepSeek Harness
 
-[English](README.md)
+[English](PLUGIN.md)
 
 Ein Plugin-Bundle für [DeepSeek Harness](https://www.deepseek.com/harness/)
 (DSH). Es macht zwei Dinge:
@@ -13,6 +13,11 @@ Ein Plugin-Bundle für [DeepSeek Harness](https://www.deepseek.com/harness/)
 
 Ein schwebendes Mini-Fenster zeigt, was der Agent gerade tut. Es hat eine
 Live-Vorschau und einen Stopp-Knopf.
+
+> **Neu: dsh-codex als eigenständiger Agent in Rust (Vorschau).** Gleicher
+> Look und gleiche Werkzeuge ohne DSH und Node.js, rund 100-mal schnellerer
+> Start und ein Zehntel des Speichers. Siehe
+> [README.md](README.md) (englisch).
 
 > Keine Verbindung zu OpenAI oder DeepSeek. „Codex“ ist eine Marke von
 > OpenAI. Das Projekt enthält keinen Code und keine Dateien aus Codex.

@@ -1,0 +1,8 @@
+{
+ "description": "First start: no API key yet, so a banner points to Settings.",
+ "session": null,
+ "cwd": "/Users/alex/code/tally",
+ "info": {
+  "apiKeyConfigured": false
+ }
+}
