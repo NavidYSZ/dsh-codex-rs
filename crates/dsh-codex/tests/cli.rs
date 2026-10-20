@@ -105,22 +105,29 @@ async fn sdk_protocol_runs_a_turn() {
         json!({"jsonrpc": "2.0", "id": 5, "method": "nope"}),
         json!({"jsonrpc": "2.0", "id": 6, "method": "shutdown"}),
     ];
-    let reader = std::thread::spawn(move || {
-        stdout
-            .lines()
-            .map(|l| serde_json::from_str::<Value>(&l.unwrap()).unwrap())
-            .collect::<Vec<_>>()
-    });
+    // Like an SDK client: send one request, read until its response arrives.
+    let mut lines = stdout.lines();
+    let mut frames: Vec<Value> = Vec::new();
     for r in &requests {
         writeln!(stdin, "{r}").unwrap();
-        // Wait for the turn before asking for the rest, like an SDK client would.
-        if r["id"] == 2 {
-            std::thread::sleep(std::time::Duration::from_millis(50));
+        stdin.flush().unwrap();
+        loop {
+            let frame: Value = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+            let done = frame["id"] == r["id"];
+            frames.push(frame);
+            if done {
+                break;
+            }
         }
     }
     drop(stdin);
-    let frames = reader.join().unwrap();
+    frames.extend(lines.map(|l| serde_json::from_str::<Value>(&l.unwrap()).unwrap()));
+    let started = std::time::Instant::now();
     assert!(child.wait().unwrap().success());
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "slow exit after shutdown"
+    );
     let by_id = |id: i64| {
         frames
             .iter()
@@ -132,8 +139,12 @@ async fn sdk_protocol_runs_a_turn() {
         by_id(1)["result"]["serverInfo"]["name"],
         "deepseek-harness-sdk-runtime"
     );
-    assert!(by_id(2)["result"]["messageId"].is_string());
-    assert_eq!(by_id(3)["result"], json!({}));
+    assert!(
+        by_id(2)["result"]["messageId"].is_string(),
+        "prompt: {}",
+        by_id(2)
+    );
+    assert_eq!(by_id(3)["result"], json!({}), "wait: {}", by_id(3));
     assert_eq!(by_id(4)["result"]["cwd"], cwd.as_str());
     assert_eq!(by_id(5)["error"]["code"], -32601);
     assert_eq!(by_id(6)["result"], json!({}));

@@ -192,8 +192,8 @@ Read the source; it is short. Summary:
   `[codex]` settings and localized mini strings (`STRINGS` in `index.js`), system locale detection.
 - Implements `dshx_browser::MiniSink` for the browser's mini-window updates.
 - Compiles on every OS; tools only registered on macOS. Tests on Linux with a fake helper on a temp socket.
-- CI: `.github/workflows/rust.yml` — fmt, clippy, test on ubuntu-latest and macos-latest; build the Swift
-  helper on macOS (`helper/build.sh` without install/sign); cache cargo.
+- No GitHub CI (owner's decision): macOS is verified on the owner's Mac. `helper/build.sh --no-sign`
+  builds the Swift helper without signing or installing.
 - The Swift helper stays as is. Only additive socket commands if the Rust side truly needs them.
 
 ### 5.7 `ui/` (worker: ui)

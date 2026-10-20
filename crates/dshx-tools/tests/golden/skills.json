@@ -1,0 +1,67 @@
+{
+ "source": "dsh 0.2.0-rc.2 headless, tools/dev mock; see crates/dshx-tools/tests/skill.rs",
+ "prompt": "please use /gamma and /quiet now",
+ "catalog": "<system-reminder>\nA skill is a reusable set of task-specific instructions. The following skills are available in this session:\n\n<available_skills>\n- `alpha`: Alpha skill for testing the loader.\n- `beta`: Beta handles &lt;tags&gt; &amp; stuff across lines\n- `delta`: Delta word0 word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15 word16 word17 word18 word19 word20 word21 word22 word23 word24 word25 word26 word27 word28 word29 word30 word31 word32 word33 word34 word35 word36 word37 word38 word39 word40 word41 word42 word43 word44 word45 word46 word47 word48 word49 word50 word51 word52 word53 word54 word55 word56 word57 word58 word59 word60 word61 word62 word63 word64 word65 word66 word67 word68 word69 word70 word...\n- `gamma`: Gamma user skill.\n- `quiet`: Quiet skill, user cannot invoke.\n</available_skills>\n\nIf the user names a skill, or the task clearly matches a skill's description, call the `skill` tool with the exact skill name before taking task actions. Load all applicable skills, then follow their full instructions. This catalog contains summaries only; do not infer or follow a skill's instructions until it has been loaded.\nA user may also invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool again for that skill.\n</system-reminder>",
+ "invocation_gamma": "<skill_content name=\"gamma\">\n<skill_resources>\nBase directory for this skill: {ROOT}/dshhome/skills/gamma\nResolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.\n</skill_resources>\n\n<skill_instructions>\nGamma body.\n</skill_instructions>\n</skill_content>",
+ "tool_results": [
+  {
+   "input": {
+    "name": "alpha"
+   },
+   "is_error": false,
+   "text": "<skill_content name=\"alpha\">\n<skill_resources>\nBase directory for this skill: {ROOT}/proj/.dsh/skills/alpha\nResolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.\n</skill_resources>\n\n<skill_instructions>\n# Alpha\n\nDo the alpha thing. See ./ref.md.\n</skill_instructions>\n</skill_content>"
+  },
+  {
+   "input": {
+    "name": "beta"
+   },
+   "is_error": false,
+   "text": "<skill_content name=\"beta\">\n<skill_resources>\nBase directory for this skill: {ROOT}/proj/.agents/skills\nResolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.\n</skill_resources>\n\n<skill_instructions>\nBeta body line 1\r\nBeta body line 2\n</skill_instructions>\n</skill_content>"
+  },
+  {
+   "input": {
+    "name": "hidden"
+   },
+   "is_error": true,
+   "text": "Error: skill \"hidden\" is not available for model invocation"
+  },
+  {
+   "input": {
+    "name": "nope"
+   },
+   "is_error": true,
+   "text": "Error: skill \"nope\" is unknown or no longer available"
+  },
+  {
+   "input": {
+    "name": "Bad_Name"
+   },
+   "is_error": true,
+   "text": "Error: invalid skill name \"Bad_Name\""
+  },
+  {
+   "input": {
+    "name": "quiet"
+   },
+   "is_error": false,
+   "text": "<skill_content name=\"quiet\">\n<skill_resources>\nBase directory for this skill: {ROOT}/proj/.dsh/skills/quiet\nResolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.\n</skill_resources>\n\n<skill_instructions>\nquiet body\n</skill_instructions>\n</skill_content>"
+  }
+ ],
+ "catalog_update": "<system-reminder>\nThe available skill catalog changed. This complete catalog replaces every earlier available-skills list in this session:\n\n<available_skills>\n- `alpha`: Alpha skill for testing the loader.\n- `beta`: Beta handles &lt;tags&gt; &amp; stuff across lines\n- `epsilon`: Epsilon added later.\n- `gamma`: Gamma user skill.\n- `quiet`: Quiet skill, user cannot invoke.\n</available_skills>\n\nUse only names in this replacement catalog. If the user names a listed skill, or the task clearly matches its description, call the `skill` tool with the exact name before acting.\nA user may also invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the `skill` tool again for that skill.\n</system-reminder>",
+ "tool_schema": {
+  "name": "skill",
+  "description": "Load the full instructions for a skill. Call it before acting on a task that names or clearly matches a skill in the session skill catalog.",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "The exact skill name from the available skills list."
+    }
+   },
+   "required": [
+    "name"
+   ]
+  }
+ }
+}

@@ -1,0 +1,484 @@
+{
+ "source": "dsh 0.2.0-rc.2 headless + tests/fixtures/mcp_server.py (stdio as t, HTTP+SSE as h); see tests/golden.rs; mcp__t__mixed was captured over HTTP (h) and mcp__t__ordered in a second stdio run",
+ "prompt_tail": "## MCP resource servers\n\nUse list_mcp_resources, list_mcp_resource_templates, or read_mcp_resource with one of these names as the server argument: [\"t\"].\n\n### MCP server: t\n\nUse the fixture tools carefully.",
+ "tools": [
+  {
+   "name": "list_mcp_resource_templates",
+   "description": "List parameterized resource URI templates from an MCP server.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "server": {
+      "type": "string",
+      "description": "Configured MCP server name."
+     },
+     "cursor": {
+      "type": "string",
+      "description": "Continuation cursor returned by this server."
+     }
+    },
+    "required": [
+     "server"
+    ]
+   }
+  },
+  {
+   "name": "list_mcp_resources",
+   "description": "List resources available from an MCP server.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "server": {
+      "type": "string",
+      "description": "Configured MCP server name."
+     },
+     "cursor": {
+      "type": "string",
+      "description": "Continuation cursor returned by this server."
+     }
+    },
+    "required": [
+     "server"
+    ]
+   }
+  },
+  {
+   "name": "mcp__t__bad_image",
+   "description": "Return an image with a bad media type.",
+   "input_schema": {
+    "type": "object"
+   }
+  },
+  {
+   "name": "mcp__t__change",
+   "description": "Add a tool and announce the list change.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__crash",
+   "description": "Exit the server process.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__echo",
+   "description": "Echo the given text back.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "Text to echo."
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  },
+  {
+   "name": "mcp__t__empty",
+   "description": "",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__fail",
+   "description": "Always fails.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__image",
+   "description": "Return a caption and a tiny PNG.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__info",
+   "description": "Report pid, cwd and selected environment variables.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__mixed",
+   "description": "Return every content block kind.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__ping_client",
+   "description": "Ping the client before answering.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__slow",
+   "description": "Sleep for ms milliseconds.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "ms": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "ms"
+    ]
+   }
+  },
+  {
+   "name": "mcp__t__spawn_child",
+   "description": "Start a long-running grandchild process.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__structured",
+   "description": "Structured output.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "mcp__t__weird_name_with_dots_10f7f669ff8b",
+   "description": "A tool whose name needs normalizing.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   }
+  },
+  {
+   "name": "read_mcp_resource",
+   "description": "Read an MCP resource by URI from the named server. Use a listed URI or an expanded resource template.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "server": {
+      "type": "string",
+      "description": "Configured MCP server name."
+     },
+     "uri": {
+      "type": "string",
+      "description": "Resource URI to read."
+     }
+    },
+    "required": [
+     "server",
+     "uri"
+    ]
+   }
+  },
+  {
+   "name": "mcp__t__added",
+   "description": "Added at runtime.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   },
+   "defer_loading": true
+  },
+  {
+   "name": "mcp__t__ordered",
+   "description": "Schema keys in unusual order.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "b": {
+      "type": "number",
+      "description": "B"
+     },
+     "a": {
+      "description": "A",
+      "type": "string"
+     }
+    },
+    "required": [
+     "a"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+   }
+  }
+ ],
+ "results": [
+  {
+   "tool": "mcp__t__echo",
+   "input": {
+    "text": "hello"
+   },
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "hello"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__image",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "caption before"
+    },
+    {
+     "type": "image",
+     "media_type": "image/png",
+     "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAMBAQAY3Y2wAAAAAElFTkSuQmCC"
+    },
+    {
+     "type": "text",
+     "text": "caption after"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__bad_image",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "[image unavailable: image/bmp; the declared media type is not PNG, JPEG, WebP, or GIF; raw image data remains available to programmatic callers]"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__fail",
+   "input": {},
+   "is_error": true,
+   "content": [
+    {
+     "type": "text",
+     "text": "Error: boom: the tool failed"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__empty",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "(empty returned no model-visible content)"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__structured",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "{\"n\": 7}"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__weird_name_with_dots_10f7f669ff8b",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "weird ok"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__info",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "{\"pid\": 2981561, \"cwd\": \"{ROOT}/work\", \"env\": {\"MCP_TEST_VAR\": \"from-config\", \"FAKE_API_KEY\": null, \"PATH_PROBE\": \"yes\"}}"
+    }
+   ]
+  },
+  {
+   "tool": "list_mcp_resources",
+   "input": {
+    "server": "t"
+   },
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "MCP server: t\n{\"resources\":[{\"name\":\"readme\",\"uri\":\"test://readme\",\"mimeType\":\"text/plain\"},{\"name\":\"blob\",\"uri\":\"test://blob\",\"mimeType\":\"application/octet-stream\"}]}"
+    }
+   ]
+  },
+  {
+   "tool": "list_mcp_resources",
+   "input": {
+    "server": "t",
+    "cursor": "r2"
+   },
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "MCP server: t\n{\"resources\":[{\"name\":\"blob\",\"uri\":\"test://blob\",\"mimeType\":\"application/octet-stream\"}]}"
+    }
+   ]
+  },
+  {
+   "tool": "list_mcp_resource_templates",
+   "input": {
+    "server": "t"
+   },
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "MCP server: t\n{\"resourceTemplates\":[{\"name\":\"item\",\"uriTemplate\":\"test://item/{id}\"}]}"
+    }
+   ]
+  },
+  {
+   "tool": "read_mcp_resource",
+   "input": {
+    "server": "t",
+    "uri": "test://readme"
+   },
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "MCP server: t\n{\"contents\":[{\"uri\":\"test://readme\",\"mimeType\":\"text/plain\",\"text\":\"Hello from the readme.\"}]}"
+    }
+   ]
+  },
+  {
+   "tool": "read_mcp_resource",
+   "input": {
+    "server": "t",
+    "uri": "test://blob"
+   },
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "MCP server: t\n{\"contents\":[{\"uri\":\"test://blob\",\"mimeType\":\"application/octet-stream\",\"blob\":\"[binary resource: 12 base64 characters; available to programmatic callers]\"}]}"
+    }
+   ]
+  },
+  {
+   "tool": "read_mcp_resource",
+   "input": {
+    "server": "t",
+    "uri": "test://nope"
+   },
+   "is_error": true,
+   "content": [
+    {
+     "type": "text",
+     "text": "Error: Resource not found: test://nope"
+    }
+   ]
+  },
+  {
+   "tool": "read_mcp_resource",
+   "input": {
+    "server": "zzz",
+    "uri": "x"
+   },
+   "is_error": true,
+   "content": [
+    {
+     "type": "text",
+     "text": "Error: MCP resource server \"zzz\" is unavailable in this agent's scope"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__echo",
+   "input": {},
+   "is_error": false,
+   "content": []
+  },
+  {
+   "tool": "mcp__t__ping_client",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "client answered: {}"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__slow",
+   "input": {
+    "ms": 50
+   },
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "slept"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__change",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "changed"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__added",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "added works"
+    }
+   ]
+  },
+  {
+   "tool": "mcp__t__mixed",
+   "input": {},
+   "is_error": false,
+   "content": [
+    {
+     "type": "text",
+     "text": "first\nsecond\nResource link: readme (test://readme)\n[audio result unsupported: audio/wav; raw audio data remains available to programmatic callers]\n[embedded resource unsupported; raw resource data remains available to programmatic callers]"
+    }
+   ]
+  }
+ ]
+}

@@ -86,6 +86,9 @@ pub struct ExtraSection {
     pub name: String,
     pub order: i64,
     pub text: String,
+    /// Insert `text` verbatim, without `{{variable}}` interpolation (dsh
+    /// `interpolate: false`, e.g. MCP server instructions).
+    pub literal: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,6 +100,9 @@ pub struct PromptConfig {
     pub persona_suffix: String,
     pub include_runtime_context: bool,
     pub extra_sections: Vec<ExtraSection>,
+    /// Runtime-context contributions after `sandbox:policy` and
+    /// `approval:policy`, in `order` (e.g. a subagent's `subagent:delegation`).
+    pub extra_context: Vec<ExtraSection>,
 }
 
 impl Default for PromptConfig {
@@ -107,6 +113,7 @@ impl Default for PromptConfig {
             persona_suffix: "Your working directory is {{cwd}}.".into(),
             include_runtime_context: true,
             extra_sections: Vec::new(),
+            extra_context: Vec::new(),
         }
     }
 }

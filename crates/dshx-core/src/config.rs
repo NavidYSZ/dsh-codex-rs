@@ -2,6 +2,8 @@
 //!
 //! The `[codex]` table carries the settings of the original plugin bundle
 //! (`computerUse`, `apps`, `browser`, `mini`), with the same keys and defaults.
+//! `[mcp_servers.<name>]` tables configure MCP servers (dsh `mcp-client`).
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,9 @@ pub struct Config {
     pub approval: String,
     pub max_tokens: u32,
     pub codex: CodexConfig,
+    /// MCP servers by name (the `mcp__<name>__<tool>` namespace).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_servers: BTreeMap<String, McpServerConfig>,
 }
 
 impl Default for Config {
@@ -32,6 +37,86 @@ impl Default for Config {
             approval: "ask".into(),
             max_tokens: 256_000,
             codex: CodexConfig::default(),
+            mcp_servers: BTreeMap::new(),
+        }
+    }
+}
+
+/// One `[mcp_servers.<name>]` table (dsh `mcp-client` config). `command`
+/// selects the stdio transport, `url` Streamable HTTP; `transport` may name
+/// it explicitly (`stdio` / `streamable-http`). dsh's camelCase field names
+/// are accepted as aliases.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct McpServerConfig {
+    /// `false` skips the server without removing its table.
+    pub enabled: bool,
+    pub transport: Option<String>,
+    /// stdio: executable, started without a shell.
+    pub command: Option<String>,
+    pub args: Vec<String>,
+    /// stdio: variables merged over the parent environment (which loses
+    /// credential-like names and `DSH_*`).
+    pub env: BTreeMap<String, String>,
+    /// stdio: working directory; `None` = the process's.
+    pub cwd: Option<PathBuf>,
+    /// Streamable HTTP endpoint; plain `http://` only for loopback hosts.
+    pub url: Option<String>,
+    pub headers: BTreeMap<String, String>,
+    /// Timeout per tool call or resource request.
+    #[serde(alias = "toolCallTimeoutMs")]
+    pub tool_call_timeout_ms: u64,
+    /// Limit for the server's instructions (with attribution) in the prompt.
+    #[serde(alias = "maxInstructionBytes")]
+    pub max_instruction_bytes: usize,
+    /// Fail startup instead of logging when the first connection fails.
+    #[serde(alias = "failOnStartupError")]
+    pub fail_on_startup_error: bool,
+    pub reconnect: McpReconnectConfig,
+}
+
+impl Default for McpServerConfig {
+    fn default() -> Self {
+        McpServerConfig {
+            enabled: true,
+            transport: None,
+            command: None,
+            args: Vec::new(),
+            env: BTreeMap::new(),
+            cwd: None,
+            url: None,
+            headers: BTreeMap::new(),
+            tool_call_timeout_ms: 60_000,
+            max_instruction_bytes: 32_768,
+            fail_on_startup_error: false,
+            reconnect: McpReconnectConfig::default(),
+        }
+    }
+}
+
+/// Reconnect policy after a lost MCP connection (dsh defaults).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct McpReconnectConfig {
+    pub enabled: bool,
+    /// First delay; doubles per consecutive failed attempt.
+    #[serde(alias = "initialDelayMs")]
+    pub initial_delay_ms: u64,
+    /// Backoff ceiling, also the uptime after which the attempt budget resets.
+    #[serde(alias = "maxDelayMs")]
+    pub max_delay_ms: u64,
+    /// Consecutive failed attempts per outage before giving up.
+    #[serde(alias = "maxAttempts")]
+    pub max_attempts: u32,
+}
+
+impl Default for McpReconnectConfig {
+    fn default() -> Self {
+        McpReconnectConfig {
+            enabled: true,
+            initial_delay_ms: 500,
+            max_delay_ms: 30_000,
+            max_attempts: 10,
         }
     }
 }
@@ -161,5 +246,39 @@ impl Config {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
             Err(e) => Err(e.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mcp_servers_table() {
+        let config: Config = toml::from_str(
+            r#"
+            [mcp_servers.github]
+            command = "npx"
+            args = ["-y", "server-github"]
+            env = { GITHUB_TOKEN = "t" }
+
+            [mcp_servers.web]
+            url = "http://localhost:3000/mcp"
+            headers = { Authorization = "Bearer x" }
+            toolCallTimeoutMs = 5000
+            reconnect = { enabled = false, max_attempts = 2 }
+            "#,
+        )
+        .unwrap();
+        let github = &config.mcp_servers["github"];
+        assert!(github.enabled);
+        assert_eq!(github.command.as_deref(), Some("npx"));
+        assert_eq!(github.tool_call_timeout_ms, 60_000);
+        let web = &config.mcp_servers["web"];
+        assert_eq!(web.tool_call_timeout_ms, 5000);
+        assert!(!web.reconnect.enabled);
+        assert_eq!(web.reconnect.max_attempts, 2);
+        assert_eq!(web.reconnect.initial_delay_ms, 500);
+        assert!(Config::default().mcp_servers.is_empty());
     }
 }

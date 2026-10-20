@@ -16,6 +16,7 @@ mod agent;
 mod compaction;
 pub mod config;
 mod events;
+mod hooks;
 mod instructions;
 mod jobs;
 mod journal;
@@ -35,6 +36,7 @@ pub use config::{
     PrunerConfig, RepeatReminderConfig, RouteCapabilities, TitleConfig, ToolUpdate,
 };
 pub use events::{CancelCause, TurnEndReason, TurnOutcome};
+pub use hooks::{PreStep, PreStepHook};
 pub use observer::{AgentObserver, AgentStatus, DeltaKind, NoopObserver, StreamDelta};
 pub use prompt::render_system_prompt;
 pub use retry::{RetryMode, RetryPolicy};

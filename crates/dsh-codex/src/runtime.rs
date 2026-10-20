@@ -1,17 +1,23 @@
 //! Everything a front end (headless, web, SDK) needs to run agents: config,
-//! API key, DeepSeek client, session store, attachments and the tool set.
+//! API key, DeepSeek client, session store, attachments and the tool set
+//! (built-ins, Codex tools, the `skill` tool and MCP servers).
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use anyhow::Context as _;
-use dshx_agent::{Agent, AgentConfig, AgentDeps, AgentObserver, RouteCapabilities};
+use dshx_agent::{
+    Agent, AgentConfig, AgentDeps, AgentObserver, ExtraSection, PreStep, PreStepHook,
+    RouteCapabilities,
+};
 use dshx_core::config::Config;
 use dshx_core::{
-    ApprovalDecision, Approver, AttachmentStore, ImageAttachmentRef, LlmClient, SessionLog, Tool,
-    ToolRegistry,
+    ApprovalDecision, Approver, AttachmentStore, ImageAttachmentRef, LlmClient, Message,
+    SessionLog, Tool, ToolRegistry,
 };
 use dshx_llm::{DeepSeekClient, DeepSeekConfig, SharedApiKey};
 use dshx_session::{Credentials, FileAttachments, SessionStore};
+use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
 
 pub struct Runtime {
     pub home: PathBuf,
@@ -24,6 +30,13 @@ pub struct Runtime {
     /// One background Chrome per process, shared by all sessions.
     browser: Option<Arc<dshx_browser::BrowserTool>>,
     macos: Vec<Arc<dyn Tool>>,
+    /// In-process subagents of every agent this runtime starts.
+    pub subagents: Arc<dshx_subagent::SubagentRuntime>,
+    /// Local skills behind the `skill` tool and the session skill catalog.
+    skills: Arc<SkillRegistry>,
+    /// Connected MCP servers; unset until [`Runtime::start_mcp`] ran (or
+    /// when none are configured).
+    mcp: OnceLock<dshx_mcp::McpHandle>,
 }
 
 impl Runtime {
@@ -79,17 +92,84 @@ impl Runtime {
             None
         };
         let macos = dshx_macos::macos_tools(&config.codex);
+        let store = Arc::new(store);
+        let llm = Arc::new(llm);
+        let subagents = dshx_subagent::SubagentRuntime::new(dshx_subagent::RuntimeDeps {
+            llm: llm.clone() as Arc<dyn LlmClient>,
+            sessions: Arc::new(dshx_subagent::StoreSessions::new(store.clone())),
+            attachments: attachments.clone() as Arc<dyn AttachmentStore>,
+            approver: Arc::new(NoApprover),
+        });
+        let skills = Arc::new(SkillRegistry::new(SkillConfig::default()));
+        // Children see the skill catalog too, like in dsh.
+        let child_skills = skills.clone();
+        subagents.set_child_agent(Arc::new(move |child: &Agent| {
+            child.add_pre_step_hook(Arc::new(SkillsHook {
+                skills: child_skills.clone(),
+            }));
+        }));
         Ok(Arc::new(Runtime {
             home,
             config: RwLock::new(config),
-            store: Arc::new(store),
+            store,
             attachments,
             credentials,
             api_key,
-            llm: Arc::new(llm),
+            llm,
             browser,
             macos,
+            subagents,
+            skills,
+            mcp: OnceLock::new(),
         }))
+    }
+
+    /// Connects the configured MCP servers (concurrently, each bounded by
+    /// its handshake timeout, like dsh before its first turn). Without an
+    /// enabled `[mcp_servers.*]` entry this does nothing.
+    pub async fn start_mcp(&self) -> anyhow::Result<()> {
+        let config = self.config();
+        if !config.mcp_servers.values().any(|s| s.enabled) || self.mcp.get().is_some() {
+            return Ok(());
+        }
+        let (_, handle) = dshx_mcp::mcp_tools(&config).await?;
+        if let Err(handle) = self.mcp.set(handle) {
+            handle.shutdown().await;
+        }
+        Ok(())
+    }
+
+    /// Changes whenever the MCP tool set or server instructions change.
+    pub fn tools_version(&self) -> u64 {
+        self.mcp.get().map_or(0, |m| *m.subscribe().borrow())
+    }
+
+    /// MCP prompt sections as literal extra sections (dsh order 3100).
+    pub fn prompt_sections(&self) -> Vec<ExtraSection> {
+        self.mcp
+            .get()
+            .map(|m| m.prompt_sections())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| ExtraSection {
+                name: s.name,
+                order: s.order,
+                text: s.text,
+                literal: true,
+            })
+            .collect()
+    }
+
+    /// Brings an open agent's tools and MCP prompt sections up to date when
+    /// they changed since `seen` (call before each turn).
+    pub fn refresh_agent(&self, agent: &Agent, seen: &AtomicU64) {
+        let version = self.tools_version();
+        if seen.swap(version, Ordering::SeqCst) == version {
+            return;
+        }
+        agent.set_tools(self.tools());
+        let sections = self.prompt_sections();
+        agent.update_config(|c| c.prompt.extra_sections = sections);
     }
 
     pub fn config(&self) -> Config {
@@ -158,6 +238,15 @@ impl Runtime {
         for tool in &self.macos {
             tools.register(tool.clone());
         }
+        for tool in dshx_subagent::subagent_tools(self.subagents.clone()) {
+            tools.register(tool);
+        }
+        tools.register(Arc::new(SkillTool::new(self.skills.clone())));
+        if let Some(mcp) = self.mcp.get() {
+            for tool in mcp.tools() {
+                tools.register(tool);
+            }
+        }
         tools
     }
 
@@ -175,6 +264,7 @@ impl Runtime {
         }
         let mut config = AgentConfig::from_core(&core, cwd);
         config.route = Some(self.route(&config.model));
+        config.prompt.extra_sections = self.prompt_sections();
         config
     }
 
@@ -202,7 +292,7 @@ impl Runtime {
         approver: Arc<dyn Approver>,
         observer: Option<Arc<dyn AgentObserver>>,
     ) -> Agent {
-        Agent::new(
+        let agent = Agent::new(
             config,
             AgentDeps {
                 llm: self.llm.clone() as Arc<dyn LlmClient>,
@@ -213,14 +303,67 @@ impl Runtime {
                 observer,
                 tool_state: None,
             },
-        )
+        );
+        agent.add_pre_step_hook(Arc::new(SkillsHook {
+            skills: self.skills.clone(),
+        }));
+        self.subagents.attach(&agent);
+        agent
     }
 
-    /// Closes the browser so its profile is saved cleanly.
+    /// Stops an agent and everything it delegated.
+    pub async fn close_agent(&self, agent: &Agent) {
+        let id = agent.session_id();
+        self.subagents.drain_descendants(&id).await;
+        agent.dispose().await;
+        self.subagents.detach(&id);
+    }
+
+    /// Closes the browser so its profile is saved cleanly, and stops the MCP
+    /// servers (stdio servers with their whole process group).
     pub async fn shutdown(&self) {
+        self.subagents.shutdown().await;
         if let Some(browser) = &self.browser {
             browser.browser().close().await;
         }
+        if let Some(mcp) = self.mcp.get() {
+            mcp.shutdown().await;
+        }
+    }
+}
+
+/// dsh `tool-skill`'s two pre-step listeners: the session skill catalog
+/// (first publication, replacements, withdrawal) after the runtime context,
+/// then one `skill-invocation` message per `/name` gesture.
+struct SkillsHook {
+    skills: Arc<SkillRegistry>,
+}
+
+#[async_trait::async_trait]
+impl PreStepHook for SkillsHook {
+    async fn pre_step(
+        &self,
+        step: &PreStep<'_>,
+        entering: &mut Vec<Message>,
+    ) -> anyhow::Result<()> {
+        let history =
+            step.read_history(|events, visible| CatalogHistory::from_events(events, visible));
+        let offered = step.tools.iter().any(|t| t == "skill");
+        let skills = self.skills.clone();
+        let cwd = step.cwd.to_path_buf();
+        let claimed = step.claimed.to_vec();
+        // Discovery reads skill files; keep it off the async workers.
+        let (snapshot, invocations) = tokio::task::spawn_blocking(move || {
+            let snapshot = offered.then(|| skills.snapshot(&cwd));
+            let invocations = dshx_tools::skill::invocation_messages(&skills, &cwd, &claimed);
+            (snapshot, invocations)
+        })
+        .await?;
+        let max = self.skills.config().catalog_description_max_length;
+        let batch = std::mem::take(entering);
+        *entering = dshx_tools::skill::apply_catalog(batch, snapshot.as_ref(), max, &history);
+        entering.extend(invocations);
+        Ok(())
     }
 }
 

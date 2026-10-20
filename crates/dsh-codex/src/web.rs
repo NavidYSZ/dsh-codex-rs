@@ -53,6 +53,8 @@ struct OpenSession {
     log: Arc<dyn SessionLog>,
     cwd: PathBuf,
     status: Arc<Mutex<String>>,
+    /// MCP tool-set version the agent last received.
+    tools_version: std::sync::atomic::AtomicU64,
 }
 
 pub struct WebBackend {
@@ -82,7 +84,7 @@ impl WebBackend {
     async fn close_all(&self) {
         let sessions: Vec<_> = self.open.lock().await.drain().map(|(_, s)| s).collect();
         for s in sessions {
-            s.agent.dispose().await;
+            self.runtime.close_agent(&s.agent).await;
         }
     }
 
@@ -151,6 +153,7 @@ impl WebBackend {
             log,
             cwd,
             status,
+            tools_version: self.runtime.tools_version().into(),
         })
     }
 
@@ -374,6 +377,7 @@ impl Backend for WebBackend {
             c.effort = route.effort.clone();
             c.route = route.route.clone();
         });
+        self.runtime.refresh_agent(&s.agent, &s.tools_version);
         if let Some(mode) = overrides.sandbox {
             let approval = s.agent.config().approval;
             s.agent.set_permissions(mode, approval).await?;
@@ -415,7 +419,7 @@ impl Backend for WebBackend {
 
     async fn delete_session(&self, id: &str) -> anyhow::Result<()> {
         if let Some(s) = self.open.lock().await.remove(id) {
-            s.agent.dispose().await;
+            self.runtime.close_agent(&s.agent).await;
         }
         if self.runtime.store.locate(id)?.is_none() {
             return Err(NotFound(id.to_owned()).into());

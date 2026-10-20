@@ -4,7 +4,7 @@
 use dshx_core::{ContentBlock, Message, MessageSource, Role, SandboxMode, ToolSchema};
 use serde_json::{Value, json};
 
-use crate::config::{ApprovalPolicy, PromptConfig};
+use crate::config::{ApprovalPolicy, ExtraSection, PromptConfig};
 
 pub(crate) const HARNESS_IDENTITY: &str = "You are an AI agent powered by DeepSeek Harness.";
 
@@ -40,6 +40,8 @@ pub(crate) struct Section {
     pub name: String,
     pub order: i64,
     pub text: String,
+    /// Rendered verbatim (no `{{variable}}` interpolation).
+    pub literal: bool,
 }
 
 /// Variables available to `{{name}}` references.
@@ -58,6 +60,7 @@ pub(crate) fn sections(config: &PromptConfig, tool_names: &[String]) -> Vec<Sect
             name: name.to_owned(),
             order,
             text,
+            literal: false,
         })
     };
     if config.include_harness_identity {
@@ -133,7 +136,12 @@ pub(crate) fn sections(config: &PromptConfig, tool_names: &[String]) -> Vec<Sect
         config.persona_suffix.clone(),
     );
     for extra in &config.extra_sections {
-        add(&extra.name, extra.order, extra.text.clone());
+        out.push(Section {
+            name: extra.name.clone(),
+            order: extra.order,
+            text: extra.text.clone(),
+            literal: extra.literal,
+        });
     }
     out.sort_by(|a, b| {
         a.order
@@ -185,7 +193,11 @@ pub(crate) fn interpolate(text: &str, vars: &Variables<'_>, owner: &str) -> anyh
 pub(crate) fn render(sections: &[Section], vars: &Variables<'_>) -> anyhow::Result<String> {
     let mut parts = Vec::new();
     for s in sections {
-        let text = interpolate(&s.text, vars, &s.name)?;
+        let text = if s.literal {
+            s.text.clone()
+        } else {
+            interpolate(&s.text, vars, &s.name)?
+        };
         if !text.is_empty() {
             parts.push(text);
         }
@@ -217,11 +229,13 @@ pub(crate) fn ordered_tools(mut tools: Vec<ToolSchema>) -> Vec<ToolSchema> {
     tools
 }
 
-/// The runtime-context sections (`sandbox:policy`, `approval:policy`) in order.
+/// The runtime-context sections (`sandbox:policy`, `approval:policy`, then
+/// the configured extra contributions by `order`).
 pub(crate) fn context_sections(
     sandbox: SandboxMode,
     approval: ApprovalPolicy,
     cwd: &str,
+    extra: &[ExtraSection],
 ) -> Vec<(String, String)> {
     let sandbox_text = match sandbox {
         SandboxMode::ReadOnly => "Current DSH file policy: read-only. Any available operation enforced by the DSH file sandbox cannot modify files in the standing mode. Do not refuse a required modification from this policy alone: try an available tool normally and follow any denial and escalation guidance it returns.".to_owned(),
@@ -235,10 +249,18 @@ pub(crate) fn context_sections(
         ApprovalPolicy::Ask => ASK_SENTENCE,
         ApprovalPolicy::Never => NEVER_SENTENCE,
     };
-    vec![
+    let mut sections = vec![
         ("sandbox:policy".into(), sandbox_text),
         ("approval:policy".into(), approval_text.into()),
-    ]
+    ];
+    let mut extra: Vec<&ExtraSection> = extra.iter().collect();
+    extra.sort_by(|a, b| {
+        a.order
+            .cmp(&b.order)
+            .then_with(|| a.name.as_bytes().cmp(b.name.as_bytes()))
+    });
+    sections.extend(extra.into_iter().map(|s| (s.name.clone(), s.text.clone())));
+    sections
 }
 
 /// dsh `joinContextSections`.

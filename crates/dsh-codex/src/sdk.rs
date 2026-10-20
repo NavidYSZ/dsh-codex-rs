@@ -16,6 +16,9 @@ use crate::runtime::{NoApprover, Overrides, Runtime};
 
 pub async fn run(runtime: Arc<Runtime>) -> anyhow::Result<i32> {
     let (notifier, outgoing) = jsonrpc::channel();
+    runtime
+        .subagents
+        .set_observer(Arc::new(SubagentNotifier(notifier.clone())));
     let server = Arc::new(SdkServer {
         runtime: runtime.clone(),
         notifier: notifier.clone(),
@@ -50,6 +53,8 @@ struct SdkSession {
     runs: Mutex<Vec<JoinHandle<anyhow::Result<dshx_agent::TurnOutcome>>>>,
     /// Latest live failure not superseded by a later completed turn.
     failure: Mutex<Option<String>>,
+    /// MCP tool-set version the agent last received.
+    tools_version: std::sync::atomic::AtomicU64,
 }
 
 struct SdkServer {
@@ -171,6 +176,7 @@ impl SdkServer {
             agent,
             runs: Mutex::new(Vec::new()),
             failure: Mutex::new(None),
+            tools_version: self.runtime.tools_version().into(),
         })
     }
 
@@ -248,6 +254,8 @@ impl SdkServer {
             }
         }
         let session = self.get_or_create(&id).await?;
+        self.runtime
+            .refresh_agent(&session.agent, &session.tools_version);
         let mut message = Message::user_text("");
         message.content = content;
         let message_id = message.id.clone();
@@ -352,7 +360,7 @@ impl SdkServer {
     async fn dispose_all(&self) {
         let sessions: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
         for s in sessions {
-            s.agent.dispose().await;
+            self.runtime.close_agent(&s.agent).await;
         }
     }
 }
@@ -391,6 +399,24 @@ impl AgentObserver for StatusNotifier {
         self.notifier.notify(
             "session.status",
             json!({ "sessionId": self.session_id, "status": status }),
+        );
+    }
+}
+
+/// `subagent.started` / `subagent.finished` notifications.
+struct SubagentNotifier(Notifier);
+
+impl dshx_subagent::SubagentObserver for SubagentNotifier {
+    fn on_started(&self, event: &dshx_subagent::SubagentStarted) {
+        self.0.notify(
+            "subagent.started",
+            serde_json::to_value(event).unwrap_or_default(),
+        );
+    }
+    fn on_finished(&self, event: &dshx_subagent::SubagentFinished) {
+        self.0.notify(
+            "subagent.finished",
+            serde_json::to_value(event).unwrap_or_default(),
         );
     }
 }

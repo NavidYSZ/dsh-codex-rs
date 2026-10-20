@@ -66,7 +66,7 @@ pub async fn run(runtime: Arc<Runtime>, args: HeadlessArgs) -> anyhow::Result<i3
 
     let first_turn_seq = log.events().last().map_or(0, |e| e.seq + 1);
     let outcome = agent.run_turn(vec![ContentBlock::text(args.task)]).await;
-    agent.dispose().await;
+    runtime.close_agent(&agent).await;
     if let Some(r) = &reasoning {
         r.close_section();
     }

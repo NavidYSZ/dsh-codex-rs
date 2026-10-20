@@ -40,6 +40,7 @@ pub mod process;
 pub mod sandbox;
 mod schemas;
 pub mod search;
+pub mod skill;
 pub mod spill;
 mod state;
 pub mod testing;

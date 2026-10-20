@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 
 use dshx_core::{
     Approver, AttachmentStore, ContentBlock, FinishReason, GenerateRequest, LlmClient, LlmFailure,
-    Message, MessageSource, NewEvent, Role, SandboxMode, StreamChunk, ToolRegistry, ToolSchema,
-    kinds, now_ms,
+    Message, MessageSource, NewEvent, Role, SandboxMode, SessionEvent, SessionHeader, StreamChunk,
+    ToolRegistry, ToolSchema, kinds, now_ms,
 };
 use futures::StreamExt;
 use serde_json::{Map, Value, json};
@@ -109,6 +109,8 @@ pub(crate) struct Inner {
     /// `dshx-tools` session state when the tools use it (jobs, spill, model).
     pub tools_state: Option<Arc<dshx_tools::ToolState>>,
     pub jobs: crate::jobs::JobQueue,
+    /// Product hooks over each step's entering batch, in registration order.
+    pub pre_step_hooks: Mutex<Vec<Arc<dyn crate::hooks::PreStepHook>>>,
 }
 
 /// One coding agent over one session log. Cheap to clone; all clones drive the
@@ -200,6 +202,7 @@ impl Agent {
             lifetime: CancellationToken::new(),
             tools_state,
             jobs: Default::default(),
+            pre_step_hooks: Mutex::new(Vec::new()),
         };
         let inner = Arc::new(inner);
         if let Some(state) = &inner.tools_state {
@@ -228,6 +231,12 @@ impl Agent {
     /// Replaces the tool set; additions/removals reach the model at the next request.
     pub fn set_tools(&self, tools: ToolRegistry) {
         *self.inner.tools.lock().unwrap() = tools;
+    }
+
+    /// Adds a hook that runs at every step after the runtime-context
+    /// snapshot (see [`crate::PreStepHook`]).
+    pub fn add_pre_step_hook(&self, hook: Arc<dyn crate::hooks::PreStepHook>) {
+        self.inner.pre_step_hooks.lock().unwrap().push(hook);
     }
 
     /// Switches sandbox mode and approval policy, logging dsh's permission events.
@@ -283,7 +292,73 @@ impl Agent {
                 },
             });
         }
-        inner.drive().await
+        inner.drive(Target::NextTurn).await
+    }
+
+    /// Delivers a prebuilt message at the nearest step (dsh `steer`): a
+    /// running turn claims it at its next step; an idle agent opens a turn
+    /// that claims it from the next-step inbox. Resolves when the turn that
+    /// took it ends; `None` when an already running turn took it.
+    pub async fn steer_message(&self, message: Message) -> anyhow::Result<Option<TurnOutcome>> {
+        let inner = &self.inner;
+        inner.ensure_initialized().await?;
+        let id = message.id.clone();
+        let len = inner.state.lock().unwrap().next_step.len();
+        inner
+            .splice(Target::NextStep, len, 0, vec![message], false)
+            .await?;
+        let _driver = inner.driver.lock().await;
+        let pending = inner
+            .state
+            .lock()
+            .unwrap()
+            .next_step
+            .iter()
+            .any(|m| m.id == id);
+        if !pending {
+            return Ok(None);
+        }
+        inner.drive(Target::NextStep).await.map(Some)
+    }
+
+    /// No turn runs, no input is queued and no caller is about to drive one
+    /// (dsh `status === "idle"` with an empty inbox).
+    pub fn is_idle(&self) -> bool {
+        let st = self.inner.state.lock().unwrap();
+        st.running.is_none()
+            && st.next_turn.is_empty()
+            && st.next_step.is_empty()
+            && self.inner.driver.try_lock().is_ok()
+    }
+
+    /// The tools offered to the model (a subagent starts from its parent's set).
+    pub fn tools(&self) -> ToolRegistry {
+        self.inner.tools.lock().unwrap().clone()
+    }
+
+    /// The session header.
+    pub fn header(&self) -> SessionHeader {
+        self.inner.journal.header()
+    }
+
+    /// Snapshot of the session's events (without the header).
+    pub fn events(&self) -> Vec<SessionEvent> {
+        self.inner.journal.read(|events, _| events.to_vec())
+    }
+
+    /// Number of events in the session log (the next `seq`).
+    pub fn log_len(&self) -> u64 {
+        self.inner.journal.len()
+    }
+
+    /// Appends one log-only event (e.g. a parent's `subagent/catalog` fact).
+    pub async fn append_event(&self, event: NewEvent) -> anyhow::Result<SessionEvent> {
+        self.inner.append(event).await
+    }
+
+    /// Durability checkpoint of the session log.
+    pub async fn flush(&self) -> anyhow::Result<()> {
+        self.inner.journal.flush().await
     }
 
     /// Adds input for the next step of the running turn (dsh `steer`); when idle
@@ -567,10 +642,10 @@ impl Inner {
     }
 
     /// Runs turns while this caller's prompt (and late next-step input) is pending.
-    async fn drive(self: &Arc<Self>) -> anyhow::Result<TurnOutcome> {
+    async fn drive(self: &Arc<Self>, first: Target) -> anyhow::Result<TurnOutcome> {
         self.set_status(AgentStatus::Running);
         let mut outcome;
-        let mut target = Target::NextTurn;
+        let mut target = first;
         loop {
             outcome = self.turn(target).await;
             target = Target::NextStep;
@@ -769,22 +844,28 @@ impl Inner {
         if let Some(ctx) = context {
             messages.push(ctx);
         }
+        // dsh skips the step's listeners when nothing at all enters step 1.
+        if !(step == 1 && messages.is_empty()) {
+            crate::hooks::run(self, &claimed, &mut messages, cancel).await;
+            check(cancel)?;
+        }
         Ok(Entering { messages })
     }
 
     /// The runtime-context snapshot when it differs from the retained one.
     fn runtime_context(&self) -> Option<Message> {
-        let (sandbox, approval, cwd, include) = {
+        let (sandbox, approval, cwd, include, extra) = {
             let c = self.config.lock().unwrap();
             (
                 c.sandbox,
                 c.approval,
                 c.cwd.to_string_lossy().into_owned(),
                 c.prompt.include_runtime_context,
+                c.prompt.extra_context.clone(),
             )
         };
         let sections = if include {
-            prompt::context_sections(sandbox, approval, &cwd)
+            prompt::context_sections(sandbox, approval, &cwd, &extra)
         } else {
             Vec::new()
         };
@@ -902,11 +983,18 @@ impl Inner {
             .clone()
             .unwrap_or_else(|| route.default_effort.clone());
         let max_tokens = c.max_tokens.unwrap_or(route.default_max_tokens);
+        // dsh key order: an explicit effort precedes `maxTokens`, an adapter
+        // default one is appended after it.
         let mut config = Map::new();
         config.insert("provider".into(), self.llm.provider().into());
         config.insert("model".into(), c.model.clone().into());
+        if c.effort.is_some() {
+            config.insert("reasoningEffort".into(), effort.clone().into());
+        }
         config.insert("maxTokens".into(), max_tokens.into());
-        config.insert("reasoningEffort".into(), effort.clone().into());
+        if c.effort.is_none() {
+            config.insert("reasoningEffort".into(), effort.clone().into());
+        }
         let mut header = Map::new();
         header.insert("config".into(), Value::Object(config));
         let mut defaults = Map::new();

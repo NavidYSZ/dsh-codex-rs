@@ -7,6 +7,7 @@ mod web;
 
 use std::io::{IsTerminal as _, Read as _};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use dshx_core::SandboxMode;
@@ -73,6 +74,13 @@ fn parse_sandbox(s: &str) -> Result<SandboxMode, String> {
     })
 }
 
+/// Loads the runtime and connects the configured MCP servers.
+async fn start() -> anyhow::Result<Arc<Runtime>> {
+    let runtime = Runtime::load()?;
+    runtime.start_mcp().await?;
+    Ok(runtime)
+}
+
 fn main() {
     let cli = Cli::parse();
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -130,8 +138,8 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
             Runtime::load()?.set_api_key(None)?;
             Ok(0)
         }
-        Some(Command::Web { port, no_open }) => web::run(Runtime::load()?, port, !no_open).await,
-        Some(Command::Sdk) => sdk::run(Runtime::load()?).await,
+        Some(Command::Web { port, no_open }) => web::run(start().await?, port, !no_open).await,
+        Some(Command::Sdk) => sdk::run(start().await?).await,
         None => {
             let task = match cli.task.as_deref() {
                 Some(t) if t != "-" => t.to_owned(),
@@ -143,7 +151,7 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
                 _ => anyhow::bail!("a task is required, for example: dsh-codex \"run the tests\""),
             };
             anyhow::ensure!(!task.trim().is_empty(), "the task is empty");
-            let runtime = Runtime::load()?;
+            let runtime = start().await?;
             let args = headless::HeadlessArgs {
                 task,
                 cwd,

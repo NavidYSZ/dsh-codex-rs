@@ -70,6 +70,10 @@ where
         let output = output.clone();
         tokio::spawn(async move {
             while let Some(frame) = outgoing.recv().await {
+                // `Null` is our end marker: everything queued before it is written.
+                if frame.is_null() {
+                    break;
+                }
                 let mut line = serde_json::to_string(&frame).unwrap_or_default();
                 line.push('\n');
                 let mut out = output.lock().await;
@@ -118,8 +122,9 @@ where
         tasks.spawn(task);
     }
     while tasks.join_next().await.is_some() {}
-    drop(notifier);
-    // Let the writer drain whatever is queued, then stop.
+    // Long-lived notifier clones (agents, subagents) must not keep the writer
+    // alive: queue the end marker and let it drain what came before.
+    let _ = notifier.tx.send(Value::Null);
     let _ = tokio::time::timeout(std::time::Duration::from_secs(5), writer).await;
     Ok(())
 }

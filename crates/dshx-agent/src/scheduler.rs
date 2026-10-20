@@ -27,6 +27,8 @@ pub(crate) const TOOL_ABORTED_BEFORE_DISPATCH: &str = "ABORTED_BEFORE_DISPATCH";
 pub(crate) const TOOL_TIMEOUT: &str = "TOOL_TIMEOUT";
 
 const FILE_TOUCH_TOOLS: [&str; 3] = ["read", "write", "edit"];
+/// Bridged MCP tools (`mcp__<server>__<tool>`), whose arguments dsh does not validate.
+const MCP_TOOL_PREFIX: &str = "mcp__";
 
 /// One model tool call with parsed arguments.
 #[derive(Clone)]
@@ -286,7 +288,13 @@ impl Inner {
                 Some(("ToolNotFoundError", "UNKNOWN_TOOL")),
             ));
         };
-        let violations = schema::validate(&tool.schema().parameters, &call.args);
+        // dsh validates only tools built with `defineTool`; MCP tools hand the
+        // raw arguments to their server, which reports what is wrong.
+        let violations = if call.name.starts_with(MCP_TOOL_PREFIX) {
+            Vec::new()
+        } else {
+            schema::validate(&tool.schema().parameters, &call.args)
+        };
         if !violations.is_empty() {
             return Prepared::Post(ExecResult::error(
                 &format!("invalid arguments: {}", violations.join("; ")),
