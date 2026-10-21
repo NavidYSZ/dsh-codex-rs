@@ -567,11 +567,13 @@ version = "0.3.0-alpha.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "base64 0.22.1",
  "bytes",
  "dshx-core",
  "dshx-tools",
  "futures",
+ "getrandom 0.3.4",
  "libc",
  "reqwest",
  "serde",

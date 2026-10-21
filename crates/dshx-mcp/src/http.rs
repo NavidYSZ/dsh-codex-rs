@@ -3,6 +3,12 @@
 //! requests and notifications. `Mcp-Session-Id` from `initialize` rides on
 //! every later request, `MCP-Protocol-Version` after the handshake; a 404 for
 //! a known session ends the connection so the supervisor re-initializes.
+//!
+//! With a [`TokenProvider`] every request carries its bearer token; a 401
+//! gets one retry with a refreshed token, then fails as
+//! [`McpError::Unauthorized`] (and ends a live connection, so the
+//! supervisor reports that a login is needed). A 403 `insufficient_scope`
+//! is recorded for step-up authorization.
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
@@ -14,6 +20,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::McpError;
+use crate::oauth::{AuthChallenge, TokenProvider, parse_www_authenticate};
 use crate::peer::{Incoming, Transport};
 
 const SESSION_HEADER: &str = "mcp-session-id";
@@ -29,6 +36,20 @@ pub(crate) struct HttpTransport {
     /// Ends the SSE readers when the connection closes.
     stop: CancellationToken,
     label: String,
+    auth: Option<Arc<dyn TokenProvider>>,
+    /// The last authorization challenge (shared with the supervisor).
+    challenge: Arc<Mutex<Option<AuthChallenge>>>,
+}
+
+fn challenge_of(response: &reqwest::Response) -> AuthChallenge {
+    parse_www_authenticate(
+        response.status().as_u16(),
+        response
+            .headers()
+            .get_all(reqwest::header::WWW_AUTHENTICATE)
+            .iter()
+            .filter_map(|v| v.to_str().ok()),
+    )
 }
 
 impl HttpTransport {
@@ -36,6 +57,8 @@ impl HttpTransport {
         url: url::Url,
         headers: &BTreeMap<String, String>,
         label: &str,
+        auth: Option<Arc<dyn TokenProvider>>,
+        challenge: Arc<Mutex<Option<AuthChallenge>>>,
     ) -> Result<(Arc<HttpTransport>, mpsc::UnboundedReceiver<Incoming>), McpError> {
         let mut map = HeaderMap::new();
         for (k, v) in headers {
@@ -61,16 +84,28 @@ impl HttpTransport {
                 inbox,
                 stop: CancellationToken::new(),
                 label: label.to_owned(),
+                auth,
+                challenge,
             }),
             rx,
         ))
     }
 
-    fn request(&self, method: reqwest::Method) -> reqwest::RequestBuilder {
+    async fn token(&self) -> Option<String> {
+        match &self.auth {
+            Some(auth) => auth.token().await,
+            None => None,
+        }
+    }
+
+    fn request(&self, method: reqwest::Method, token: Option<&str>) -> reqwest::RequestBuilder {
         let mut builder = self
             .client
             .request(method, self.url.clone())
             .headers(self.headers.clone());
+        if let Some(token) = token {
+            builder = builder.bearer_auth(token);
+        }
         if let Some(session) = self.session.lock().unwrap().clone() {
             builder = builder.header(SESSION_HEADER, session);
         }
@@ -117,8 +152,9 @@ impl HttpTransport {
     fn listen(self: &Arc<Self>) {
         let this = self.clone();
         tokio::spawn(async move {
+            let token = this.token().await;
             let response = this
-                .request(reqwest::Method::GET)
+                .request(reqwest::Method::GET, token.as_deref())
                 .header(ACCEPT, "text/event-stream")
                 .send()
                 .await;
@@ -143,14 +179,28 @@ impl Transport for HttpTransport {
     async fn send(&self, message: Value) -> Result<(), McpError> {
         let is_initialize = message.get("method").and_then(Value::as_str) == Some("initialize");
         let had_session = self.session.lock().unwrap().is_some();
-        let response = self
-            .request(reqwest::Method::POST)
-            .header(ACCEPT, "application/json, text/event-stream")
-            .header(CONTENT_TYPE, "application/json")
-            .body(serde_json::to_vec(&message).map_err(|e| McpError::Protocol(e.to_string()))?)
-            .send()
-            .await
-            .map_err(|e| McpError::Transport(format!("HTTP request failed: {e}")))?;
+        let body = serde_json::to_vec(&message).map_err(|e| McpError::Protocol(e.to_string()))?;
+        let token = self.token().await;
+        let mut response = self.post(&body, token.as_deref()).await?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            let fresh = match (&self.auth, &token) {
+                (Some(auth), Some(rejected)) => auth.refresh(rejected).await,
+                _ => None,
+            };
+            if let Some(fresh) = fresh {
+                response = self.post(&body, Some(&fresh)).await?;
+            }
+        }
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(self.unauthorized(challenge_of(&response)));
+        }
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            let challenge = challenge_of(&response);
+            if challenge.insufficient_scope() {
+                *self.challenge.lock().unwrap() = Some(challenge.clone());
+                return Err(McpError::Unauthorized(Box::new(challenge)));
+            }
+        }
         if is_initialize
             && let Some(session) = response
                 .headers()
@@ -202,8 +252,9 @@ impl Transport for HttpTransport {
     async fn close(&self) -> bool {
         self.stop.cancel();
         if self.session.lock().unwrap().is_some() {
+            let token = self.token().await;
             let release = self
-                .request(reqwest::Method::DELETE)
+                .request(reqwest::Method::DELETE, token.as_deref())
                 .timeout(std::time::Duration::from_secs(5))
                 .send()
                 .await;
@@ -220,6 +271,27 @@ impl Transport for HttpTransport {
 }
 
 impl HttpTransport {
+    async fn post(&self, body: &[u8], token: Option<&str>) -> Result<reqwest::Response, McpError> {
+        self.request(reqwest::Method::POST, token)
+            .header(ACCEPT, "application/json, text/event-stream")
+            .header(CONTENT_TYPE, "application/json")
+            .body(body.to_vec())
+            .send()
+            .await
+            .map_err(|e| McpError::Transport(format!("HTTP request failed: {e}")))
+    }
+
+    /// Records a 401; a live connection ends so the supervisor notices.
+    fn unauthorized(&self, challenge: AuthChallenge) -> McpError {
+        *self.challenge.lock().unwrap() = Some(challenge.clone());
+        if self.version.lock().unwrap().is_some() {
+            let _ = self
+                .inbox
+                .send(Incoming::Closed("authorization required".into()));
+        }
+        McpError::Unauthorized(Box::new(challenge))
+    }
+
     /// Starts the GET listener once the session is initialized.
     pub fn start_listening(self: &Arc<Self>) {
         self.listen();

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use dshx_core::config::McpServerConfig;
+use dshx_core::config::{McpOAuthConfig, McpServerConfig};
 
 use crate::names::is_server_name;
 
@@ -21,7 +21,19 @@ pub(crate) enum TransportSpec {
     Http {
         url: url::Url,
         headers: BTreeMap<String, String>,
+        auth: AuthSpec,
     },
+}
+
+/// Where the bearer token of an HTTP server comes from.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum AuthSpec {
+    /// Only the configured headers (an `Authorization` header, or OAuth off).
+    None,
+    /// `bearer_token_env_var`.
+    BearerEnv(String),
+    /// Logins through [`crate::OAuthManager`].
+    OAuth(McpOAuthConfig),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,6 +69,13 @@ impl ServerSpec {
     /// `mcp-client(<name>)`, the prefix of dsh's log and error texts.
     pub fn label(&self) -> String {
         format!("mcp-client({})", self.name)
+    }
+
+    pub fn transport_name(&self) -> &'static str {
+        match self.transport {
+            TransportSpec::Stdio { .. } => "stdio",
+            TransportSpec::Http { .. } => "streamable-http",
+        }
     }
 }
 
@@ -122,9 +141,20 @@ pub(crate) fn resolve(name: &str, config: &McpServerConfig) -> Result<ServerSpec
             }
             other => return Err(fail(format!("unsupported url scheme \"{other}\""))),
         }
+        let has_auth_header = config
+            .headers
+            .keys()
+            .any(|k| k.eq_ignore_ascii_case("authorization"));
+        let auth = match (&config.bearer_token_env_var, &config.oauth) {
+            _ if has_auth_header => AuthSpec::None,
+            (Some(var), _) if !var.is_empty() => AuthSpec::BearerEnv(var.clone()),
+            (_, Some(oauth)) if !oauth.enabled => AuthSpec::None,
+            (_, oauth) => AuthSpec::OAuth(oauth.clone().unwrap_or_default()),
+        };
         TransportSpec::Http {
             url,
             headers: config.headers.clone(),
+            auth,
         }
     };
     let r = &config.reconnect;

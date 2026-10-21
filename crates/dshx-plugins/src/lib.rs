@@ -291,13 +291,12 @@ fn mcp_servers(
         _ => warnings.push(format!("MCP file {rel:?} not found in the plugin")),
     };
     let declared = manifest.data.get("mcpServers");
-    if declared.is_none() || !manifest.format.mcp_replaces_default() {
-        if let Some(default) = [".mcp.json", "mcp.json"]
+    if (declared.is_none() || !manifest.format.mcp_replaces_default())
+        && let Some(default) = [".mcp.json", "mcp.json"]
             .into_iter()
             .find(|f| root.join(f).is_file())
-        {
-            read_file(default, warnings, &mut maps);
-        }
+    {
+        read_file(default, warnings, &mut maps);
     }
     match declared {
         Some(Value::String(path)) => read_file(path, warnings, &mut maps),

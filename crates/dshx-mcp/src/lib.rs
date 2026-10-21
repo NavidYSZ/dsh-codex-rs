@@ -7,6 +7,11 @@
 //! `read_mcp_resource`. Server instructions and the resource-server list
 //! become system prompt sections (dsh order `MCP_SERVERS` = 3100).
 //!
+//! The server set can change at runtime: [`McpHandle::apply`] starts new
+//! and changed servers and stops removed ones, leaving the rest connected.
+//! HTTP servers log in through [`OAuthManager`] (see [`oauth`]); the
+//! built-in [`catalog`] lists well-known remote servers.
+//!
 //! ```no_run
 //! # async fn demo(config: &dshx_core::config::Config) -> anyhow::Result<()> {
 //! let (tools, mcp) = dshx_mcp::mcp_tools(config).await?;
@@ -15,21 +20,26 @@
 //!     registry.register(tool);
 //! }
 //! // Later: rebuild the registry from `mcp.tools()` whenever
-//! // `mcp.subscribe()` changes (tool-list changes, reconnects, give-ups),
-//! // and add `mcp.prompt_sections()` to the system prompt.
+//! // `mcp.subscribe()` changes (tool-list changes, reconnects, give-ups,
+//! // `apply`), and add `mcp.prompt_sections()` to the system prompt.
 //! mcp.shutdown().await;
 //! # Ok(()) }
 //! ```
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use dshx_core::Tool;
-use dshx_core::config::Config;
-use tokio::sync::watch;
+use dshx_core::config::{Config, McpServerConfig};
+use serde::Serialize;
+use tokio::sync::{oneshot, watch};
 
+pub mod catalog;
 mod config;
 mod error;
 mod http;
 mod names;
+pub mod oauth;
 mod peer;
 mod protocol;
 mod resources;
@@ -39,10 +49,11 @@ mod tools;
 
 pub use error::McpError;
 pub use names::{is_server_name, public_tool_name};
+pub use oauth::{AuthChallenge, CallbackParams, LoginRequest, LoginStatus, OAuthManager};
 pub use resources::ResourceTool;
 pub use tools::McpTool;
 
-use server::Server;
+use server::{Phase, Server};
 
 /// dsh `getSectionOrder('MCP_SERVERS')`.
 pub const MCP_SECTION_ORDER: i64 = 3100;
@@ -58,29 +69,93 @@ pub struct PromptSection {
     pub text: String,
 }
 
+/// One bridged tool, for status listings.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolInfo {
+    /// Model-facing name (`mcp__<server>__<tool>`).
+    pub name: String,
+    /// The server's own name.
+    pub raw_name: String,
+    pub description: String,
+}
+
+/// State of one configured server.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerInfo {
+    pub name: String,
+    /// `connecting`, `connected`, `needs-login` or `error`.
+    pub status: &'static str,
+    /// Failure text (`error`) or why a login is needed (`needs-login`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// `error` only: a reconnect attempt is still pending.
+    pub retrying: bool,
+    /// `stdio` or `streamable-http`; empty for an invalid entry.
+    pub transport: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The last 401/403 challenge (scope hints for the login).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<AuthChallenge>,
+    pub tools: Vec<ToolInfo>,
+}
+
 /// Owner of all MCP connections. Dropping it does not stop the servers; call
 /// [`McpHandle::shutdown`].
 pub struct McpHandle {
-    servers: Arc<Vec<Arc<Server>>>,
+    servers: Arc<RwLock<Vec<Arc<Server>>>>,
     resource_tools: Vec<Arc<dyn Tool>>,
     changes: Arc<watch::Sender<u64>>,
+    oauth: Option<Arc<OAuthManager>>,
+    /// Enabled entries that failed validation, with their error.
+    invalid: RwLock<BTreeMap<String, String>>,
+    /// Serializes `apply` and `restart`.
+    reconcile: tokio::sync::Mutex<()>,
 }
 
 impl McpHandle {
     /// A handle without servers.
     pub fn empty() -> Self {
+        McpHandle::new(None)
+    }
+
+    /// A handle without servers whose HTTP servers log in through `oauth`.
+    pub fn new(oauth: Option<Arc<OAuthManager>>) -> Self {
+        let servers = Arc::new(RwLock::new(Vec::new()));
         McpHandle {
-            servers: Arc::new(Vec::new()),
-            resource_tools: Vec::new(),
+            resource_tools: resources::resource_tools(servers.clone()),
+            servers,
             changes: Arc::new(watch::channel(0).0),
+            oauth,
+            invalid: RwLock::new(BTreeMap::new()),
+            reconcile: tokio::sync::Mutex::new(()),
         }
+    }
+
+    pub fn oauth(&self) -> Option<&Arc<OAuthManager>> {
+        self.oauth.as_ref()
+    }
+
+    fn current(&self) -> Vec<Arc<Server>> {
+        self.servers.read().unwrap().clone()
+    }
+
+    fn notify(&self) {
+        self.changes.send_modify(|v| *v += 1);
     }
 
     /// The current tool set: resource tools (when any server is configured)
     /// and every server's current tools.
     pub fn tools(&self) -> Vec<Arc<dyn Tool>> {
-        let mut tools = self.resource_tools.clone();
-        for server in self.servers.iter() {
+        let servers = self.current();
+        let mut tools = if servers.is_empty() {
+            Vec::new()
+        } else {
+            self.resource_tools.clone()
+        };
+        for server in &servers {
             for entry in server.tools() {
                 tools.push(Arc::new(McpTool::new(server.clone(), entry)));
             }
@@ -88,14 +163,15 @@ impl McpHandle {
         tools
     }
 
-    /// Changes whenever a server's tools or instructions change.
+    /// Changes whenever a server's tools or instructions change, and on
+    /// every [`McpHandle::apply`] or [`McpHandle::restart`].
     pub fn subscribe(&self) -> watch::Receiver<u64> {
         self.changes.subscribe()
     }
 
     /// Names of the configured servers, sorted.
     pub fn servers(&self) -> Vec<String> {
-        self.servers.iter().map(|s| s.name().to_owned()).collect()
+        self.current().iter().map(|s| s.name().to_owned()).collect()
     }
 
     /// Whether `name` is a tool this handle bridges (resource tools included).
@@ -106,15 +182,16 @@ impl McpHandle {
     /// The `mcp-resource-servers` section and one `mcp:<server>` section per
     /// server, in dsh's assembly order (order, then name bytes).
     pub fn prompt_sections(&self) -> Vec<PromptSection> {
+        let servers = self.current();
         let mut sections = Vec::new();
-        if !self.servers.is_empty() {
+        if !servers.is_empty() {
             sections.push(PromptSection {
                 name: "mcp-resource-servers".into(),
                 order: MCP_SECTION_ORDER,
                 text: resources::servers_section(&self.servers()),
             });
         }
-        for server in self.servers.iter() {
+        for server in &servers {
             sections.push(PromptSection {
                 name: format!("mcp:{}", server.name()),
                 order: MCP_SECTION_ORDER,
@@ -125,10 +202,196 @@ impl McpHandle {
         sections
     }
 
+    /// Status of every enabled server (and of entries that failed validation).
+    pub fn status(&self) -> Vec<ServerInfo> {
+        let mut out: Vec<ServerInfo> = self
+            .current()
+            .iter()
+            .map(|server| {
+                let challenge = server.challenge();
+                let (status, error, retrying) = match server.phase() {
+                    Phase::Connecting => ("connecting", None, false),
+                    Phase::Connected => match &challenge {
+                        Some(c) if c.insufficient_scope() => (
+                            "needs-login",
+                            Some(McpError::Unauthorized(Box::new(c.clone())).to_string()),
+                            false,
+                        ),
+                        _ => ("connected", None, false),
+                    },
+                    Phase::Retrying { error } => ("error", Some(error), true),
+                    Phase::NeedsLogin => (
+                        "needs-login",
+                        challenge
+                            .as_ref()
+                            .and_then(|c| c.error_description.clone().or(c.error.clone())),
+                        false,
+                    ),
+                    Phase::Failed { error } => ("error", Some(error), false),
+                };
+                ServerInfo {
+                    name: server.name().to_owned(),
+                    status,
+                    error,
+                    retrying,
+                    transport: server.spec.transport_name(),
+                    url: match &server.spec.transport {
+                        config::TransportSpec::Http { url, .. } => Some(url.to_string()),
+                        config::TransportSpec::Stdio { .. } => None,
+                    },
+                    challenge,
+                    tools: server
+                        .tools()
+                        .into_iter()
+                        .map(|t| ToolInfo {
+                            name: t.public_name,
+                            raw_name: t.raw.name,
+                            description: t.raw.description,
+                        })
+                        .collect(),
+                }
+            })
+            .collect();
+        for (name, error) in self.invalid.read().unwrap().iter() {
+            out.push(ServerInfo {
+                name: name.clone(),
+                status: "error",
+                error: Some(error.clone()),
+                retrying: false,
+                transport: "",
+                url: None,
+                challenge: None,
+                tools: Vec::new(),
+            });
+        }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out
+    }
+
+    /// The last authorization challenge of a server.
+    pub fn challenge(&self, name: &str) -> Option<AuthChallenge> {
+        self.current()
+            .iter()
+            .find(|s| s.name() == name)
+            .and_then(|s| s.challenge())
+    }
+
+    /// Brings the running servers in line with `servers` (disabled entries
+    /// count as absent): unchanged servers keep their connection, changed
+    /// ones restart, removed ones stop. Waits up to `wait` (`None` = until
+    /// done) for the first connection attempt of every started server.
+    /// Fails when an entry with `fail_on_startup_error` is invalid or does
+    /// not connect; the other servers are applied anyway.
+    pub async fn apply(
+        &self,
+        servers: &BTreeMap<String, McpServerConfig>,
+        wait: Option<Duration>,
+    ) -> anyhow::Result<()> {
+        let _guard = self.reconcile.lock().await;
+        let mut specs = Vec::new();
+        let mut invalid = BTreeMap::new();
+        let mut strict_errors = Vec::new();
+        for (name, entry) in servers {
+            if !entry.enabled {
+                continue;
+            }
+            match config::resolve(name, entry) {
+                Ok(spec) => specs.push(spec),
+                Err(e) => {
+                    if entry.fail_on_startup_error {
+                        strict_errors.push(e.clone());
+                    }
+                    tracing::error!("{e}; server skipped");
+                    invalid.insert(name.clone(), e);
+                }
+            }
+        }
+        let current = self.current();
+        let (keep, stop): (Vec<_>, Vec<_>) = current
+            .into_iter()
+            .partition(|s| specs.iter().any(|spec| *spec == s.spec));
+        let mut next = keep.clone();
+        let mut startups = Vec::new();
+        for spec in specs {
+            if keep.iter().any(|s| s.name() == spec.name) {
+                continue;
+            }
+            let strict = spec.fail_on_startup_error;
+            let (server, first) = Server::start(spec, self.changes.clone(), self.oauth.as_ref());
+            startups.push((server.clone(), strict, first));
+            next.push(server);
+        }
+        next.sort_by(|a, b| a.name().cmp(b.name()));
+        *self.servers.write().unwrap() = next;
+        *self.invalid.write().unwrap() = invalid;
+        self.notify();
+        futures::future::join_all(stop.iter().map(|s| s.dispose())).await;
+        for (server, strict, outcome) in first_attempts(startups, wait).await {
+            if let Err(e) = outcome
+                && strict
+            {
+                strict_errors.push(format!(
+                    "{}: initial connection or tool synchronization failed: {e}",
+                    server.spec.label()
+                ));
+            }
+        }
+        match strict_errors.first() {
+            Some(e) => anyhow::bail!("{e}"),
+            None => Ok(()),
+        }
+    }
+
+    /// Reconnects one server from scratch (after a login, or after it gave
+    /// up), waiting up to `wait` for the first attempt.
+    pub async fn restart(&self, name: &str, wait: Option<Duration>) -> anyhow::Result<()> {
+        let _guard = self.reconcile.lock().await;
+        let Some(old) = self.current().into_iter().find(|s| s.name() == name) else {
+            anyhow::bail!("no running MCP server named {name}");
+        };
+        old.dispose().await;
+        let (server, first) =
+            Server::start(old.spec.clone(), self.changes.clone(), self.oauth.as_ref());
+        {
+            let mut servers = self.servers.write().unwrap();
+            for slot in servers.iter_mut() {
+                if Arc::ptr_eq(slot, &old) {
+                    *slot = server.clone();
+                }
+            }
+        }
+        self.notify();
+        first_attempts(vec![(server, false, first)], wait).await;
+        Ok(())
+    }
+
     /// Stops reconnecting and closes every connection; stdio servers get
     /// their stdin closed, then their process group is terminated.
     pub async fn shutdown(&self) {
-        futures::future::join_all(self.servers.iter().map(|s| s.dispose())).await;
+        let servers = self.current();
+        futures::future::join_all(servers.iter().map(|s| s.dispose())).await;
+    }
+}
+
+type Startup = (Arc<Server>, bool, oneshot::Receiver<Result<(), String>>);
+
+/// Outcomes of the first connection attempts, as far as they finished
+/// within `wait`.
+async fn first_attempts(
+    startups: Vec<Startup>,
+    wait: Option<Duration>,
+) -> Vec<(Arc<Server>, bool, Result<(), String>)> {
+    let all = futures::future::join_all(startups.into_iter().map(
+        |(server, strict, first)| async move {
+            let outcome = first
+                .await
+                .unwrap_or_else(|_| Err("connection supervisor stopped".into()));
+            (server, strict, outcome)
+        },
+    ));
+    match wait {
+        Some(limit) => tokio::time::timeout(limit, all).await.unwrap_or_default(),
+        None => all.await,
     }
 }
 
@@ -138,63 +401,10 @@ impl McpHandle {
 /// [`McpHandle::subscribe`]); with `fail_on_startup_error` the failure, or an
 /// invalid entry, is returned as an error instead.
 pub async fn mcp_tools(config: &Config) -> anyhow::Result<(Vec<Arc<dyn Tool>>, McpHandle)> {
-    let changes = Arc::new(watch::channel(0).0);
-    let mut servers = Vec::new();
-    let mut startups = Vec::new();
-    for (name, entry) in &config.mcp_servers {
-        if !entry.enabled {
-            continue;
-        }
-        let spec = match config::resolve(name, entry) {
-            Ok(spec) => spec,
-            Err(e) if entry.fail_on_startup_error => {
-                shutdown_all(&servers).await;
-                anyhow::bail!(e);
-            }
-            Err(e) => {
-                tracing::error!("{e}; server skipped");
-                continue;
-            }
-        };
-        let strict = spec.fail_on_startup_error;
-        let (server, first) = Server::start(spec, changes.clone());
-        startups.push((server.clone(), strict, first));
-        servers.push(server);
+    let handle = McpHandle::empty();
+    if let Err(e) = handle.apply(&config.mcp_servers, None).await {
+        handle.shutdown().await;
+        return Err(e);
     }
-    let outcomes = futures::future::join_all(startups.into_iter().map(
-        |(server, strict, first)| async move {
-            let outcome = first
-                .await
-                .unwrap_or_else(|_| Err("connection supervisor stopped".into()));
-            (server, strict, outcome)
-        },
-    ))
-    .await;
-    for (server, strict, outcome) in outcomes {
-        if let Err(e) = outcome
-            && strict
-        {
-            shutdown_all(&servers).await;
-            anyhow::bail!(
-                "{}: initial connection or tool synchronization failed: {e}",
-                server.spec.label()
-            );
-        }
-    }
-    let servers = Arc::new(servers);
-    let resource_tools = if servers.is_empty() {
-        Vec::new()
-    } else {
-        resources::resource_tools(servers.clone())
-    };
-    let handle = McpHandle {
-        servers,
-        resource_tools,
-        changes,
-    };
     Ok((handle.tools(), handle))
-}
-
-async fn shutdown_all(servers: &[Arc<Server>]) {
-    futures::future::join_all(servers.iter().map(|s| s.dispose())).await;
 }
