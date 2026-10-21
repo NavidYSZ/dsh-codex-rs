@@ -83,8 +83,11 @@ class HttpApi {
   workspaces() { return this.req('GET', '/api/workspaces'); }
   addWorkspace(path) { return this.req('POST', '/api/workspaces', { path }); }
   sessions() { return this.req('GET', '/api/sessions'); }
-  createSession(cwd) { return this.req('POST', '/api/sessions', { cwd }); }
+  /** An empty `cwd` starts a chat without a project (the server gives it its own folder). */
+  createSession(cwd) { return this.req('POST', '/api/sessions', cwd ? { cwd } : {}); }
   session(id) { return this.req('GET', `/api/sessions/${enc(id)}`); }
+  /** `{title?, pinned?, archived?, seen?, unread?}` → the session's list row. */
+  updateSession(id, patch) { return this.req('PATCH', `/api/sessions/${enc(id)}`, patch); }
   prompt(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/prompt`, body); }
   cancel(id) { return this.req('POST', `/api/sessions/${enc(id)}/cancel`); }
   deleteSession(id) { return this.req('DELETE', `/api/sessions/${enc(id)}`); }
@@ -109,6 +112,7 @@ class HttpApi {
   /**
    * Live feed of one session. Reconnects with backoff and resumes after the
    * last event seq it delivered. `on.message(msg)`, `on.state('open'|'retry')`.
+   * Without a session id it carries only status and approvals of all chats.
    */
   stream(sessionId, after, on) {
     let closed = false;
@@ -119,7 +123,7 @@ class HttpApi {
     const open = () => {
       if (closed) return;
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const q = new URLSearchParams({ session: sessionId, after: String(last) });
+      const q = new URLSearchParams(sessionId ? { session: sessionId, after: String(last) } : {});
       if (this.token) q.set('token', this.token);
       ws = new WebSocket(`${proto}//${location.host}/api/stream?${q}`);
       ws.onopen = () => { tries = 0; on.state?.('open'); };
@@ -241,15 +245,29 @@ class FixtureApi {
     return list;
   }
 
+  async updateSession(id, patch) {
+    await this.ready;
+    const rows = [...(this.shared.sessions ?? []), ...(this.created ? [this.created] : [])];
+    const row = rows.find((s) => s.id === id);
+    if (!row) throw new ApiError(404, 'session not found');
+    if ('title' in patch) row.title = patch.title || row.title;
+    for (const k of ['pinned', 'archived']) if (k in patch) row[k] = !!patch[k];
+    if (patch.seen) row.unread = false;
+    if ('unread' in patch) row.unread = !!patch.unread;
+    return clone(row);
+  }
+
   async createSession(cwd) {
     await this.ready;
     const id = `session-fixture-${Date.now().toString(36)}`;
+    const scratch = !cwd;
+    if (scratch) cwd = `/Users/alex/.dsh-codex/chats/chat-${id.slice(-8)}`;
     this.sessionData = { header: { type: 'session', version: 4, id, createdAt: Date.now(), cwd, isSeeded: false, delegationDepth: 0 }, events: [] };
     this.history = [];
     this.pendingLive = [];
     this.seq = -1;
     this.status = 'idle';
-    this.created = { id, title: '', cwd, createdAt: Date.now(), updatedAt: Date.now(), status: 'idle' };
+    this.created = { id, title: '', cwd, scratch, createdAt: Date.now(), updatedAt: Date.now(), status: 'idle' };
     return { id };
   }
 
@@ -286,6 +304,7 @@ class FixtureApi {
   stream(sessionId, _after, on) {
     this.subs.add(on);
     on.state?.('open');
+    if (!sessionId) return () => this.subs.delete(on); // the sidebar's status feed
     if (!this.started) {
       this.started = true;
       setTimeout(() => this.replay(), this.speed === 0 ? 0 : 500 / this.speed);

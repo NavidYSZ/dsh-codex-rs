@@ -191,6 +191,24 @@ async fn routes_map_to_backend() {
         .await
         .unwrap();
     assert_eq!(r.json::<Value>().await.unwrap()["bytes"], 10);
+    // A chat without a project folder: no cwd in the body.
+    let r = http
+        .post(url("/sessions"))
+        .bearer_auth("secret")
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    // Backends without sidebar state refuse PATCH instead of pretending.
+    let r = http
+        .patch(url("/sessions/s1"))
+        .bearer_auth("secret")
+        .json(&json!({ "pinned": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400);
 }
 
 #[tokio::test]

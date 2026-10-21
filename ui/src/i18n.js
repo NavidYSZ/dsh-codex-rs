@@ -95,6 +95,22 @@ const EN = {
   tokens: (n) => `${n} tokens`, cached: (p) => `${p}% cached`, context: (p) => `${p}% of context`,
   justNow: 'now',
   scrollDown: 'Scroll to bottom',
+  // sidebar
+  search: 'Search', pinned: 'Pinned', projects: 'Projects', chats: 'Chats', activity: 'Activity',
+  activityFilters: { all: 'All', unread: 'Unread', active: 'Active', pinned: 'Pinned' },
+  markAllRead: 'Mark all as read', nothingHere: 'Nothing here',
+  noProject: 'No project', noProjectHint: 'A private folder for this chat',
+  newChatIn: (n) => `New chat in ${n}`, newChatNoProject: 'New chat without a project',
+  moreChats: (n) => `Show ${n} more`, fewerChats: 'Show less',
+  rename: 'Rename', pin: 'Pin', unpin: 'Unpin', markUnread: 'Mark as unread', markRead: 'Mark as read',
+  archive: 'Archive', unarchive: 'Restore', archived: 'Archived chats', noArchived: 'No archived chats',
+  copyPath: 'Copy folder path', more: 'More', byProject: 'Back to projects', addProject: 'Add project',
+  statusRunning: 'Running', statusWaiting: 'Waiting for you', statusUnread: 'Unread',
+  // search palette
+  paletteHint: 'Search chats and actions', actions: 'Actions', noResults: 'No results',
+  toggleTheme: 'Switch light or dark', inProject: (n) => `in ${n}`,
+  // desktop instances
+  instances: 'Instances', addInstance: 'Add instance…', manageInstances: 'Manage instances…',
 };
 
 const DE = {
@@ -184,6 +200,19 @@ const DE = {
   tokens: (n) => `${n} Tokens`, cached: (p) => `${p} % aus dem Cache`, context: (p) => `${p} % vom Kontext`,
   justNow: 'jetzt',
   scrollDown: 'Nach unten',
+  search: 'Suchen', pinned: 'Angepinnt', projects: 'Projekte', chats: 'Chats', activity: 'Aktivität',
+  activityFilters: { all: 'Alle', unread: 'Ungelesen', active: 'Aktiv', pinned: 'Angepinnt' },
+  markAllRead: 'Alle als gelesen markieren', nothingHere: 'Hier ist nichts',
+  noProject: 'Ohne Projekt', noProjectHint: 'Eigener Ordner für diesen Chat',
+  newChatIn: (n) => `Neuer Chat in ${n}`, newChatNoProject: 'Neuer Chat ohne Projekt',
+  moreChats: (n) => `${n} weitere anzeigen`, fewerChats: 'Weniger anzeigen',
+  rename: 'Umbenennen', pin: 'Anpinnen', unpin: 'Lösen', markUnread: 'Als ungelesen markieren', markRead: 'Als gelesen markieren',
+  archive: 'Archivieren', unarchive: 'Wiederherstellen', archived: 'Archivierte Chats', noArchived: 'Keine archivierten Chats',
+  copyPath: 'Ordnerpfad kopieren', more: 'Mehr', byProject: 'Zurück zu Projekten', addProject: 'Projekt hinzufügen',
+  statusRunning: 'Läuft', statusWaiting: 'Wartet auf dich', statusUnread: 'Ungelesen',
+  paletteHint: 'Chats und Aktionen suchen', actions: 'Aktionen', noResults: 'Keine Treffer',
+  toggleTheme: 'Hell oder dunkel', inProject: (n) => `in ${n}`,
+  instances: 'Instanzen', addInstance: 'Instanz hinzufügen …', manageInstances: 'Instanzen verwalten …',
 };
 
 export const t = de ? DE : EN;

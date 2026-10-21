@@ -36,6 +36,16 @@ export const IconAlert = icon(html`<circle cx="8" cy="8" r="6.25" ...${S}/><path
 export const IconShield = icon(html`<path d="M8 1.75 13 3.6v4.1c0 3-2.1 5.3-5 6.55-2.9-1.25-5-3.55-5-6.55V3.6L8 1.75Z" ...${S}/>`);
 export const IconLock = icon(html`<rect x="3" y="7" width="10" height="7" rx="1.75" ...${S}/><path d="M5.25 7V5a2.75 2.75 0 0 1 5.5 0v2" ...${S}/>`);
 export const IconArrowDown = icon(html`<path d="M8 3v9.5M3.75 8.5 8 12.75l4.25-4.25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`);
+export const IconBell = icon(html`<path d="M4.1 6.6a3.9 3.9 0 0 1 7.8 0c0 2.5.75 3.85 1.45 4.65H2.65c.7-.8 1.45-2.15 1.45-4.65Z" ...${S}/><path d="M6.5 13.4a1.6 1.6 0 0 0 3 0" ...${S}/>`);
+export const IconPin = icon(html`<path d="M9.9 1.9 14.1 6.1l-1.45.55-2.5 2.5-.3 2.9-1.05 1.05L2.9 7.2l1.05-1.05 2.9-.3 2.5-2.5L9.9 1.9Z" ...${S}/><path d="m5.6 10.4-3.35 3.35" ...${S}/>`);
+export const IconArchive = icon(html`<rect x="1.75" y="2.75" width="12.5" height="3" rx="1" ...${S}/><path d="M2.9 5.9v6.35a1 1 0 0 0 1 1h8.2a1 1 0 0 0 1-1V5.9M6.4 8.5h3.2" ...${S}/>`);
+export const IconMore = icon(html`<circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/>`);
+export const IconChat = icon(html`<path d="M2.25 7.6c0-2.85 2.55-4.85 5.75-4.85s5.75 2 5.75 4.85S11.2 12.45 8 12.45c-.75 0-1.45-.1-2.1-.3L3 13.25l.8-2.35A4.45 4.45 0 0 1 2.25 7.6Z" ...${S}/>`);
+export const IconFolderPlus = icon(html`<path d="M1.75 4.5A1.25 1.25 0 0 1 3 3.25h3l1.5 1.5H13a1.25 1.25 0 0 1 1.25 1.25v5.5A1.25 1.25 0 0 1 13 12.75H3a1.25 1.25 0 0 1-1.25-1.25v-7Z" ...${S}/><path d="M8 7v3.5M6.25 8.75h3.5" ...${S}/>`);
+export const IconPanelRight = icon(html`<rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2.25" ...${S}/><path d="M9.75 2.9v10.2" ...${S}/>`);
+export const IconUnread = icon(html`<path d="M13.25 7.2v4.55a1.5 1.5 0 0 1-1.5 1.5h-7.5a1.5 1.5 0 0 1-1.5-1.5v-7.5a1.5 1.5 0 0 1 1.5-1.5H8.8" ...${S}/><circle cx="12.25" cy="3.75" r="1.75" fill="currentColor"/>`);
+export const IconCopy = icon(html`<rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.75" ...${S}/><path d="M10.75 5.25V3.5A1.25 1.25 0 0 0 9.5 2.25h-6A1.25 1.25 0 0 0 2.25 3.5v6a1.25 1.25 0 0 0 1.25 1.25h1.75" ...${S}/>`);
+export const IconSun = icon(html`<circle cx="8" cy="8" r="2.75" ...${S}/><path d="M8 1.75v1.5M8 12.75v1.5M14.25 8h-1.5M3.25 8h-1.5M12.4 3.6l-1.05 1.05M4.65 11.35 3.6 12.4M12.4 12.4l-1.05-1.05M4.65 4.65 3.6 3.6" ...${S}/>`);
 export const IconKey = icon(html`<circle cx="5.5" cy="10.5" r="2.75" ...${S}/><path d="m7.5 8.5 5.75-5.75M11 5l1.75 1.75M9.5 6.5l1.25 1.25" ...${S}/>`);
 
 /**

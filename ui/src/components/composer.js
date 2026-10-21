@@ -85,8 +85,10 @@ export function WorkspaceMenu({ open, onClose, anchor, side = 'top', align = 'st
     if (!path.trim()) return;
     if (await addWorkspace(path.trim())) { setPath(''); onClose(); }
   };
-  return html`<${Menu} open=${open} onClose=${onClose} anchor=${anchor} side=${side} align=${align} class="menu-wide">
-    <div class="menu-head">${t.pickWorkspace}</div>
+  return html`<${Menu} open=${open} onClose=${onClose} anchor=${anchor} side=${side} align=${align} class="menu-wide menu-scroll">
+    <${MenuItem} checked=${!cwd} hint=${t.noProjectHint} onClick=${() => { pickWorkspace(''); onClose(); }}>${t.noProject}</${MenuItem}>
+    <div class="menu-sep" />
+    <div class="menu-head">${t.projects}</div>
     ${workspaces.map((w) => html`<${MenuItem} key=${w.path} checked=${w.path === cwd} hint=${w.path}
       onClick=${() => { pickWorkspace(w.path); onClose(); }}>${w.name || workspaceName(w.path)}</${MenuItem}>`)}
     <div class="menu-sep" />
@@ -106,7 +108,7 @@ function HeroTray({ sel }) {
   return html`<div class="tray">
     <span class="chip-wrap">
       <button type="button" ref=${anchor} class="chip chip-plain" onClick=${() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded=${open}>
-        <${IconFolder} size=${14} /><span class="chip-label">${workspaceName(cwd) || t.pickWorkspace}</span>
+        <${IconFolder} size=${14} /><span class="chip-label">${workspaceName(cwd) || t.noProject}</span>
       </button>
       <${WorkspaceMenu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} />
     </span>
@@ -130,12 +132,10 @@ export function Composer({ hero, tx }) {
   const file = useRef(null);
   const composing = useRef(false);
 
-  const cwd = useStore(store, (s) => s.cwd);
   const running = status === 'running' || status === 'waiting-approval';
   const noKey = info && !info.apiKeyConfigured;
-  const noWorkspace = hero && !cwd;
   const uploading = images.some((i) => !i.ref);
-  const canSend = !noKey && !noWorkspace && !uploading && (text.trim() || images.length);
+  const canSend = !noKey && !uploading && (text.trim() || images.length);
 
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, [activeId]);
   useEffect(() => {
@@ -177,7 +177,7 @@ export function Composer({ hero, tx }) {
     }
   };
 
-  const placeholder = noKey ? t.placeholderNoKey : noWorkspace ? t.placeholderNoWorkspace : hero ? t.placeholderHero : t.placeholder;
+  const placeholder = noKey ? t.placeholderNoKey : hero ? t.placeholderHero : t.placeholder;
   const showStop = running && !canSend;
   return html`<div class=${cx('composer', drag && 'is-drag')}
       onDragOver=${(e) => { if ([...(e.dataTransfer?.types ?? [])].includes('Files')) { e.preventDefault(); setDrag(true); } }}

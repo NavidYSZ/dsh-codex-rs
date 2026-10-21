@@ -232,9 +232,10 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?}` → `/api/info` shape |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
-| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status}]` (newest first) |
-| POST | `/api/sessions` | `{cwd}` → `{id}` |
+| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread}]` (newest first) |
+| POST | `/api/sessions` | `{cwd?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`) |
 | GET | `/api/sessions/:id` | → `{header, events:[SessionEvent], status}` |
+| PATCH | `/api/sessions/:id` | `{title?, pinned?, archived?, seen?, unread?}` → list row; kept in `$DSHX_HOME/ui-state.json`, not in the log |
 | POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?}` → 202 |
 | POST | `/api/sessions/:id/cancel` | → 202 |
 | DELETE | `/api/sessions/:id` | → 204 |

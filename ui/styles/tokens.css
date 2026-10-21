@@ -1,5 +1,6 @@
-/* Codex tokens, carried over from client.js (Codex 26.1007 seeds: surface
-   #fff/#181818, ink #1a1c1f, accent #339cff). Each light value has its dark
+/* Codex tokens. Seeds from the Codex app's default theme (light: surface
+   #fff, ink #0d0d0d, accent #0285ff; dark: #181818, #fff, #339cff) and
+   values sampled from its public screenshots. Each light value has its dark
    twin below. The theme is resolved in JS ("system" follows the OS) and set
    as <html data-theme="light|dark">. */
 :root {
@@ -12,7 +13,7 @@
   --bg-3: #ffffff;
   --bg-overlay: #ededed;
   --bg-module: #f3f3f3;
-  --selection: #339cff4d;
+  --selection: #0285ff40;
 
   /* text */
   --ink: #1a1c1f;
@@ -29,9 +30,9 @@
   --line-4: #1a1c1f29;
 
   /* ink actions, blue accent */
-  --accent: #339cff;
-  --link: #339cff;
-  --info: #339cff;
+  --accent: #0285ff;
+  --link: #0285ff;
+  --info: #0285ff;
   --info-bg: #e5f2ff;
   --btn: #0d0d0d;
   --btn-hover: #393939;
@@ -42,23 +43,25 @@
   --hover-solid: #f3f3f3;
 
   /* sidebar */
-  --sidebar: #fafafa;
-  --nav-hover: #1a1c1f0e;
-  --nav-active: #1a1c1f14;
+  --sidebar: #f7f7f7;
+  --nav-hover: #1a1c1f0c;
+  --nav-active: #1a1c1f12;
+  --unread: #0285ff;
 
   /* composer, menus, tooltips */
   --input: #ffffff;
+  --input-line: #e2e2e2;
   --selector: #f3f3f3;
   --menu: #fffffff2;
   --tooltip: #1a1c1f;
   --tray: #f4f4f4;
-  --composer-shadow: 0 0 0 1px #0000000a, 0 2px 8px 0 #0000000a, 0 4px 80px 8px #00000006;
+  --composer-shadow: 0 0 0 1px var(--input-line), 0 2px 10px 0 #0000000a, 0 4px 60px 4px #00000005;
   --menu-shadow: 0 0 0 .5px #0000001f, 0 8px 28px -6px #00000026, 0 2px 6px #0000000d;
 
-  /* user bubble: dark ink like the Codex window */
-  --bubble: #141414;
-  --bubble-hi: #2d2d2d;
-  --bubble-ink: #ffffff;
+  /* user bubble: quiet grey, like the Codex app */
+  --bubble: #f3f3f3;
+  --bubble-hi: #ebebeb;
+  --bubble-ink: #0d0d0d;
 
   /* markdown and code */
   --code-block: #f3f3f3;
@@ -103,6 +106,7 @@
   --bg-overlay: #414141;
   --bg-module: #2d2d2d;
   --selection: #83c3ff4d;
+  --accent: #339cff;
 
   --ink: #ffffff;
   --ink-2: #ffffffb5;
@@ -126,20 +130,23 @@
   --active: #ffffff1f;
   --hover-solid: #2d2d2d;
 
-  --sidebar: #1a1a1a;
-  --nav-hover: #ffffff14;
-  --nav-active: #ffffff1a;
+  --sidebar: #1f1f1f;
+  --nav-hover: #ffffff10;
+  --nav-active: #ffffff18;
+  --unread: #339cff;
 
-  --input: #363636;
+  --input: #2d2d2d;
+  --input-line: #ffffff1a;
   --selector: #414141;
   --menu: #2d2d2df2;
   --tooltip: #2d2d2d;
   --tray: #232323;
-  --composer-shadow: inset 0 0 1px 0 #ffffff33, 0 8px 24px -10px #00000080;
+  --composer-shadow: 0 0 0 1px var(--input-line), 0 8px 24px -10px #00000080;
   --menu-shadow: inset 0 0 0 .5px #ffffff26, 0 12px 32px -8px #000000a0;
 
-  --bubble: #323232;
-  --bubble-hi: #444444;
+  --bubble: #2a2a2a;
+  --bubble-hi: #343434;
+  --bubble-ink: #ffffff;
 
   --code-block: #2a2a2a;
   --inline-code: #dfdfdf1c;

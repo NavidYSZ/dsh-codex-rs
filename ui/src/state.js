@@ -13,6 +13,12 @@ function readLocal(key, fallback) {
 function writeLocal(key, value) {
   try { localStorage.setItem(key, value); } catch { /* storage blocked */ }
 }
+function readJson(key, fallback) {
+  try { return JSON.parse(readLocal(key, '')) ?? fallback; } catch { return fallback; }
+}
+
+/** Last project picked on the start page; '' means a chat without a project. */
+const PROJECT_KEY = 'dshx-project';
 
 export const store = createStore({
   boot: 'loading',
@@ -36,7 +42,22 @@ export const store = createStore({
   theme: params.get('theme') || readLocal('dshx-theme', 'system'),
   sidebarOpen: false,
   sidebarCollapsed: readLocal('dshx-sidebar', '') === 'collapsed',
+  // 'projects' groups chats by folder; 'activity' (the bell) lists all by recency.
+  sidebarMode: params.get('sidebar') || readLocal('dshx-sidebar-mode', 'projects'),
+  activityFilter: 'all',
+  folded: readJson('dshx-folded', []),
+  palette: false,
+  renaming: null,
+  desktop: readDesktop(),
 });
+
+/** The Mac app's bridge (instances, notifications); null in a plain browser. */
+function readDesktop() {
+  const d = window.dshxDesktop;
+  if (!d) return null;
+  return { instances: [...(d.instances ?? [])], current: d.current ?? null, version: d.version ?? '' };
+}
+window.addEventListener('dshx-desktop-change', () => store.set({ desktop: readDesktop() }));
 
 // ---- theme ---------------------------------------------------------------
 
@@ -61,12 +82,17 @@ export async function boot() {
   try {
     const [info, workspaces, sessions] = await Promise.all([api.info(), api.workspaces(), api.sessions()]);
     const recent = [...(workspaces ?? [])].sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0));
-    store.set({ boot: 'ready', info, workspaces: workspaces ?? [], sessions: sessions ?? [], cwd: recent[0]?.path ?? sessions?.[0]?.cwd ?? '' });
+    const picked = readLocal(PROJECT_KEY, null);
+    const cwd = picked === '' || recent.some((w) => w.path === picked) ? picked : recent[0]?.path ?? '';
+    store.set({ boot: 'ready', info, workspaces: workspaces ?? [], sessions: sessions ?? [], cwd });
   } catch (e) {
     store.set({ boot: 'error', bootError: e });
     return;
   }
   window.addEventListener('hashchange', route);
+  window.addEventListener('keydown', onShortcut);
+  document.addEventListener('visibilitychange', () => { if (visible()) markSeen(store.get().activeId); });
+  watchAll();
   if (!location.hash && api.fixture) {
     const fx = await api.ready.then(() => api.fx);
     if (fx.session) return openSession(fx.session.header.id, { replace: true });
@@ -103,7 +129,9 @@ function showNewChat() {
   store.set({ ...EMPTY_SESSION, activeId: null, view: 'chat', pending: null, sidebarOpen: false, composer: {} });
 }
 
-export function newChat() {
+/** Start page; with a `cwd` ('' = no project) the new chat goes there. */
+export function newChat(cwd) {
+  if (typeof cwd === 'string') pickWorkspace(cwd);
   setHash('');
   showNewChat();
 }
@@ -137,7 +165,8 @@ export async function openSession(id, { fresh = false, replace = false } = {}) {
   try {
     const data = await api.session(id);
     if (my !== openToken) return;
-    store.set({ header: data.header, events: data.events ?? [], status: data.status ?? 'idle', cwd: data.header?.cwd ?? store.get().cwd });
+    store.set({ header: data.header, events: data.events ?? [], status: data.status ?? 'idle' });
+    markSeen(id);
     const events = data.events ?? [];
     const after = events.length ? events[events.length - 1].seq : -1;
     closeStream = api.stream(id, after, {
@@ -171,7 +200,10 @@ function onMessage(id, m) {
       if (m.status !== 'running') patch.deltas = null;
       store.set(patch);
       store.set((st) => ({ sessions: st.sessions.map((x) => (x.id === id ? { ...x, status: m.status } : x)) }));
-      if (m.status === 'idle' || m.status === 'error') refreshSessions();
+      if (m.status === 'idle' || m.status === 'error') {
+        if (visible()) markSeen(id);
+        refreshSessions();
+      }
       break;
     }
     case 'approval': store.set({ approval: m }); break;
@@ -216,6 +248,34 @@ function appendEvent(ev) {
     }
     return patch;
   });
+  if (visible()) markSeen(store.get().activeId);
+}
+
+/** Status of every chat (running dots, unread after a background run finishes). */
+function watchAll() {
+  api.stream(null, -1, {
+    message: (m) => {
+      if (m.kind !== 'status' || !m.sessionId) return;
+      const known = store.get().sessions.some((x) => x.id === m.sessionId);
+      store.set((st) => ({ sessions: st.sessions.map((x) => (x.id === m.sessionId ? { ...x, status: m.status } : x)) }));
+      if (!known || m.status === 'idle' || m.status === 'error') refreshSessions();
+    },
+  });
+}
+
+const visible = () => document.visibilityState === 'visible';
+
+// "Seen" is debounced: a watched run sends many events.
+const seenTimers = new Map();
+export function markSeen(id) {
+  if (!id) return;
+  const row = store.get().sessions.find((x) => x.id === id);
+  if (row?.unread) store.set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, unread: false } : x)) }));
+  clearTimeout(seenTimers.get(id));
+  seenTimers.set(id, setTimeout(() => {
+    seenTimers.delete(id);
+    api.updateSession(id, { seen: true }).catch(() => {});
+  }, 700));
 }
 
 let refreshTimer = 0;
@@ -260,6 +320,30 @@ export async function decide(callId, decision) {
   try { await api.decide(callId, decision); } catch (e) { fail(e); }
 }
 
+/** Pin, archive, rename or mark a chat; the sidebar updates before the server answers. */
+export async function patchSession(id, patch) {
+  const local = { ...patch };
+  delete local.seen;
+  if (patch.seen) local.unread = false;
+  store.set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, ...local } : x)) }));
+  try {
+    const row = await api.updateSession(id, patch);
+    if (row?.id) store.set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, ...row, status: x.status } : x)) }));
+  } catch (e) {
+    fail(e);
+    refreshSessions();
+  }
+}
+
+export const renameSession = (id, title) => patchSession(id, { title: title.trim() });
+export const setPinned = (id, pinned) => patchSession(id, { pinned });
+export const setArchived = (id, archived) => patchSession(id, { archived });
+export const setUnread = (id, unread) => patchSession(id, unread ? { unread: true } : { seen: true });
+
+export function markAllRead() {
+  for (const x of store.get().sessions) if (x.unread) patchSession(x.id, { seen: true });
+}
+
 export async function deleteSession(id) {
   if (!confirm(t.confirmDelete)) return;
   try {
@@ -284,6 +368,7 @@ export async function addWorkspace(path) {
   try {
     const ws = await api.addWorkspace(path);
     store.set((s) => ({ workspaces: [ws, ...s.workspaces.filter((w) => w.path !== ws.path)], cwd: ws.path }));
+    writeLocal(PROJECT_KEY, ws.path);
     return true;
   } catch (e) {
     fail(e);
@@ -292,6 +377,7 @@ export async function addWorkspace(path) {
 }
 
 export function pickWorkspace(path) {
+  writeLocal(PROJECT_KEY, path);
   store.set({ cwd: path });
 }
 
@@ -308,6 +394,42 @@ export function toggleSidebar() {
     writeLocal('dshx-sidebar', collapsed ? 'collapsed' : '');
     store.set({ sidebarCollapsed: collapsed });
   }
+}
+
+export function setSidebarMode(mode) {
+  writeLocal('dshx-sidebar-mode', mode);
+  store.set({ sidebarMode: mode });
+}
+
+export function setActivityFilter(activityFilter) {
+  store.set({ activityFilter });
+}
+
+/** Folds or unfolds one project in the sidebar. */
+export function toggleFolded(path) {
+  const folded = store.get().folded.includes(path) ? store.get().folded.filter((p) => p !== path) : [...store.get().folded, path];
+  writeLocal('dshx-folded', JSON.stringify(folded));
+  store.set({ folded });
+}
+
+export const openPalette = () => store.set({ palette: true });
+export const closePalette = () => store.set({ palette: false });
+export const startRename = (id) => store.set({ renaming: id });
+export const stopRename = () => store.set({ renaming: null });
+
+/** ⌘K search, ⌘B sidebar, ⌘⇧O new chat (⌘N belongs to the browser). */
+function onShortcut(e) {
+  const mod = e.metaKey || e.ctrlKey;
+  if (!mod || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'k' && !e.shiftKey) { e.preventDefault(); store.set((s) => ({ palette: !s.palette })); }
+  else if (k === 'b' && !e.shiftKey) { e.preventDefault(); toggleSidebar(); }
+  else if (k === 'o' && e.shiftKey) { e.preventDefault(); newChat(); }
+}
+
+/** Asks the Mac app to switch instance (the page reloads into the other one). */
+export function switchInstance(id) {
+  window.dshxDesktop?.switchTo?.(id);
 }
 
 export function fail(e) {

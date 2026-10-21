@@ -13,6 +13,7 @@ use dshx_server::{Backend, NotFound, PromptRequest, StreamMessage};
 use serde_json::{Value, json};
 use tokio::sync::{broadcast, oneshot};
 
+use crate::chats::ChatState;
 use crate::runtime::{Overrides, Runtime};
 
 pub async fn run(runtime: Arc<Runtime>, port: u16, open: bool) -> anyhow::Result<i32> {
@@ -63,12 +64,14 @@ pub struct WebBackend {
     approvals: Arc<Approvals>,
     tx: broadcast::Sender<StreamMessage>,
     workspaces_file: PathBuf,
+    chats: ChatState,
 }
 
 impl WebBackend {
     pub fn new(runtime: Arc<Runtime>) -> Self {
         let (tx, _) = broadcast::channel(4096);
         let workspaces_file = runtime.home.join("workspaces.json");
+        let chats = ChatState::load(&runtime.home);
         WebBackend {
             approvals: Arc::new(Approvals {
                 pending: Mutex::new(HashMap::new()),
@@ -78,6 +81,7 @@ impl WebBackend {
             open: tokio::sync::Mutex::new(HashMap::new()),
             tx,
             workspaces_file,
+            chats,
         }
     }
 
@@ -255,7 +259,7 @@ impl Backend for WebBackend {
         }
         let mut rows: Vec<(String, u64)> = by_path
             .into_iter()
-            .filter(|(p, _)| Path::new(p).is_dir())
+            .filter(|(p, _)| Path::new(p).is_dir() && !self.chats.is_scratch(p))
             .collect();
         rows.sort_by_key(|r| std::cmp::Reverse(r.1));
         Ok(Value::Array(
@@ -298,23 +302,45 @@ impl Backend for WebBackend {
             if let Some(s) = open.get(&r.id) {
                 v["status"] = json!(s.status.lock().unwrap().clone());
             }
+            self.chats.decorate(&mut v);
             out.push(v);
         }
         Ok(Value::Array(out))
     }
 
     async fn create_session(&self, cwd: String) -> anyhow::Result<String> {
-        let dir = PathBuf::from(&cwd)
-            .canonicalize()
-            .map_err(|e| anyhow::anyhow!("{cwd}: {e}"))?;
+        // No folder: the chat gets a private one that never shows up as a project.
+        let scratch = cwd.trim().is_empty();
+        let dir = if scratch {
+            self.chats.new_chat_dir()?
+        } else {
+            PathBuf::from(&cwd)
+                .canonicalize()
+                .map_err(|e| anyhow::anyhow!("{cwd}: {e}"))?
+        };
         anyhow::ensure!(dir.is_dir(), "{} is not a folder", dir.display());
         let log: Arc<dyn SessionLog> =
             Arc::new(self.runtime.store.create(&dir.display().to_string())?);
         let id = log.id().to_owned();
         let s = self.start_agent(&id, log, dir.clone(), &Overrides::default());
         self.open.lock().await.insert(id.clone(), s);
-        let _ = self.add_workspace(dir.display().to_string()).await;
+        if !scratch {
+            let _ = self.add_workspace(dir.display().to_string()).await;
+        }
+        let _ = self.chats.update(&id, &json!({ "seen": true }), now_ms());
         Ok(id)
+    }
+
+    async fn update_session(&self, id: &str, patch: Value) -> anyhow::Result<Value> {
+        if self.runtime.store.locate(id)?.is_none() && !self.open.lock().await.contains_key(id) {
+            return Err(NotFound(id.to_owned()).into());
+        }
+        self.chats.update(id, &patch, now_ms())?;
+        let rows = self.list_sessions(None).await?;
+        Ok(rows
+            .as_array()
+            .and_then(|rows| rows.iter().find(|r| r["id"] == id).cloned())
+            .unwrap_or_else(|| json!({ "id": id })))
     }
 
     async fn session(&self, id: &str) -> anyhow::Result<Value> {
@@ -425,6 +451,7 @@ impl Backend for WebBackend {
             return Err(NotFound(id.to_owned()).into());
         }
         self.runtime.store.delete(id)?;
+        self.chats.remove(id);
         Ok(())
     }
 

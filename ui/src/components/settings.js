@@ -1,10 +1,11 @@
 // Settings: theme (local to this browser), defaults for new chats, API key.
 import { useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
-import { t } from '../i18n.js';
+import { t, age } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, setTheme, updateSettings, closeSettings, toggleSidebar } from '../state.js';
-import { IconChevronLeft, IconCheck, IconKey, IconSidebar } from '../icons.js';
+import { store, setTheme, updateSettings, closeSettings, toggleSidebar, setArchived, deleteSession } from '../state.js';
+import { IconChevronLeft, IconCheck, IconKey, IconSidebar, IconArchive } from '../icons.js';
+import { workspaceName } from './composer.js';
 
 function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
@@ -46,6 +47,24 @@ function ApiKey({ configured }) {
     ${configured ? html`<button type="button" class="btn btn-small" onClick=${() => { setEditing(false); setValue(''); }}>${t.cancel}</button>` : null}
     <button type="submit" class="btn btn-small btn-primary" disabled=${!value.trim()}>${t.save}</button>
   </form>`;
+}
+
+function Archived() {
+  const sessions = useStore(store, (s) => s.sessions);
+  const list = sessions.filter((s) => s.archived).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return html`<section class="card">
+    <h2 class="card-title"><${IconArchive} size=${14} />${t.archived}</h2>
+    ${list.length ? list.map((s) => html`<div class="field" key=${s.id}>
+      <div class="field-text">
+        <div class="field-label">${s.title || t.newChat}</div>
+        <div class="field-hint">${[s.scratch ? t.noProject : workspaceName(s.cwd), age(s.updatedAt ?? s.createdAt ?? Date.now())].join(' · ')}</div>
+      </div>
+      <div class="field-control key-row">
+        <button type="button" class="btn btn-small" onClick=${() => setArchived(s.id, false)}>${t.unarchive}</button>
+        <button type="button" class="btn btn-small" onClick=${() => deleteSession(s.id)}>${t.deleteChat}</button>
+      </div>
+    </div>`) : html`<div class="field"><span class="field-hint">${t.noArchived}</span></div>`}
+  </section>`;
 }
 
 export function Settings() {
@@ -100,6 +119,8 @@ export function Settings() {
         </${Field}>
         <${Field} label=${t.language}><span class="field-value">${t.languageValue}</span></${Field}>
       </section>
+
+      <${Archived} />
 
       <section class="card">
         <h2 class="card-title">${t.about}</h2>

@@ -86,7 +86,7 @@ pub trait Backend: Send + Sync + 'static {
     async fn workspaces(&self) -> anyhow::Result<Value>;
     async fn add_workspace(&self, path: String) -> anyhow::Result<Value>;
     async fn list_sessions(&self, cwd: Option<String>) -> anyhow::Result<Value>;
-    /// Returns the new session id.
+    /// Returns the new session id. An empty `cwd` starts a chat without a project folder.
     async fn create_session(&self, cwd: String) -> anyhow::Result<String>;
     /// `{header, events, status}`.
     async fn session(&self, id: &str) -> anyhow::Result<Value>;
@@ -96,6 +96,12 @@ pub trait Backend: Send + Sync + 'static {
     async fn prompt(&self, id: &str, request: PromptRequest) -> anyhow::Result<()>;
     async fn cancel(&self, id: &str) -> anyhow::Result<()>;
     async fn delete_session(&self, id: &str) -> anyhow::Result<()>;
+    /// Applies `{title?, pinned?, archived?, seen?, unread?}` (UI state, not the
+    /// session log) and returns the session's list row.
+    async fn update_session(&self, id: &str, patch: Value) -> anyhow::Result<Value> {
+        let _ = (id, patch);
+        anyhow::bail!("not supported")
+    }
     async fn approve(&self, call_id: &str, decision: &str) -> anyhow::Result<()>;
     async fn save_attachment(
         &self,
@@ -169,7 +175,10 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/settings", put(update_settings))
         .route("/workspaces", get(workspaces).post(add_workspace))
         .route("/sessions", get(list_sessions).post(create_session))
-        .route("/sessions/{id}", get(session).delete(delete_session))
+        .route(
+            "/sessions/{id}",
+            get(session).delete(delete_session).patch(update_session),
+        )
         .route("/sessions/{id}/prompt", post(prompt))
         .route("/sessions/{id}/cancel", post(cancel))
         .route("/approvals/{call_id}", post(approve))
@@ -340,15 +349,27 @@ async fn list_sessions(
 
 #[derive(Deserialize)]
 struct CreateBody {
-    cwd: String,
+    #[serde(default)]
+    cwd: Option<String>,
 }
 
 async fn create_session(
     State(s): State<AppState>,
     Json(body): Json<CreateBody>,
 ) -> ApiResult<Json<Value>> {
-    let id = s.backend.create_session(body.cwd).await?;
+    let id = s
+        .backend
+        .create_session(body.cwd.unwrap_or_default())
+        .await?;
     Ok(Json(json!({ "id": id })))
+}
+
+async fn update_session(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(patch): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.update_session(&id, patch).await?))
 }
 
 async fn session(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
