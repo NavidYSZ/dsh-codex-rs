@@ -16,22 +16,63 @@ use tokio::sync::{broadcast, oneshot};
 use crate::chats::ChatState;
 use crate::runtime::{Overrides, Runtime};
 
-pub async fn run(runtime: Arc<Runtime>, port: u16, open: bool) -> anyhow::Result<i32> {
+pub async fn run(
+    runtime: Arc<Runtime>,
+    port: u16,
+    open: bool,
+    ready_file: Option<PathBuf>,
+) -> anyhow::Result<i32> {
     let backend = Arc::new(WebBackend::new(runtime.clone()));
     let token = uuid::Uuid::new_v4().simple().to_string();
     let (addr, server) = dshx_server::serve(backend.clone(), token.clone(), port).await?;
     let url = format!("http://127.0.0.1:{}/?token={token}", addr.port());
     eprintln!("dsh-codex web: {url}");
+    if let Some(path) = &ready_file {
+        write_ready_file(path, &url, &token, addr.port())
+            .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
+    }
     if open {
         open_browser(&url);
     }
     tokio::select! {
         _ = server => {}
         _ = tokio::signal::ctrl_c() => {}
+        _ = terminated() => {}
+    }
+    if let Some(path) = &ready_file {
+        let _ = std::fs::remove_file(path);
     }
     backend.close_all().await;
     runtime.shutdown().await;
     Ok(0)
+}
+
+/// Resolves on SIGTERM, which a supervising app sends on quit, so the agents
+/// and MCP servers shut down cleanly.
+async fn terminated() {
+    #[cfg(unix)]
+    if let Ok(mut sig) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+        sig.recv().await;
+        return;
+    }
+    std::future::pending::<()>().await
+}
+
+/// Writes `{url, token, port}` atomically with mode 0600 so a supervising app
+/// learns where the UI listens without parsing stderr.
+fn write_ready_file(path: &Path, url: &str, token: &str, port: u16) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let tmp = path.with_extension("tmp");
+    let _ = std::fs::remove_file(&tmp);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options.open(&tmp)?;
+    let body = json!({ "url": url, "token": token, "port": port });
+    file.write_all(body.to_string().as_bytes())?;
+    file.sync_all()?;
+    std::fs::rename(&tmp, path)
 }
 
 fn open_browser(url: &str) {

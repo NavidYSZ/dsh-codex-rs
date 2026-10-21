@@ -61,6 +61,10 @@ enum Command {
         /// Do not open a browser window.
         #[arg(long)]
         no_open: bool,
+        /// Once listening, write `{"url","token","port"}` here as JSON (mode 0600)
+        /// for a supervising app such as the macOS desktop shell.
+        #[arg(long, value_name = "PATH")]
+        ready_file: Option<PathBuf>,
     },
     /// Serve the dsh SDK JSON-RPC protocol on stdio.
     Sdk,
@@ -116,6 +120,7 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
         (None, Some("web")) => Some(Command::Web {
             port: 0,
             no_open: false,
+            ready_file: None,
         }),
         (None, Some("headless") | None) => None,
         (None, Some(other)) => anyhow::bail!("unknown profile {other:?} (headless, web, sdk)"),
@@ -140,7 +145,11 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
             Runtime::load()?.set_api_key(None)?;
             Ok(0)
         }
-        Some(Command::Web { port, no_open }) => web::run(start().await?, port, !no_open).await,
+        Some(Command::Web {
+            port,
+            no_open,
+            ready_file,
+        }) => web::run(start().await?, port, !no_open, ready_file).await,
         Some(Command::Sdk) => sdk::run(start().await?).await,
         None => {
             let task = match cli.task.as_deref() {
