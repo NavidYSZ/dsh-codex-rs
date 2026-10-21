@@ -22,6 +22,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
+mod extensions;
+
+pub use extensions::{Extensions, OAuthCallback};
+
 /// Live messages pushed to UI clients over the WebSocket.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -147,6 +151,11 @@ pub trait Backend: Send + Sync + 'static {
         let _ = id;
         None
     }
+    /// Plugins, marketplaces, skills, MCP servers and connector logins;
+    /// `None` = those routes answer 404.
+    fn extensions(&self) -> Option<Arc<dyn Extensions>> {
+        None
+    }
 }
 
 /// Error for unknown sessions, attachments or approvals (→ HTTP 404).
@@ -220,6 +229,7 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/attachments", post(save_attachment))
         .route("/attachments/{id}", get(load_attachment))
         .route("/stream", get(stream))
+        .merge(extensions::routes())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_token,
@@ -228,6 +238,7 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .nest("/api", api)
         .route("/preview/{grant}/", get(preview_index))
         .route("/preview/{grant}/{*path}", get(preview_file))
+        .route("/api/oauth/callback", get(extensions::oauth_callback))
         .fallback(get(static_file))
         .with_state(state)
 }
@@ -256,7 +267,7 @@ async fn require_token(
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    let host_ok = local_host(&headers);
+    let host_ok = host_is_loopback(&headers);
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -278,7 +289,7 @@ async fn require_token(
 }
 
 /// Only localhost may talk to us (DNS-rebinding guard).
-fn local_host(headers: &HeaderMap) -> bool {
+fn host_is_loopback(headers: &HeaderMap) -> bool {
     headers
         .get(header::HOST)
         .and_then(|h| h.to_str().ok())
@@ -356,14 +367,16 @@ fn csp_for(html: &[u8]) -> String {
 }
 
 async fn info(State(s): State<AppState>) -> ApiResult<Json<Value>> {
-    Ok(Json(s.backend.info().await?))
+    let info = s.backend.info().await?;
+    Ok(Json(extensions::with_summary(&s, info).await))
 }
 
 async fn update_settings(
     State(s): State<AppState>,
     Json(patch): Json<Value>,
 ) -> ApiResult<Json<Value>> {
-    Ok(Json(s.backend.update_settings(patch).await?))
+    let info = s.backend.update_settings(patch).await?;
+    Ok(Json(extensions::with_summary(&s, info).await))
 }
 
 async fn workspaces(State(s): State<AppState>) -> ApiResult<Json<Value>> {
@@ -548,7 +561,7 @@ async fn preview_file(
 /// One file of a granted folder; folders serve their `index.html`.
 async fn serve_preview(s: &AppState, grant: &str, rel: &str, headers: &HeaderMap) -> Response {
     let not_found = || StatusCode::NOT_FOUND.into_response();
-    if !local_host(headers) {
+    if !host_is_loopback(headers) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
     let Some(root) = s.previews.root(grant) else {

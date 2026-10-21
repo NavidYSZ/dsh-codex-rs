@@ -3,6 +3,8 @@
 //! with exponential backoff after a lost connection. One outage shares one
 //! attempt budget; a connection that stays up for `max_delay` resets it.
 //! Exhausting the budget removes the server's tools and instructions.
+//! A server that answers with an authorization challenge is not retried: it
+//! waits (without tools) until it is restarted after a login.
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -10,10 +12,11 @@ use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
-use crate::config::{ServerSpec, TransportSpec};
+use crate::config::{AuthSpec, ServerSpec, TransportSpec};
 use crate::error::McpError;
 use crate::http::HttpTransport;
 use crate::names::public_tool_name;
+use crate::oauth::{AuthChallenge, EnvBearer, OAuthManager, TokenProvider};
 use crate::peer::{Peer, PeerEvent, Transport};
 use crate::protocol::{self, RawTool};
 use crate::stdio::StdioTransport;
@@ -28,8 +31,57 @@ pub(crate) struct ToolEntry {
     pub raw: RawTool,
 }
 
+/// Where the supervisor stands.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) enum Phase {
+    #[default]
+    Connecting,
+    Connected,
+    /// Waiting for the next attempt after a failure or a lost connection.
+    Retrying {
+        error: String,
+    },
+    /// The server wants a login; no further attempts until a restart.
+    NeedsLogin,
+    /// Gave up, or reconnecting is off.
+    Failed {
+        error: String,
+    },
+}
+
+/// Why a connection attempt failed.
+pub(crate) enum ConnectError {
+    Auth(AuthChallenge),
+    Other(String),
+}
+
+impl From<String> for ConnectError {
+    fn from(e: String) -> Self {
+        ConnectError::Other(e)
+    }
+}
+
+impl From<McpError> for ConnectError {
+    fn from(e: McpError) -> Self {
+        match e {
+            McpError::Unauthorized(challenge) => ConnectError::Auth(*challenge),
+            other => ConnectError::Other(other.to_string()),
+        }
+    }
+}
+
+impl std::fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectError::Auth(_) => f.write_str("authorization required"),
+            ConnectError::Other(e) => f.write_str(e),
+        }
+    }
+}
+
 #[derive(Default)]
 struct State {
+    phase: Phase,
     /// The live generation; `None` while connecting, down or given up.
     peer: Option<Arc<Peer>>,
     capabilities: Value,
@@ -45,6 +97,10 @@ pub(crate) struct Server {
     changes: Arc<watch::Sender<u64>>,
     disposed: CancellationToken,
     stopped: Mutex<Option<oneshot::Receiver<()>>>,
+    /// Bearer tokens of an HTTP server.
+    auth: Option<Arc<dyn TokenProvider>>,
+    /// The server's last authorization challenge.
+    challenge: Arc<Mutex<Option<AuthChallenge>>>,
 }
 
 /// One established connection before it is published.
@@ -61,15 +117,30 @@ impl Server {
     pub fn start(
         spec: ServerSpec,
         changes: Arc<watch::Sender<u64>>,
+        oauth: Option<&Arc<OAuthManager>>,
     ) -> (Arc<Server>, oneshot::Receiver<Result<(), String>>) {
         let (first_tx, first_rx) = oneshot::channel();
         let (stopped_tx, stopped_rx) = oneshot::channel();
+        let auth: Option<Arc<dyn TokenProvider>> = match &spec.transport {
+            TransportSpec::Http {
+                auth: AuthSpec::OAuth(_),
+                url,
+                ..
+            } => oauth.map(|m| m.provider(url)),
+            TransportSpec::Http {
+                auth: AuthSpec::BearerEnv(var),
+                ..
+            } => Some(Arc::new(EnvBearer(var.clone()))),
+            _ => None,
+        };
         let server = Arc::new(Server {
             spec,
             state: Mutex::new(State::default()),
             changes,
             disposed: CancellationToken::new(),
             stopped: Mutex::new(Some(stopped_rx)),
+            auth,
+            challenge: Arc::new(Mutex::new(None)),
         });
         let supervisor = server.clone();
         tokio::spawn(async move {
@@ -102,6 +173,20 @@ impl Server {
 
     pub fn has_capability(&self, name: &str) -> bool {
         self.state.lock().unwrap().capabilities.get(name).is_some()
+    }
+
+    pub fn phase(&self) -> Phase {
+        self.state.lock().unwrap().phase.clone()
+    }
+
+    /// The last 401/403 challenge (a 403 `insufficient_scope` also on a
+    /// live connection).
+    pub fn challenge(&self) -> Option<AuthChallenge> {
+        self.challenge.lock().unwrap().clone()
+    }
+
+    fn set_phase(&self, phase: Phase) {
+        self.state.lock().unwrap().phase = phase;
     }
 
     fn notify(&self) {
@@ -141,11 +226,13 @@ impl Server {
                     } = connection;
                     {
                         let mut state = self.state.lock().unwrap();
+                        state.phase = Phase::Connected;
                         state.peer = Some(peer.clone());
                         state.capabilities = capabilities;
                         state.tools = tools;
                         state.instructions = instructions;
                     }
+                    *self.challenge.lock().unwrap() = None;
                     self.notify();
                     if let Some(tx) = first.take() {
                         let _ = tx.send(Ok(()));
@@ -184,21 +271,46 @@ impl Server {
                                     }
                                     Err(e) => tracing::error!("{label}: tool re-sync failed: {e}"),
                                 }
+                                // A 403 insufficient_scope changes the reported status.
+                                self.notify();
                             }
                             Some(Some(PeerEvent::Closed(reason))) => break reason,
                             Some(None) => break "connection ended".to_owned(),
                         }
                     };
                     tracing::warn!("{label}: connection lost: {lost}");
-                    self.state.lock().unwrap().peer = None;
+                    {
+                        let mut state = self.state.lock().unwrap();
+                        state.peer = None;
+                        state.phase = Phase::Retrying {
+                            error: format!("connection lost: {lost}"),
+                        };
+                    }
                     // Reap what is left of the old generation before a new one starts.
                     Self::close_peer(&peer, &label).await;
                     if since.elapsed() >= policy.max_delay {
                         failed_attempts = 0;
                     }
                 }
-                Err(e) => {
+                Err(ConnectError::Auth(challenge)) => {
+                    tracing::info!("{label}: login required; waiting for a restart after login");
+                    *self.challenge.lock().unwrap() = Some(challenge);
+                    {
+                        let mut state = self.state.lock().unwrap();
+                        state.phase = Phase::NeedsLogin;
+                        state.tools.clear();
+                        state.instructions.clear();
+                    }
+                    self.notify();
+                    if let Some(tx) = first.take() {
+                        let _ = tx.send(Err("authorization required".into()));
+                    }
+                    self.disposed.cancelled().await;
+                    return;
+                }
+                Err(ConnectError::Other(e)) => {
                     tracing::warn!("{label}: connection attempt failed: {e}");
+                    self.set_phase(Phase::Retrying { error: e.clone() });
                     if let Some(tx) = first.take() {
                         let _ = tx.send(Err(e));
                     }
@@ -214,12 +326,24 @@ impl Server {
                     "connection failed and reconnect is disabled — no tools were registered; restart dsh-codex to connect"
                 };
                 tracing::error!("{label}: {message}");
+                let error = match self.phase() {
+                    Phase::Retrying { error } => error,
+                    _ => message.to_owned(),
+                };
+                self.set_phase(Phase::Failed { error });
                 return;
             }
             failed_attempts += 1;
             if failed_attempts > policy.max_attempts {
                 {
                     let mut state = self.state.lock().unwrap();
+                    let error = match &state.phase {
+                        Phase::Retrying { error } => error.clone(),
+                        _ => "connection failed".to_owned(),
+                    };
+                    state.phase = Phase::Failed {
+                        error: format!("gave up after {} attempts: {error}", policy.max_attempts),
+                    };
                     state.tools.clear();
                     state.instructions.clear();
                 }
@@ -258,7 +382,7 @@ impl Server {
 
     /// One attempt: transport, `initialize`, `notifications/initialized`,
     /// instructions, tool discovery. A failed attempt closes its transport.
-    async fn connect(&self) -> Result<Connection, String> {
+    async fn connect(&self) -> Result<Connection, ConnectError> {
         let label = self.spec.label();
         let (transport, inbox, http): (Arc<dyn Transport>, _, Option<Arc<HttpTransport>>) =
             match &self.spec.transport {
@@ -273,9 +397,15 @@ impl Server {
                             .map_err(|e| e.to_string())?;
                     (t, inbox, None)
                 }
-                TransportSpec::Http { url, headers } => {
-                    let (t, inbox) = HttpTransport::new(url.clone(), headers, &label)
-                        .map_err(|e| e.to_string())?;
+                TransportSpec::Http { url, headers, .. } => {
+                    let (t, inbox) = HttpTransport::new(
+                        url.clone(),
+                        headers,
+                        &label,
+                        self.auth.clone(),
+                        self.challenge.clone(),
+                    )
+                    .map_err(|e| e.to_string())?;
                     (t.clone(), inbox, Some(t))
                 }
             };
@@ -311,7 +441,7 @@ impl Server {
         }
     }
 
-    async fn handshake(&self, peer: &Arc<Peer>) -> Result<(Value, String), String> {
+    async fn handshake(&self, peer: &Arc<Peer>) -> Result<(Value, String), ConnectError> {
         let label = self.spec.label();
         let params = json!({
             "protocolVersion": protocol::PROTOCOL_VERSION,
@@ -320,17 +450,14 @@ impl Server {
         });
         let result = peer
             .request("initialize", Some(params), INIT_TIMEOUT, None)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
         let version = result
             .get("protocolVersion")
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_owned();
         if !protocol::SUPPORTED_VERSIONS.contains(&version.as_str()) {
-            return Err(format!(
-                "Server's protocol version is not supported: {version}"
-            ));
+            return Err(format!("Server's protocol version is not supported: {version}").into());
         }
         peer.transport().initialized(&version);
         peer.notify("notifications/initialized", None).await;
@@ -352,20 +479,19 @@ impl Server {
             return Err(format!(
                 "{label}: server instructions exceed maxInstructionBytes ({})",
                 self.spec.max_instruction_bytes
-            ));
+            )
+            .into());
         }
         Ok((capabilities, instructions))
     }
 
     /// The complete tool list (all pages) under public names.
-    async fn list_tools(&self, peer: &Arc<Peer>) -> Result<Vec<ToolEntry>, String> {
-        let pages = list_all(peer, "tools/list", INIT_TIMEOUT, None)
-            .await
-            .map_err(|e| e.to_string())?;
+    async fn list_tools(&self, peer: &Arc<Peer>) -> Result<Vec<ToolEntry>, ConnectError> {
+        let pages = list_all(peer, "tools/list", INIT_TIMEOUT, None).await?;
         let mut entries: Vec<ToolEntry> = Vec::new();
         for page in pages {
             let (tools, _) = protocol::tools_page(&page)
-                .map_err(|e| format!("Invalid result for tools/list: {e}"))?;
+                .map_err(|e| ConnectError::Other(format!("Invalid result for tools/list: {e}")))?;
             for raw in tools {
                 let public_name = public_tool_name(&self.spec.name, &raw.name);
                 if entries.iter().any(|e| e.public_name == public_name) {
@@ -373,7 +499,8 @@ impl Server {
                         "{}: server listed tool \"{}\" more than once — invalid tool list",
                         self.spec.label(),
                         raw.name
-                    ));
+                    )
+                    .into());
                 }
                 entries.push(ToolEntry { public_name, raw });
             }

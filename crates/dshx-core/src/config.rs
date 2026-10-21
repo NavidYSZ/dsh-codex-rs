@@ -2,7 +2,8 @@
 //!
 //! The `[codex]` table carries the settings of the original plugin bundle
 //! (`computerUse`, `apps`, `browser`, `mini`), with the same keys and defaults.
-//! `[mcp_servers.<name>]` tables configure MCP servers (dsh `mcp-client`).
+//! `[mcp_servers.<name>]` tables configure MCP servers (dsh `mcp-client`),
+//! `[plugins."<name>@<marketplace>"]` tables switch installed plugins on.
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -25,6 +26,10 @@ pub struct Config {
     /// MCP servers by name (the `mcp__<name>__<tool>` namespace).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub mcp_servers: BTreeMap<String, McpServerConfig>,
+    /// Installed plugins by id (`<name>@<marketplace>`); only enabled ones
+    /// contribute skills and MCP servers.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub plugins: BTreeMap<String, PluginConfig>,
 }
 
 impl Default for Config {
@@ -38,6 +43,7 @@ impl Default for Config {
             max_tokens: 256_000,
             codex: CodexConfig::default(),
             mcp_servers: BTreeMap::new(),
+            plugins: BTreeMap::new(),
         }
     }
 }
@@ -62,7 +68,17 @@ pub struct McpServerConfig {
     pub cwd: Option<PathBuf>,
     /// Streamable HTTP endpoint; plain `http://` only for loopback hosts.
     pub url: Option<String>,
+    /// Codex calls them `http_headers`.
+    #[serde(alias = "http_headers")]
     pub headers: BTreeMap<String, String>,
+    /// Streamable HTTP: bearer token read from this environment variable.
+    #[serde(alias = "bearerTokenEnvVar", skip_serializing_if = "Option::is_none")]
+    pub bearer_token_env_var: Option<String>,
+    /// Streamable HTTP: OAuth settings. Without them a 401 still starts
+    /// discovery and dynamic client registration; `enabled = false` turns
+    /// OAuth off for the server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<McpOAuthConfig>,
     /// Timeout per tool call or resource request.
     #[serde(alias = "toolCallTimeoutMs")]
     pub tool_call_timeout_ms: u64,
@@ -86,11 +102,53 @@ impl Default for McpServerConfig {
             cwd: None,
             url: None,
             headers: BTreeMap::new(),
+            bearer_token_env_var: None,
+            oauth: None,
             tool_call_timeout_ms: 60_000,
             max_instruction_bytes: 32_768,
             fail_on_startup_error: false,
             reconnect: McpReconnectConfig::default(),
         }
+    }
+}
+
+/// `[mcp_servers.<name>.oauth]`: a client registered in advance (for
+/// authorization servers without dynamic registration, e.g. GitHub) and the
+/// scopes to request.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct McpOAuthConfig {
+    pub enabled: bool,
+    #[serde(alias = "clientId", skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+    #[serde(alias = "clientSecret", skip_serializing_if = "Option::is_none")]
+    pub client_secret: Option<String>,
+    /// Empty = the scopes the server asks for (`WWW-Authenticate`) or advertises.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
+}
+
+impl Default for McpOAuthConfig {
+    fn default() -> Self {
+        McpOAuthConfig {
+            enabled: true,
+            client_id: None,
+            client_secret: None,
+            scopes: Vec::new(),
+        }
+    }
+}
+
+/// One `[plugins."<name>@<marketplace>"]` table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct PluginConfig {
+    pub enabled: bool,
+}
+
+impl Default for PluginConfig {
+    fn default() -> Self {
+        PluginConfig { enabled: true }
     }
 }
 
@@ -286,5 +344,37 @@ mod tests {
         assert_eq!(web.reconnect.max_attempts, 2);
         assert_eq!(web.reconnect.initial_delay_ms, 500);
         assert!(Config::default().mcp_servers.is_empty());
+    }
+
+    #[test]
+    fn plugins_and_oauth_tables() {
+        let config: Config = toml::from_str(
+            r#"
+            [plugins."linear@openai-curated"]
+            enabled = true
+
+            [plugins."notes@local"]
+            enabled = false
+
+            [mcp_servers.gh]
+            url = "https://api.githubcopilot.com/mcp/"
+            http_headers = { X-Extra = "1" }
+            oauth = { client_id = "Iv1.abc", scopes = ["repo"] }
+            "#,
+        )
+        .unwrap();
+        assert!(config.plugins["linear@openai-curated"].enabled);
+        assert!(!config.plugins["notes@local"].enabled);
+        let gh = &config.mcp_servers["gh"];
+        assert_eq!(gh.headers["X-Extra"], "1");
+        let oauth = gh.oauth.as_ref().unwrap();
+        assert!(oauth.enabled);
+        assert_eq!(oauth.client_id.as_deref(), Some("Iv1.abc"));
+        // Unset optional tables stay out of a rewritten config.toml.
+        let text = toml::to_string(&Config::default()).unwrap();
+        assert!(
+            !text.contains("plugins") && !text.contains("oauth"),
+            "{text}"
+        );
     }
 }

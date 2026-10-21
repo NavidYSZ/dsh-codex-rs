@@ -450,12 +450,14 @@ dependencies = [
  "dshx-llm",
  "dshx-macos",
  "dshx-mcp",
+ "dshx-plugins",
  "dshx-server",
  "dshx-session",
  "dshx-subagent",
  "dshx-testkit",
  "dshx-tools",
  "futures",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
@@ -463,6 +465,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 
@@ -567,11 +570,13 @@ version = "0.3.0-alpha.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "base64 0.22.1",
  "bytes",
  "dshx-core",
  "dshx-tools",
  "futures",
+ "getrandom 0.3.4",
  "libc",
  "reqwest",
  "serde",
@@ -583,6 +588,20 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "dshx-plugins"
+version = "0.3.0-alpha.0"
+dependencies = [
+ "anyhow",
+ "dshx-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

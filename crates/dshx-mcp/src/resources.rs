@@ -1,7 +1,7 @@
 //! The shared resource tools (dsh `mcp-resources`): `list_mcp_resources`,
 //! `list_mcp_resource_templates`, `read_mcp_resource`, plus the prompt
 //! section naming the servers they accept.
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 use dshx_core::{Tool, ToolContext, ToolError, ToolOutput, ToolSchema};
@@ -31,10 +31,10 @@ impl Kind {
 /// One of the three resource tools over every configured server.
 pub struct ResourceTool {
     kind: Kind,
-    servers: Arc<Vec<Arc<Server>>>,
+    servers: Arc<RwLock<Vec<Arc<Server>>>>,
 }
 
-pub(crate) fn resource_tools(servers: Arc<Vec<Arc<Server>>>) -> Vec<Arc<dyn Tool>> {
+pub(crate) fn resource_tools(servers: Arc<RwLock<Vec<Arc<Server>>>>) -> Vec<Arc<dyn Tool>> {
     [Kind::List, Kind::Templates, Kind::Read]
         .into_iter()
         .map(|kind| {
@@ -102,15 +102,18 @@ impl Tool for ResourceTool {
         let name = args["server"].as_str().unwrap_or_default();
         let server = self
             .servers
+            .read()
+            .unwrap()
             .iter()
             .find(|s| s.name() == name)
+            .cloned()
             .ok_or_else(|| {
                 ToolError::Failed(format!(
                     "MCP resource server \"{name}\" is unavailable in this agent's scope"
                 ))
             })?;
         let value = self
-            .request(server, &args, &ctx)
+            .request(&server, &args, &ctx)
             .await
             .map_err(|e| match e {
                 McpError::Cancelled => ToolError::Cancelled,

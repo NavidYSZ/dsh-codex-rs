@@ -55,6 +55,8 @@ crates/dshx-agent          agent loop, scheduler, retries, prompt, context,
                            AGENTS.md, compaction, subagents                    (worker: agent)
 crates/dshx-browser        background Chrome over CDP pipe + `browser` tool    (worker: browser)
 crates/dshx-macos          Swift-helper client + `computer`, `app` tools, mini (worker: macos)
+crates/dshx-mcp            MCP client, OAuth connector logins, connector catalog
+crates/dshx-plugins        plugin manifests, plugin MCP servers, marketplaces
 crates/dshx-server         HTTP/WebSocket server for the UI                    (wave 2)
 crates/dsh-codex           the binary: CLI (headless, web, sdk)                (wave 2)
 ui/                        Codex-style web UI, no build step                   (worker: ui)
@@ -228,7 +230,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], settings:{model, effort, sandbox, approval}, apiKeyConfigured, tools:{browser, app, computer}}` |
+| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], settings:{model, effort, sandbox, approval}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}` |
 | PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?}` → `/api/info` shape |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
@@ -246,6 +248,53 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | POST | `/api/attachments` | raw image body, `Content-Type` → `ImageAttachmentRef` |
 | GET | `/api/attachments/:id` | → image bytes |
 | WS | `/api/stream?session=:id&after=:seq` | server → client messages below |
+
+### Plugins page (`Backend::extensions`, routes in `dshx-server/src/extensions.rs`)
+
+Without extensions every route below answers 404. Errors are `{error}` with 400, unknown ids 404.
+
+| Method | Path | Body → Response |
+|---|---|---|
+| GET | `/api/plugins` | → `[Plugin]` (every folder under `$DSHX_HOME/plugins/<marketplace>/<name>/`) |
+| POST | `/api/plugins` | `{marketplace, name, enable?=true}` → `Plugin` (install = copy/clone, then `[plugins."id"] enabled`) |
+| GET | `/api/plugins/:id` | → `Plugin` (`id` = `<name>@<marketplace>`) |
+| DELETE | `/api/plugins/:id` | → 204 (folder and config entry removed) |
+| POST | `/api/plugins/:id/enable` \| `/disable` | → `Plugin` (skills and MCP servers applied at once) |
+| POST | `/api/plugins/:id/update` | → `Plugin` (pulls a git marketplace, reinstalls) |
+| GET | `/api/plugins/:id/assets/*path` | → image bytes (png, jpeg, gif, webp, svg, ico inside the plugin only) |
+| GET | `/api/marketplaces` | → `[Marketplace]` |
+| POST | `/api/marketplaces` | `{source, ref?}` (git URL, `owner/repo`, local path; `#ref` suffix allowed) → `Marketplace` |
+| POST | `/api/marketplaces/:name/update` | → `Marketplace` |
+| DELETE | `/api/marketplaces/:name` | → 204 (installed plugins stay) |
+| GET | `/api/skills?cwd=` | → `[{name, description, whenToUse, source, plugin, path, active, modelInvocable, userInvocable}]` |
+| GET | `/api/mcp/servers` | → `[McpServer]` (config servers, then plugin servers) |
+| POST | `/api/mcp/servers` | `{name?, connector?, config?}` (`config` = a `[mcp_servers.x]` table as JSON; `connector` fills the URL from the catalog, its id is the default name) → `McpServer` |
+| DELETE | `/api/mcp/servers/:name` | → 204 (config servers only; its tokens are revoked and deleted) |
+| POST | `/api/mcp/servers/:name/enable` \| `/disable` \| `/restart` | → `McpServer` |
+| POST | `/api/mcp/servers/:name/login` | → `{server, authorizationUrl, redirectUri}`; open the URL in a browser |
+| POST | `/api/mcp/servers/:name/logout` | → `McpServer` |
+| PUT | `/api/mcp/servers/:name/token` | `{token}` (personal access token; `null` removes) → `McpServer` |
+| GET | `/api/connectors` | → `[{id, name, description, url, auth:"oauth"\|"token"\|"none", category, website, brandColor, tokenHelp?, added, servers, status}]` |
+| GET | `/api/oauth/callback` | **no token**, loopback Host only; `?code&state&iss` or `?error` → HTML page; bound to the pending `state` |
+
+- `Plugin`: `{id, name, marketplace, root, format:"agent-plugins"|"codex"|"claude"|"layout", version, description,
+  author, homepage, repository, license, keywords, interface:{displayName, shortDescription, longDescription?,
+  developerName?, category?, brandColor?, logo?, composerIcon?, screenshots?, websiteURL?, …}, logoUrl?,
+  composerIconUrl?, skillDirs, skills:[{name, description, path}], mcpServers:[{name, originalName, error?,
+  warnings?, status}], warnings, error?, enabled, installed:{marketplace, name, version, source, commit,
+  installedAt, updatedAt}|null}`.
+- `Marketplace`: `{name, source, kind:"git"|"github"|"local", url?, ref?, path, commit?, addedAt, updatedAt,
+  displayName, description, owner, format:"codex"|"claude", plugins:[{id, name, source:{kind:"path"|"git"|"unsupported", …},
+  description, version, category, author, homepage, keywords, interface, policy?, installed, enabled}], error?}`.
+- `McpServer`: `{name, origin:"config"|"plugin", plugin, originalName, connector, enabled, transport, url, command,
+  args, headers:[names], auth:{oauth, login:{kind:"oauth"|"token", issuer?, scope?, expiresAt?, refreshable}|null},
+  status:"connecting"|"connected"|"needs-login"|"error"|"disabled"|"stopped", error, retrying, challenge?:{status,
+  resourceMetadata?, scope?, error?, errorDescription?}, warnings, tools:[{name, rawName, description}]}`.
+- Login flow: `POST …/login` derives the redirect URI from the request's Host port
+  (`http://127.0.0.1:<port>/api/oauth/callback`, so it also works through an SSH tunnel to the same port),
+  the UI opens `authorizationUrl`, the authorization server sends the browser to the callback, the server
+  restarts and `GET /api/mcp/servers` shows `connected`. A `needs-login` server with `challenge.error =
+  "insufficient_scope"` needs the same login again (step-up, wider `scope`).
 
 WebSocket messages (JSON):
 - `{"kind":"event","sessionId","event":SessionEvent}` — every appended event, in order, after `after`.

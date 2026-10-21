@@ -44,7 +44,9 @@ parallel agents, many short jobs, and on small machines.
   model request by default. dsh-codex sends only what the request needs.
 - **Own web UI** in the Codex style of this project (`dsh-codex web`) instead
   of the DSH app. The original DSH plugin ([PLUGIN.md](PLUGIN.md)) still works.
-- **No JS plugins.** Extensions come through MCP servers and skills.
+- **No JS plugins.** Extensions are skills, MCP servers and plugins in the
+  Codex/Claude formats (skills and MCP servers; hooks, commands and agents
+  are not loaded).
 - Not ported: web search, agent teams, workflows/`run_code`, schedules, goals, voice,
   office documents, the Electron app.
 
@@ -183,8 +185,49 @@ url = "https://example.com/mcp"
 ```
 
 Skills are read from `<project>/.dsh/skills`, `<project>/.agents/skills`,
-`~/.dsh-codex/skills`, `~/.dsh/skills` and `~/.agents/skills`
-(`<name>/SKILL.md` or `<name>.md` with YAML front matter).
+the skill folders of enabled plugins, `~/.dsh-codex/skills`, `~/.dsh/skills`
+and `~/.agents/skills` (`<name>/SKILL.md` or `<name>.md` with YAML front
+matter).
+
+### Plugins, marketplaces and connectors
+
+Plugins live in `~/.dsh-codex/plugins/<marketplace>/<name>/`. The manifest is
+found like Codex does: `plugin.json` with the Agent Plugins 1.0 `$schema`,
+`.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, or none (Claude
+standard layout). A plugin brings skill folders (Codex `skills` replaces
+`skills/`, Claude `skills` adds to it) and MCP servers (`.mcp.json`,
+`mcp.json` or inline `mcpServers`, named `<plugin>_<server>`;
+`${CLAUDE_PLUGIN_ROOT}`/`${PLUGIN_ROOT}` are expanded). Only enabled plugins
+count:
+
+```toml
+[plugins."linear@openai-curated"]
+enabled = true
+```
+
+Marketplaces (`.agents/plugins/marketplace.json` or
+`.claude-plugin/marketplace.json`) are added by git URL, `owner/repo` or
+local path; git ones are cloned to `~/.dsh-codex/marketplaces/`. The web UI's
+Plugins page installs, updates, enables and removes plugins, manages MCP
+servers and offers a catalog of remote MCP servers (Linear, Notion, Sentry,
+Atlassian, Cloudflare, Canva, Hugging Face, Exa, Context7, Stripe, Supabase,
+Neon, Netlify, Zapier, GitHub). Every change applies at once: unchanged MCP
+servers stay connected, open chats get the new tools on their next prompt.
+
+Streamable HTTP servers log in with OAuth as in the MCP authorization
+specification (discovery, dynamic client registration, PKCE, refresh). The
+callback is `http://127.0.0.1:<ui-port>/api/oauth/callback`, which also works
+through an SSH tunnel that forwards the UI port. Tokens are stored per
+authorization server in `~/.dsh-codex/oauth/` (mode 0600). For servers
+without dynamic registration (GitHub) enter a personal access token or set
+your own OAuth app:
+
+```toml
+[mcp_servers.github]
+url = "https://api.githubcopilot.com/mcp/"
+oauth = { client_id = "Ov23li…", client_secret = "…", scopes = ["repo"] }
+# or: bearer_token_env_var = "GITHUB_PAT"
+```
 
 Sessions live in `~/.dsh-codex/sessions`, attachments in
 `~/.dsh-codex/attachments`, the API key in `~/.dsh-codex/credentials.toml`
@@ -200,7 +243,8 @@ Sessions live in `~/.dsh-codex/sessions`, attachments in
 | `crates/dshx-tools` | bash, files, search, jobs, web fetch, skills, sandbox |
 | `crates/dshx-agent` | Agent loop, prompt, AGENTS.md, compaction |
 | `crates/dshx-subagent` | In-process subagents (`subagent`, `subagent_fork`, `send_message`, …) |
-| `crates/dshx-mcp` | MCP client (stdio and Streamable HTTP) |
+| `crates/dshx-mcp` | MCP client (stdio and Streamable HTTP), OAuth logins, connector catalog |
+| `crates/dshx-plugins` | Plugin manifests, plugin MCP servers, marketplaces |
 | `crates/dshx-browser` | Background Chrome over a DevTools pipe (`browser` tool) |
 | `crates/dshx-macos` | Swift-helper client, `computer` and `app` tools, mini window |
 | `crates/dshx-server` | Local HTTP/WebSocket server for the UI |
