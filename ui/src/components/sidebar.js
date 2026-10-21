@@ -8,11 +8,11 @@ import { useStore } from '../store.js';
 import {
   store, newChat, openSettings, deleteSession, toggleSidebar, setSidebarMode, setActivityFilter, toggleFolded,
   openPalette, setPinned, setArchived, setUnread, startRename, stopRename, renameSession, markAllRead,
-  switchInstance, toast,
+  switchInstance, toast, openPlugins, openAutomations,
 } from '../state.js';
 import {
   IconCompose, IconGear, IconSidebar, IconTrash, IconFolder, IconSearch, IconBell, IconPin, IconArchive, IconMore,
-  IconPencil, IconUnread, IconCopy, IconPlus, IconChevronDown, IconFolderPlus, IconChat, IconChevronLeft,
+  IconPencil, IconUnread, IconCopy, IconPlus, IconChevronDown, IconFolderPlus, IconChat, IconChevronLeft, IconJob, IconPlug,
 } from '../icons.js';
 import { Menu, MenuItem, ActionItem } from './common.js';
 import { WorkspaceMenu, workspaceName } from './composer.js';
@@ -77,6 +77,9 @@ export function ChatMenu({ s, open, onClose, anchor, at, side = 'bottom' }) {
 
 function ChatRow({ s, activeId, now, project, icon }) {
   const renaming = useStore(store, (st) => st.renaming === s.id);
+  // A chat with active reminders wears a clock, like dsh's sidebar.
+  const scheduled = useStore(store, (st) => st.schedules.some((r) => r.sessionId === s.id && r.status !== 'inactive'));
+  if (scheduled && !mark(s)) icon = html`<${IconJob} size=${13} />`;
   const [menu, setMenu] = useState(null);
   const anchor = useRef(null);
   const active = s.id === activeId;
@@ -243,6 +246,8 @@ export function Sidebar() {
   const unread = sessions.some((s) => s.unread && !s.archived);
   const activity = mode === 'activity';
   const shownId = view === 'chat' ? activeId : null;
+  const info = useStore(store, (s) => s.info);
+  const active = useStore(store, (s) => s.schedules.filter((r) => r.status !== 'inactive').length);
   return html`<aside class="sidebar" aria-label="Sidebar">
     <div class="sb-head">
       <${InstanceSwitcher} />
@@ -256,12 +261,18 @@ export function Sidebar() {
       </button>
     </div>
     <nav class="sb-nav">
-      <button type="button" class="nav-item" onClick=${() => newChat()}>
+      <button type="button" class="nav-item" data-dshx-command="new-chat" onClick=${() => newChat()}>
         <${IconCompose} size=${16} /><span>${t.newChat}</span><kbd class="kbd">⇧⌘O</kbd>
       </button>
       <button type="button" class="nav-item" onClick=${openPalette}>
         <${IconSearch} size=${16} /><span>${t.search}</span><kbd class="kbd">⌘K</kbd>
       </button>
+      ${info?.extensions ? html`<button type="button" class=${cx('nav-item', view === 'plugins' && 'is-active')} onClick=${openPlugins}>
+        <${IconPlug} size=${16} /><span>${t.plugins}</span>
+      </button>` : null}
+      ${info?.automation?.schedules ? html`<button type="button" class=${cx('nav-item', view === 'automations' && 'is-active')} onClick=${openAutomations}>
+        <${IconJob} size=${16} /><span>${t.automations}</span>${active ? html`<span class="nav-count">${active}</span>` : null}
+      </button>` : null}
     </nav>
     ${activity ? html`<div class="sb-mode-head">
       <button type="button" class="sb-back" onClick=${() => setSidebarMode('projects')}><${IconChevronLeft} size=${14} />${t.activity}</button>
@@ -272,7 +283,7 @@ export function Sidebar() {
     : html`<${ProjectsView} sessions=${sessions} workspaces=${workspaces} activeId=${shownId} now=${now} />`}
     </div>
     <div class="sb-foot">
-      <button type="button" class=${cx('nav-item', view === 'settings' && 'is-active')} onClick=${openSettings}>
+      <button type="button" class=${cx('nav-item', view === 'settings' && 'is-active')} data-dshx-command="settings" onClick=${openSettings}>
         <${IconGear} size=${16} /><span>${t.settings}</span>
       </button>
     </div>

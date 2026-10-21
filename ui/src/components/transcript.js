@@ -48,6 +48,11 @@ function Notice({ item }) {
       </div>
     </div>`;
   }
+  if (item.code === 'goal' || item.code === 'schedule' || item.code === 'team-message') {
+    const [label, detail] = item.code === 'goal' ? [t.goal, t.goalRounds(item.round ?? '?', item.max ?? '∞')]
+      : item.code === 'schedule' ? [t.automations, item.prompt] : [t.teamMessageFrom(item.sender), item.text];
+    return html`<div class="source-line"><span class="source-label">${label}</span>${detail ? html`<span class="source-detail">${detail}</span>` : null}</div>`;
+  }
   const text = item.code === 'maxTokens' ? t.maxTokens : item.code === 'interrupted' ? t.interrupted : t.stopped;
   return html`<div class=${cx('notice-line', `tone-${item.tone}`)}>${text}</div>`;
 }

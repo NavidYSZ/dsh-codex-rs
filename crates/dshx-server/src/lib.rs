@@ -107,6 +107,10 @@ pub struct PromptRequest {
     /// a turn of its own (dsh `steer`).
     #[serde(default)]
     pub steer: bool,
+    /// The browser's IANA time zone; the time context tells the model (dsh
+    /// `clientTimeZone`).
+    #[serde(default, rename = "timeZone")]
+    pub time_zone: Option<String>,
 }
 
 /// Everything the UI can ask for. Errors map to HTTP 400 unless they are [`NotFound`].

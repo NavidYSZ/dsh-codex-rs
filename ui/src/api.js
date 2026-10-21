@@ -93,6 +93,34 @@ class HttpApi {
   /** `{base, root}`: `base` serves the chat's folder read-only for previews. */
   preview(id) { return this.req('POST', `/api/sessions/${enc(id)}/preview`); }
   files(id, dir) { return this.req('GET', `/api/sessions/${enc(id)}/files?dir=${enc(dir ?? '')}`); }
+
+  // Plugins page: plugins, marketplaces, skills, MCP servers, connectors.
+  plugins() { return this.req('GET', '/api/plugins'); }
+  installPlugin(marketplace, name) { return this.req('POST', '/api/plugins', { marketplace, name, enable: true }); }
+  pluginAction(id, action) { return this.req('POST', `/api/plugins/${enc(id)}/${action}`); }
+  removePlugin(id) { return this.req('DELETE', `/api/plugins/${enc(id)}`); }
+  /** Plugin logos load as <img>, which cannot send the bearer header. */
+  assetUrl(url) { return url && this.token ? `${url}${url.includes('?') ? '&' : '?'}token=${enc(this.token)}` : url; }
+  marketplaces() { return this.req('GET', '/api/marketplaces'); }
+  addMarketplace(source, ref) { return this.req('POST', '/api/marketplaces', ref ? { source, ref } : { source }); }
+  updateMarketplace(name) { return this.req('POST', `/api/marketplaces/${enc(name)}/update`); }
+  removeMarketplace(name) { return this.req('DELETE', `/api/marketplaces/${enc(name)}`); }
+  skills(cwd) { return this.req('GET', `/api/skills${cwd ? `?cwd=${enc(cwd)}` : ''}`); }
+  mcpServers() { return this.req('GET', '/api/mcp/servers'); }
+  addMcpServer(body) { return this.req('POST', '/api/mcp/servers', body); }
+  mcpAction(name, action) { return this.req('POST', `/api/mcp/servers/${enc(name)}/${action}`); }
+  removeMcpServer(name) { return this.req('DELETE', `/api/mcp/servers/${enc(name)}`); }
+  mcpToken(name, token) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/token`, { token }); }
+  connectors() { return this.req('GET', '/api/connectors'); }
+
+  // Goals, schedules and Agent Teams.
+  goal(id) { return this.req('GET', `/api/sessions/${enc(id)}/goal`); }
+  goalCommand(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/goal`, body); }
+  schedules() { return this.req('GET', '/api/schedules'); }
+  updateSchedule(id, body) { return this.req('PUT', `/api/schedules/${enc(id)}`, body); }
+  deleteSchedule(id) { return this.req('DELETE', `/api/schedules/${enc(id)}`); }
+  scheduleHistory(id, limit = 20) { return this.req('GET', `/api/schedules/${enc(id)}/history?limit=${limit}`); }
+  team(id) { return this.req('GET', `/api/sessions/${enc(id)}/team`); }
   deleteSession(id) { return this.req('DELETE', `/api/sessions/${enc(id)}`); }
   decide(callId, decision) { return this.req('POST', `/api/approvals/${enc(callId)}`, { decision }); }
   upload(file) { return this.req('POST', '/api/attachments', undefined, file); }
@@ -426,6 +454,17 @@ class FixtureApi {
     await this.ready;
     return { base: 'fixtures/files/', root: this.sessionData?.header.cwd ?? '' };
   }
+
+  // Fixtures have no plugins, automations or teams.
+  async plugins() { return []; }
+  async marketplaces() { return []; }
+  async skills() { return []; }
+  async mcpServers() { return []; }
+  async connectors() { return []; }
+  async schedules() { return []; }
+  async goal() { return { goal: null }; }
+  async team() { throw new ApiError(404, 'team'); }
+  assetUrl(url) { return url; }
 
   async files(_id, dir) {
     await this.ready;

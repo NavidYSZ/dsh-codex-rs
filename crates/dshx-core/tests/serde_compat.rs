@@ -34,3 +34,24 @@ fn unknown_blocks_survive() {
     let b: ContentBlock = serde_json::from_value(v.clone()).unwrap();
     assert_eq!(serde_json::to_value(&b).unwrap(), v);
 }
+
+#[test]
+fn web_prompts_with_a_time_zone_count_as_user_messages() {
+    let web: MessageSource = serde_json::from_value(
+        serde_json::json!({"kind": "user", "rpcId": "r1", "clientTimeZone": "Europe/Berlin"}),
+    )
+    .unwrap();
+    assert!(web.is_user());
+    assert!(MessageSource::User.is_user());
+    let other = MessageSource::Other(serde_json::json!({"kind": "schedule"}));
+    assert!(!other.is_user());
+    // Built in memory, the extra fields survive serialization.
+    let built = MessageSource::Other(
+        serde_json::json!({"kind": "user", "rpcId": "r2", "clientTimeZone": "Asia/Tokyo"}),
+    );
+    assert!(built.is_user());
+    assert_eq!(
+        serde_json::to_value(&built).unwrap()["clientTimeZone"],
+        "Asia/Tokyo"
+    );
+}

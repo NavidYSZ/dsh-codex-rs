@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use dshx_agent::{Agent, AgentObserver, AgentStatus, StreamDelta};
 use dshx_core::{
-    ApprovalDecision, Approver, AttachmentStore, ContentBlock, ImageAttachmentRef, NewImage,
-    SandboxMode, SessionEvent, SessionLog, now_ms,
+    ApprovalDecision, Approver, AttachmentStore, ContentBlock, ImageAttachmentRef, Message,
+    MessageSource, NewImage, Role, SandboxMode, SessionEvent, SessionLog, now_ms,
 };
 use dshx_server::{Backend, NotFound, PromptRequest, StreamMessage};
 use serde_json::{Value, json};
@@ -493,11 +493,31 @@ impl Backend for WebBackend {
         let tx = self.tx.clone();
         let session_id = id.to_owned();
         let steer = request.steer;
+        // dsh's web prompt: the browser's time zone rides on the message source.
+        let source = match request
+            .time_zone
+            .as_deref()
+            .filter(|z| !z.is_empty() && z.len() <= 64)
+        {
+            Some(zone) => MessageSource::Other(
+                json!({ "kind": "user", "rpcId": dshx_core::new_id(), "clientTimeZone": zone }),
+            ),
+            None => MessageSource::User,
+        };
+        let message = Message {
+            id: dshx_core::new_id(),
+            role: Role::User,
+            content,
+            source,
+            tool_call_id: None,
+            is_error: None,
+            extra: Default::default(),
+        };
         tokio::spawn(async move {
             let result = if steer {
-                agent.steer(content).await.map(|_| ())
+                agent.steer_message(message).await.map(|_| ())
             } else {
-                agent.run_turn(content).await.map(|_| ())
+                agent.run_message(message).await.map(|_| ())
             };
             if let Err(e) = result {
                 let _ = tx.send(StreamMessage::Status {

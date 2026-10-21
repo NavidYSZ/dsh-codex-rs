@@ -49,6 +49,7 @@ export const IconSun = icon(html`<circle cx="8" cy="8" r="2.75" ...${S}/><path d
 export const IconRefresh = icon(html`<path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71" ...${S}/><path d="M13.4 2.6v3h-3" ...${S}/>`);
 export const IconExternal = icon(html`<path d="M9.25 2.75h4v4M13.1 2.9 7.75 8.25" ...${S}/><path d="M11.75 9.5v2.75a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1H6.5" ...${S}/>`);
 export const IconDiff = icon(html`<path d="M4.5 2.25v6.5M1.25 5.5h6.5M8.25 12.5h6.5" ...${S}/><path d="M11.5 2.5 9.75 13.5" ...${S}/>`);
+export const IconPlug = icon(html`<path d="M5.75 1.75v3M10.25 1.75v3M3.75 4.75h8.5v2.5a4.25 4.25 0 0 1-8.5 0v-2.5ZM8 11.5v2.75" ...${S}/>`);
 export const IconKey = icon(html`<circle cx="5.5" cy="10.5" r="2.75" ...${S}/><path d="m7.5 8.5 5.75-5.75M11 5l1.75 1.75M9.5 6.5l1.25 1.25" ...${S}/>`);
 
 /**

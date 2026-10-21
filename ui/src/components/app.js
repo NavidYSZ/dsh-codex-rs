@@ -14,6 +14,9 @@ import { Sidebar, ChatMenu } from './sidebar.js';
 import { Palette } from './palette.js';
 import { Panel } from './panel.js';
 import { LiveFloat, useLiveTab } from './live.js';
+import { useTeamTab } from './team.js';
+import { PluginsPage } from './plugins.js';
+import { AutomationsPage } from './automations.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
@@ -89,6 +92,8 @@ function Chat() {
   const cwd = header?.cwd ?? listed?.cwd ?? '';
   const sub = hero || listed?.scratch ? '' : workspaceName(cwd);
   const liveTab = useLiveTab();
+  const teamTab = useTeamTab();
+  const extraTabs = liveTab || teamTab ? { ...(liveTab ? { live: liveTab } : {}), ...(teamTab ? { team: teamTab } : {}) } : null;
   return html`<div class="workspace">
     <div class=${cx('chat', hero && 'is-hero')}>
       <${TopBar} title=${title} sub=${sub} row=${listed} />
@@ -96,7 +101,7 @@ function Chat() {
       <${ComposerSeat} hero=${hero} tx=${hero ? null : tx} />
       ${hero ? null : html`<${LiveFloat} />`}
     </div>
-    ${hero ? null : html`<${Panel} tx=${tx} extraTabs=${liveTab ? { live: liveTab } : null} />`}
+    ${hero ? null : html`<${Panel} tx=${tx} extraTabs=${extraTabs} />`}
   </div>`;
 }
 
@@ -115,7 +120,8 @@ export function App() {
   return html`<div class=${cx('app', open && 'sidebar-open', collapsed && 'sidebar-collapsed', desktop && 'is-desktop')}>
     <${Sidebar} />
     <div class="scrim" onClick=${toggleSidebar} />
-    <main class="main">${view === 'settings' ? html`<${Settings} />` : html`<${Chat} />`}</main>
+    <main class="main">${view === 'settings' ? html`<${Settings} />` : view === 'plugins' ? html`<${PluginsPage} />`
+    : view === 'automations' ? html`<${AutomationsPage} />` : html`<${Chat} />`}</main>
     <${Palette} />
   </div>`;
 }

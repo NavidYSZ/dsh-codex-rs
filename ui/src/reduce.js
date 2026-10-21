@@ -33,6 +33,26 @@ function textOf(content) {
 
 const inputTotal = (u) => (u?.inputTokens ?? 0) + (u?.cacheReadTokens ?? 0) + (u?.cacheWriteTokens ?? 0);
 
+/** The line for a turn that a goal round, a reminder or a teammate started. */
+function sourceNotice(kind, d, seq) {
+  const text = textOf(d.content);
+  const base = { kind: 'notice', key: `n:${seq}`, code: kind, tone: 'muted' };
+  if (kind === 'goal') {
+    const max = /Round: \d+\/(\d+)/.exec(text)?.[1];
+    return { ...base, round: d.source.round, max };
+  }
+  if (kind === 'schedule') {
+    // dsh frames reminders as JSON strings: one prompt or a batch.
+    let prompt = '';
+    try { prompt = JSON.parse(/reminder_prompt_json: (".*")/.exec(text)?.[1] ?? '""'); } catch { /* keep empty */ }
+    if (!prompt) {
+      try { prompt = JSON.parse(/reminders_json: (\[.*\])/s.exec(text)?.[1] ?? '[]').map((r) => r.reminder_prompt).join(' · '); } catch { /* keep empty */ }
+    }
+    return { ...base, prompt };
+  }
+  return { ...base, sender: d.source.senderName ?? '', text: text.replace(/^Team message \S+ from [^:]*:\s*/, '') };
+}
+
 /**
  * Folds the log into turns. Each turn holds ordered items:
  * user | reasoning | text | tool | notice | divider.
@@ -82,8 +102,15 @@ export function buildTranscript(events) {
         break;
 
       case 'user/message': {
+        // Goal rounds, reminders and Team mail open turns of their own: a quiet line.
+        const kind = d.source?.kind;
+        if (kind === 'goal' || kind === 'schedule' || kind === 'team-message') {
+          const t = current(null, e.time);
+          t.items.push(sourceNotice(kind, d, e.seq));
+          break;
+        }
         // Runtime context, AGENTS.md, skills etc. are model-only user messages.
-        if (d.source?.kind !== 'user') break;
+        if (kind !== 'user') break;
         const t = current(null, e.time);
         t.items.push({
           kind: 'user', key: `u:${e.seq}`, text: textOf(d.content), time: e.time,

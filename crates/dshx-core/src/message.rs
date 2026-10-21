@@ -89,6 +89,18 @@ pub enum MessageSource {
     Other(Value),
 }
 
+impl MessageSource {
+    /// A message the human wrote: plain `user`, or dsh's web form with extra
+    /// fields (`{kind: "user", rpcId, clientTimeZone}`).
+    pub fn is_user(&self) -> bool {
+        match self {
+            MessageSource::User => true,
+            MessageSource::Other(v) => v["kind"] == "user",
+            _ => false,
+        }
+    }
+}
+
 /// A durable conversation message. Extra dsh fields (e.g. `form`, `sections`
 /// on context messages) are preserved in `extra`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -54,6 +54,10 @@ export const store = createStore({
   panelWidth: Number(readLocal('dshx-panel-width', '0')) || 0,
   // Message sent while a turn runs: 'steer' joins it, 'queue' waits for it.
   followup: readLocal('dshx-followup', 'steer'),
+  // Automations: every scheduled task (sidebar clock marks, Automations page).
+  schedules: [],
+  // Text the composer takes over once (e.g. "New automation").
+  draft: null,
   notify: readLocal('dshx-notify', '') === 'on',
 });
 
@@ -64,6 +68,15 @@ function readDesktop() {
   return { instances: [...(d.instances ?? [])], current: d.current ?? null, version: d.version ?? '' };
 }
 window.addEventListener('dshx-desktop-change', () => store.set({ desktop: readDesktop() }));
+// Menu commands and notification clicks of the Mac app.
+window.addEventListener('dshx-desktop-command', (e) => {
+  const command = e.detail?.command;
+  if (command === 'new-chat') { e.preventDefault(); newChat(); }
+  else if (command === 'settings') { e.preventDefault(); openSettings(); }
+});
+window.addEventListener('dshx-desktop-notification', (e) => {
+  if (e.detail?.tag?.startsWith('session-')) openSession(e.detail.tag);
+});
 
 // ---- theme ---------------------------------------------------------------
 
@@ -91,6 +104,7 @@ export async function boot() {
     const picked = readLocal(PROJECT_KEY, null);
     const cwd = picked === '' || recent.some((w) => w.path === picked) ? picked : recent[0]?.path ?? '';
     store.set({ boot: 'ready', info, workspaces: workspaces ?? [], sessions: sessions ?? [], cwd });
+    loadSchedules();
   } catch (e) {
     store.set({ boot: 'error', bootError: e });
     return;
@@ -111,6 +125,8 @@ function route() {
   const h = location.hash;
   if (h.startsWith('#/s/')) openSession(decodeURIComponent(h.slice(4)));
   else if (h === '#/settings') store.set({ view: 'settings', sidebarOpen: false });
+  else if (h === '#/plugins') store.set({ view: 'plugins', sidebarOpen: false });
+  else if (h === '#/automations') store.set({ view: 'automations', sidebarOpen: false });
   else showNewChat();
 }
 
@@ -126,7 +142,10 @@ function setHash(hash, replace) {
 let closeStream = null;
 let openToken = 0;
 
-const EMPTY_SESSION = { header: null, events: [], status: 'idle', statusError: null, deltas: null, approval: null, live: null, liveHidden: null };
+const EMPTY_SESSION = {
+  header: null, events: [], status: 'idle', statusError: null, deltas: null, approval: null, live: null, liveHidden: null,
+  goal: null, team: null, goalForm: false,
+};
 
 /** Another chat: file tabs belong to the old one. */
 const freshPanel = (p) => ({ ...p, files: [], tab: p.tab.startsWith('file:') ? 'changes' : p.tab });
@@ -150,6 +169,18 @@ export function openSettings() {
   store.set({ view: 'settings', sidebarOpen: false });
 }
 
+export function openPlugins() {
+  setHash('#/plugins');
+  store.set({ view: 'plugins', sidebarOpen: false });
+}
+
+export function openAutomations() {
+  setHash('#/automations');
+  store.set({ view: 'automations', sidebarOpen: false });
+  loadSchedules();
+}
+
+/** Back from Settings, Plugins or Automations to the chat that was open. */
 export function closeSettings() {
   const id = store.get().activeId;
   setHash(id ? `#/s/${encodeURIComponent(id)}` : '');
@@ -176,6 +207,8 @@ export async function openSession(id, { fresh = false, replace = false } = {}) {
     if (my !== openToken) return;
     store.set({ header: data.header, events: data.events ?? [], status: data.status ?? 'idle' });
     markSeen(id);
+    loadGoal(id);
+    loadTeam(id);
     const events = data.events ?? [];
     const after = events.length ? events[events.length - 1].seq : -1;
     closeStream = api.stream(id, after, {
@@ -217,6 +250,7 @@ function onMessage(id, m) {
     }
     case 'approval': store.set({ approval: m }); break;
     case 'live': onLive(m); break;
+    case 'goal': store.set({ goal: m.goal ?? null }); break;
     default: break;
   }
 }
@@ -253,6 +287,7 @@ function appendEvent(ev) {
     if (ev.type === 'turn/end') patch.deltas = null;
     if (ev.type === 'user/message' && d.source?.kind === 'user') patch.pending = null;
     if (ev.type === 'approval/decided' && s.approval) patch.approval = null;
+    if (ev.type.startsWith('team/')) loadTeamSoon(s.activeId);
     if (ev.type === 'session/title' && d.title) {
       patch.sessions = s.sessions.map((x) => (x.id === s.activeId ? { ...x, title: d.title } : x));
     }
@@ -270,12 +305,69 @@ function onLive(m) {
   if (fresh && p.open && (p.tab === 'changes' || p.tab === 'files')) setPanelTab('live');
 }
 
+/** The browser's zone, which dsh's time context passes on to the model. */
+function timeZone() {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone ? { timeZone: zone } : {};
+  } catch { return {}; }
+}
+
+// ---- automations ---------------------------------------------------------
+
+const automation = () => store.get().info?.automation ?? {};
+
+export async function loadSchedules() {
+  if (!automation().schedules) return;
+  try { store.set({ schedules: (await api.schedules()) ?? [] }); } catch { /* keep the old list */ }
+}
+
+async function loadGoal(id) {
+  if (!automation().goals) return;
+  try {
+    const { goal } = await api.goal(id);
+    if (store.get().activeId === id) store.set({ goal: goal ?? null });
+  } catch { /* no goal support */ }
+}
+
+/** `{action: create|edit|pause|resume|clear, objective?, maxGoalRounds?}` */
+export async function goalCommand(body) {
+  const id = store.get().activeId;
+  if (!id) return false;
+  try {
+    const { goal } = await api.goalCommand(id, body);
+    if (store.get().activeId === id) store.set({ goal: goal ?? null });
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+async function loadTeam(id) {
+  if (!automation().team) return;
+  try {
+    const team = await api.team(id);
+    // The Lead is always listed; a Team exists once it has a teammate.
+    if (store.get().activeId === id) store.set({ team: team?.members?.length > 1 ? team : null });
+  } catch { if (store.get().activeId === id) store.set({ team: null }); }
+}
+
+let teamTimer = 0;
+function loadTeamSoon(id) {
+  clearTimeout(teamTimer);
+  teamTimer = setTimeout(() => loadTeam(id), 300);
+}
+
+export const setDraft = (draft) => store.set({ draft });
+
 export const hideLive = () => store.set((s) => ({ liveHidden: s.live?.time ?? Date.now() }));
 
 /** Status of every chat (running dots, unread after a background run finishes). */
 function watchAll() {
   api.stream(null, -1, {
     message: (m) => {
+      if (m.kind === 'schedule-changed') { loadSchedules(); return; }
       if (m.kind !== 'status' || !m.sessionId) return;
       const before = store.get().sessions.find((x) => x.id === m.sessionId);
       const known = !!before;
@@ -322,7 +414,7 @@ export function refreshSessions() {
 
 export async function send(text, images, opts) {
   const s = store.get();
-  const body = { text, ...(images.length ? { images } : {}), ...opts };
+  const body = { text, ...(images.length ? { images } : {}), ...opts, ...timeZone() };
   store.set({ pending: { text, images, time: Date.now() }, statusError: null });
   try {
     let id = s.activeId;
@@ -448,7 +540,7 @@ function notifyStatus(id, status) {
   if (id === s.activeId && s.view === 'chat' && visible() && document.hasFocus()) return;
   const body = status === 'waiting-approval' ? t.notifyWaiting : status === 'error' ? t.notifyFailed : t.notifyDone;
   const title = s.sessions.find((x) => x.id === id)?.title || t.brand;
-  if (s.desktop) { window.dshxDesktop?.notify?.(title, body); return; }
+  if (s.desktop) { window.dshxDesktop?.notify?.(title, body, { tag: id }); return; }
   if (!s.notify || !('Notification' in window) || Notification.permission !== 'granted') return;
   try {
     const n = new Notification(title, { body, tag: id });

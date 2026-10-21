@@ -943,11 +943,7 @@ impl Inner {
             }
         }
         check(cancel)?;
-        if reminder
-            && claimed
-                .iter()
-                .any(|m| matches!(m.source, MessageSource::User))
-        {
+        if reminder && claimed.iter().any(|m| m.source.is_user()) {
             self.state.lock().unwrap().repeat_chain = None;
         }
         let mut messages = claimed.clone();

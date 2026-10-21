@@ -11,7 +11,8 @@ import {
 } from '../icons.js';
 import { Shimmer, useImage } from './common.js';
 import { CodexRow } from './codex.js';
-import { openFile } from '../state.js';
+import { openFile, openAutomations } from '../state.js';
+import { describeSchedule } from './automations.js';
 
 const resultText = (r) => (r?.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
 const errorReason = (r) => r?.error?.reason || resultText(r).replace(/^Error:\s*/, '') || t.failed;
@@ -271,8 +272,38 @@ function GenericRow({ item }) {
   </${Row}>`;
 }
 
+// ---- automations, goals, teams -------------------------------------------------
+
+const jsonOf = (r) => { try { return JSON.parse(resultText(r)); } catch { return null; } };
+
+/** The dsh automation tools: one readable line instead of the raw call. */
+function AutomationRow({ item }) {
+  const [open, toggle] = useOpen(false);
+  const { args, result, name } = item;
+  const running = !result;
+  const out = jsonOf(result);
+  // Validation problems come back as `{code, message}` results, not as errors.
+  const problem = result?.isError ? errorReason(result) : out?.code && out?.message ? out.message : null;
+  const view = out?.goal ?? out;
+  let detail = '';
+  if (name.startsWith('schedule_') && view?.kind) detail = `${view.title} · ${describeSchedule(view)}`;
+  else if (name.endsWith('_goal')) detail = view?.objective ?? args.objective ?? '';
+  else detail = args.name ?? args.target ?? args.subject ?? args.task_id ?? '';
+  const Icon = name.startsWith('schedule_') ? IconJob : IconTool;
+  const text = resultText(result);
+  return html`<${Row} icon=${html`<${Icon} size=${14} />`} title=${t.toolLabels[name] ?? name}
+      summary=${problem || detail} running=${running} error=${!!problem}
+      badge=${name === 'schedule_create' && !problem && result ? html`<span class="badge badge-link" role="link" onClick=${(e) => { e.stopPropagation(); openAutomations(); }}>${t.automations}</span>` : null}
+      open=${open} onToggle=${text ? toggle : undefined}>
+    <div class="list-panel"><pre class="plain">${text}</pre></div>
+  </${Row}>`;
+}
+
+const AUTOMATION = /^(schedule_|team_task_)|^(create_goal|update_goal|get_goal|spawn_teammate|list_agents|wait_agent|interrupt_agent)$/;
+
 export function ToolItem({ item, cwd }) {
   const n = item.name;
+  if (AUTOMATION.test(n)) return html`<${AutomationRow} item=${item} />`;
   if (CODEX_TOOLS.has(n)) return html`<${CodexRow} item=${item} />`;
   if (n === 'bash') return html`<${BashRow} item=${item} />`;
   if (n === 'read') return html`<${ReadRow} item=${item} cwd=${cwd} />`;

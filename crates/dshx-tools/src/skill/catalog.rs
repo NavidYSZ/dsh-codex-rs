@@ -313,7 +313,7 @@ pub fn apply_catalog(
 pub fn invoked_skill_names(claimed: &[Message]) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for message in claimed {
-        if !matches!(message.source, MessageSource::User) {
+        if !message.source.is_user() {
             continue;
         }
         for block in &message.content {

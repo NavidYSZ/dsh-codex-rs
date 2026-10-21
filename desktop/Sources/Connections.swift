@@ -63,6 +63,14 @@ final class LocalConnection: Connection {
     private var stopWaiters: [() -> Void] = []
 
     private var readyFile: URL { Paths.run.appendingPathComponent("local-\(slug).json") }
+    /// The last port of this instance. Reusing it keeps the page's origin, and
+    /// with it the browser storage (sidebar, theme, panel), across restarts.
+    private var portKey: String { "localPort.\(slug)" }
+
+    private func preferredPort() -> Int {
+        let port = UserDefaults.standard.integer(forKey: portKey)
+        return port > 0 && !Net.isListening(port: port) ? port : 0
+    }
     private var pidFile: URL { Paths.run.appendingPathComponent("local-\(slug).pid") }
 
     var binaryPath: String? {
@@ -104,7 +112,7 @@ final class LocalConnection: Connection {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = ["web", "--no-open", "--port", "0", "--ready-file", readyFile.path]
+        process.arguments = ["web", "--no-open", "--port", String(preferredPort()), "--ready-file", readyFile.path]
         process.currentDirectoryURL = URL(fileURLWithPath: cwd, isDirectory: true)
         process.environment = env
         process.standardInput = FileHandle.nullDevice
@@ -139,6 +147,7 @@ final class LocalConnection: Connection {
         if let data = try? Data(contentsOf: readyFile),
            let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
            let raw = info["url"] as? String, let url = URL(string: raw) {
+            if let port = info["port"] as? Int { UserDefaults.standard.set(port, forKey: portKey) }
             update(.ready, url: url)
             return
         }
@@ -166,6 +175,8 @@ final class LocalConnection: Connection {
         }
         if Date().timeIntervalSince(startedAt) > 60 { failures = 0 }
         failures += 1
+        // The remembered port may be the reason (taken meanwhile): next start picks any.
+        UserDefaults.standard.removeObject(forKey: portKey)
         let detail = log?.lastLines.last.map { "\n\($0)" } ?? ""
         log?.note("dsh-desktop: dsh-codex exited with status \(status)")
         if failures <= 3 {

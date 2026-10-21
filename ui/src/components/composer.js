@@ -10,7 +10,9 @@ import {
 import {
   IconPlus, IconArrowUp, IconStop, IconChevronDown, IconFolder, IconShield, IconAlert, IconTerminal, IconPencil, IconTool,
 } from '../icons.js';
-import { Menu, MenuItem, Thumb } from './common.js';
+import { Menu, MenuItem, ActionItem, Thumb } from './common.js';
+import { GoalBar, openGoalForm } from './goal.js';
+import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 
 const ACCESS = ['read-only', 'workspace-write', 'danger-full-access'];
@@ -138,6 +140,17 @@ export function Composer({ hero, tx }) {
   const canSend = !noKey && !uploading && (text.trim() || images.length);
 
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, [activeId]);
+  // "New automation" and similar hand over a draft once.
+  const draft = useStore(store, (s) => s.draft);
+  useEffect(() => {
+    if (draft == null) return;
+    setText(draft);
+    store.set({ draft: null });
+    requestAnimationFrame(() => { const el = area.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+  }, [draft]);
+  const [plus, setPlus] = useState(false);
+  const plusAnchor = useRef(null);
+  const goals = !!info?.automation?.goals && !!activeId;
   useEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -195,9 +208,17 @@ export function Composer({ hero, tx }) {
       onCompositionStart=${() => { composing.current = true; }} onCompositionEnd=${() => { composing.current = false; }}
       onPaste=${(e) => { const fs = readFiles(e.clipboardData?.files); if (fs.length) { e.preventDefault(); attach(fs); } }} />
     <div class="composer-foot">
-      <button type="button" class="icon-btn add" aria-label=${t.attach} title=${t.attach} onClick=${() => file.current?.click()}>
-        <${IconPlus} size=${18} />
-      </button>
+      <span class="chip-wrap">
+        <button type="button" ref=${plusAnchor} class="icon-btn add" aria-label=${t.attach} title=${t.attach} aria-haspopup="menu"
+          onClick=${() => (goals ? setPlus((v) => !v) : file.current?.click())}>
+          <${IconPlus} size=${18} />
+        </button>
+        <${Menu} open=${plus} onClose=${() => setPlus(false)} anchor=${plusAnchor} side="top" align="start" class="menu-actions">
+          <${ActionItem} icon=${html`<${IconImage} size=${14} />`} onClick=${() => { setPlus(false); file.current?.click(); }}>${t.attachImage}</${ActionItem}>
+          <${ActionItem} icon=${html`<svg class="icon" width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>`}
+            onClick=${() => { setPlus(false); openGoalForm(); }}>${t.setGoal}</${ActionItem}>
+        </${Menu}>
+      </span>
       <input ref=${file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden
         onChange=${(e) => { attach(e.currentTarget.files); e.currentTarget.value = ''; }} />
       <${ModelChip} sel=${sel} />
@@ -286,6 +307,7 @@ export function ComposerSeat({ hero, tx }) {
     <div class="column seat-column">
       <${Banners} />
       ${approval ? html`<${ApprovalCard} approval=${approval} />` : null}
+      ${hero ? null : html`<${GoalBar} />`}
       ${hero ? html`<${HeroTray} sel=${sel} />` : null}
       <${Composer} hero=${hero} tx=${tx} />
       ${hero ? null : html`<${Stats} tx=${tx} sel=${sel} />`}
