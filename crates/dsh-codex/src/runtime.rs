@@ -3,7 +3,7 @@
 //! (built-ins, Codex tools, the `skill` tool and MCP servers).
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, RwLock};
 
 use anyhow::Context as _;
 use dshx_agent::{
@@ -18,6 +18,10 @@ use dshx_core::{
 use dshx_llm::{DeepSeekClient, DeepSeekConfig, SharedApiKey};
 use dshx_session::{Credentials, FileAttachments, SessionStore};
 use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
+
+mod extensions;
+
+pub use extensions::RuntimeExtensions;
 
 pub struct Runtime {
     pub home: PathBuf,
@@ -34,9 +38,11 @@ pub struct Runtime {
     pub subagents: Arc<dshx_subagent::SubagentRuntime>,
     /// Local skills behind the `skill` tool and the session skill catalog.
     skills: Arc<SkillRegistry>,
-    /// Connected MCP servers; unset until [`Runtime::start_mcp`] ran (or
-    /// when none are configured).
-    mcp: OnceLock<dshx_mcp::McpHandle>,
+    /// MCP servers of the config and of enabled plugins; empty until
+    /// [`Runtime::start_mcp`] ran, re-applied when extensions change.
+    mcp: dshx_mcp::McpHandle,
+    /// Plugins, marketplaces and the lock of their changes.
+    ext: extensions::ExtensionState,
 }
 
 impl Runtime {
@@ -100,7 +106,14 @@ impl Runtime {
             attachments: attachments.clone() as Arc<dyn AttachmentStore>,
             approver: Arc::new(NoApprover),
         });
-        let skills = Arc::new(SkillRegistry::new(SkillConfig::default()));
+        let skills = Arc::new(SkillRegistry::new(SkillConfig {
+            harness_home: Some(home.clone()),
+            ..SkillConfig::default()
+        }));
+        let ext = extensions::ExtensionState::new(&home);
+        // Skill folders of enabled plugins join the catalog right away.
+        skills.set_custom_dirs(ext.skill_dirs(&config));
+        let mcp = dshx_mcp::McpHandle::new(Some(dshx_mcp::OAuthManager::new(home.join("oauth"))));
         // Children see the skill catalog too, like in dsh.
         let child_skills = skills.clone();
         subagents.set_child_agent(Arc::new(move |child: &Agent| {
@@ -120,36 +133,32 @@ impl Runtime {
             macos,
             subagents,
             skills,
-            mcp: OnceLock::new(),
+            mcp,
+            ext,
         }))
     }
 
-    /// Connects the configured MCP servers (concurrently, each bounded by
-    /// its handshake timeout, like dsh before its first turn). Without an
-    /// enabled `[mcp_servers.*]` entry this does nothing.
+    /// Connects the MCP servers of the config and of enabled plugins
+    /// (concurrently, each bounded by its handshake timeout, like dsh before
+    /// its first turn). Without an enabled server this does nothing.
     pub async fn start_mcp(&self) -> anyhow::Result<()> {
-        let config = self.config();
-        if !config.mcp_servers.values().any(|s| s.enabled) || self.mcp.get().is_some() {
-            return Ok(());
-        }
-        let (_, handle) = dshx_mcp::mcp_tools(&config).await?;
-        if let Err(handle) = self.mcp.set(handle) {
-            handle.shutdown().await;
+        if let Err(e) = self.reload_extensions(None).await {
+            self.mcp.shutdown().await;
+            return Err(e);
         }
         Ok(())
     }
 
-    /// Changes whenever the MCP tool set or server instructions change.
+    /// Changes whenever the MCP tool set or server instructions change,
+    /// including servers added, removed or restarted at runtime.
     pub fn tools_version(&self) -> u64 {
-        self.mcp.get().map_or(0, |m| *m.subscribe().borrow())
+        *self.mcp.subscribe().borrow()
     }
 
     /// MCP prompt sections as literal extra sections (dsh order 3100).
     pub fn prompt_sections(&self) -> Vec<ExtraSection> {
         self.mcp
-            .get()
-            .map(|m| m.prompt_sections())
-            .unwrap_or_default()
+            .prompt_sections()
             .into_iter()
             .map(|s| ExtraSection {
                 name: s.name,
@@ -242,10 +251,8 @@ impl Runtime {
             tools.register(tool);
         }
         tools.register(Arc::new(SkillTool::new(self.skills.clone())));
-        if let Some(mcp) = self.mcp.get() {
-            for tool in mcp.tools() {
-                tools.register(tool);
-            }
+        for tool in self.mcp.tools() {
+            tools.register(tool);
         }
         tools
     }
@@ -326,9 +333,7 @@ impl Runtime {
         if let Some(browser) = &self.browser {
             browser.browser().close().await;
         }
-        if let Some(mcp) = self.mcp.get() {
-            mcp.shutdown().await;
-        }
+        self.mcp.shutdown().await;
     }
 }
 

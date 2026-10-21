@@ -469,6 +469,12 @@ impl Backend for WebBackend {
     fn stream(&self) -> broadcast::Receiver<StreamMessage> {
         self.tx.subscribe()
     }
+
+    fn extensions(&self) -> Option<Arc<dyn dshx_server::Extensions>> {
+        Some(Arc::new(crate::runtime::RuntimeExtensions::new(
+            self.runtime.clone(),
+        )))
+    }
 }
 
 /// Live deltas and status changes of one session's agent.

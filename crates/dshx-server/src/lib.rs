@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
+mod extensions;
+
+pub use extensions::{Extensions, OAuthCallback};
+
 /// Live messages pushed to UI clients over the WebSocket.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -110,6 +114,11 @@ pub trait Backend: Send + Sync + 'static {
         let _ = id;
         None
     }
+    /// Plugins, marketplaces, skills, MCP servers and connector logins;
+    /// `None` = those routes answer 404.
+    fn extensions(&self) -> Option<Arc<dyn Extensions>> {
+        None
+    }
 }
 
 /// Error for unknown sessions, attachments or approvals (→ HTTP 404).
@@ -176,12 +185,14 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/attachments", post(save_attachment))
         .route("/attachments/{id}", get(load_attachment))
         .route("/stream", get(stream))
+        .merge(extensions::routes())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_token,
         ));
     Router::new()
         .nest("/api", api)
+        .route("/api/oauth/callback", get(extensions::oauth_callback))
         .fallback(get(static_file))
         .with_state(state)
 }
@@ -210,15 +221,7 @@ async fn require_token(
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    // Only localhost may talk to us (DNS-rebinding guard).
-    let host_ok = headers
-        .get(header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .map(|h| {
-            let name = h.rsplit_once(':').map_or(h, |(n, _)| n);
-            matches!(name, "127.0.0.1" | "localhost" | "[::1]")
-        })
-        .unwrap_or(false);
+    let host_ok = host_is_loopback(&headers);
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -237,6 +240,18 @@ async fn require_token(
             .into_response();
     }
     next.run(request).await
+}
+
+/// Only localhost may talk to us (DNS-rebinding guard).
+fn host_is_loopback(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .map(|h| {
+            let name = h.rsplit_once(':').map_or(h, |(n, _)| n);
+            matches!(name, "127.0.0.1" | "localhost" | "[::1]")
+        })
+        .unwrap_or(false)
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -300,14 +315,16 @@ fn csp_for(html: &[u8]) -> String {
 }
 
 async fn info(State(s): State<AppState>) -> ApiResult<Json<Value>> {
-    Ok(Json(s.backend.info().await?))
+    let info = s.backend.info().await?;
+    Ok(Json(extensions::with_summary(&s, info).await))
 }
 
 async fn update_settings(
     State(s): State<AppState>,
     Json(patch): Json<Value>,
 ) -> ApiResult<Json<Value>> {
-    Ok(Json(s.backend.update_settings(patch).await?))
+    let info = s.backend.update_settings(patch).await?;
+    Ok(Json(extensions::with_summary(&s, info).await))
 }
 
 async fn workspaces(State(s): State<AppState>) -> ApiResult<Json<Value>> {

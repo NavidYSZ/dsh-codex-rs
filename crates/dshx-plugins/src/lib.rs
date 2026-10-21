@@ -73,6 +73,33 @@ pub struct Plugin {
     pub error: Option<String>,
 }
 
+/// Image types a plugin may serve as assets (logo, icons, screenshots).
+const ASSET_TYPES: [(&str, &str); 7] = [
+    ("png", "image/png"),
+    ("jpg", "image/jpeg"),
+    ("jpeg", "image/jpeg"),
+    ("gif", "image/gif"),
+    ("webp", "image/webp"),
+    ("svg", "image/svg+xml"),
+    ("ico", "image/x-icon"),
+];
+
+impl Plugin {
+    /// An image file inside the plugin folder and its media type; `None`
+    /// for other files and for paths that leave the folder (`..`, symlinks).
+    pub fn asset(&self, relative: &str) -> Option<(PathBuf, &'static str)> {
+        let path = resolve_inside(&self.root, relative)?;
+        let real = path.canonicalize().ok()?;
+        let root = self.root.canonicalize().ok()?;
+        if !real.starts_with(&root) || !real.is_file() {
+            return None;
+        }
+        let ext = real.extension()?.to_str()?.to_ascii_lowercase();
+        let (_, mime) = ASSET_TYPES.iter().find(|(e, _)| *e == ext)?;
+        Some((real, mime))
+    }
+}
+
 /// `<name>@<marketplace>`.
 pub fn plugin_id(name: &str, marketplace: &str) -> String {
     format!("{name}@{marketplace}")

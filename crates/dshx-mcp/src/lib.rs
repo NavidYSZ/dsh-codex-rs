@@ -373,6 +373,27 @@ impl McpHandle {
     }
 }
 
+/// Validates one `[mcp_servers.<name>]` entry the way a start does.
+pub fn check_server(name: &str, config: &McpServerConfig) -> Result<(), String> {
+    config::resolve(name, config).map(|_| ())
+}
+
+/// Whether logins through [`OAuthManager`] apply to an entry: Streamable
+/// HTTP without an `Authorization` header or `bearer_token_env_var`, and
+/// OAuth not switched off.
+pub fn uses_oauth(name: &str, config: &McpServerConfig) -> bool {
+    matches!(
+        config::resolve(name, config),
+        Ok(config::ServerSpec {
+            transport: config::TransportSpec::Http {
+                auth: config::AuthSpec::OAuth(_),
+                ..
+            },
+            ..
+        })
+    )
+}
+
 type Startup = (Arc<Server>, bool, oneshot::Receiver<Result<(), String>>);
 
 /// Outcomes of the first connection attempts, as far as they finished

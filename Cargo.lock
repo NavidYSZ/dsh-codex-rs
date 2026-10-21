@@ -450,12 +450,14 @@ dependencies = [
  "dshx-llm",
  "dshx-macos",
  "dshx-mcp",
+ "dshx-plugins",
  "dshx-server",
  "dshx-session",
  "dshx-subagent",
  "dshx-testkit",
  "dshx-tools",
  "futures",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
@@ -463,6 +465,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 

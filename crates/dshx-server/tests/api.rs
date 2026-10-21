@@ -3,7 +3,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use dshx_core::{ImageAttachmentRef, SessionEvent};
-use dshx_server::{Backend, NotFound, PromptRequest, StreamMessage, serve};
+use dshx_server::{
+    Backend, Extensions, NotFound, OAuthCallback, PromptRequest, StreamMessage, serve,
+};
 use futures::StreamExt;
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
@@ -12,6 +14,64 @@ struct Fake {
     events: Mutex<Vec<SessionEvent>>,
     prompts: Mutex<Vec<String>>,
     tx: broadcast::Sender<StreamMessage>,
+    ext: Option<Arc<FakeExt>>,
+}
+
+/// Records the calls of the Plugins page routes.
+#[derive(Default)]
+struct FakeExt {
+    calls: Mutex<Vec<String>>,
+}
+
+impl FakeExt {
+    fn log(&self, call: String) {
+        self.calls.lock().unwrap().push(call);
+    }
+}
+
+#[async_trait]
+impl Extensions for FakeExt {
+    async fn summary(&self) -> anyhow::Result<Value> {
+        Ok(json!({ "plugins": 1, "skills": 2, "mcpServers": 3 }))
+    }
+    async fn plugins(&self) -> anyhow::Result<Value> {
+        Ok(json!([{ "id": "linear@curated" }]))
+    }
+    async fn install_plugin(
+        &self,
+        marketplace: &str,
+        name: &str,
+        enable: bool,
+    ) -> anyhow::Result<Value> {
+        self.log(format!("install {name}@{marketplace} {enable}"));
+        Ok(json!({ "id": format!("{name}@{marketplace}") }))
+    }
+    async fn set_plugin_enabled(&self, id: &str, enabled: bool) -> anyhow::Result<Value> {
+        self.log(format!("enable {id} {enabled}"));
+        Ok(json!({ "id": id, "enabled": enabled }))
+    }
+    async fn plugin_asset(&self, id: &str, path: &str) -> anyhow::Result<(Vec<u8>, String)> {
+        self.log(format!("asset {id} {path}"));
+        Ok((b"<svg/>".to_vec(), "image/svg+xml".into()))
+    }
+    async fn add_marketplace(&self, source: &str, git_ref: Option<&str>) -> anyhow::Result<Value> {
+        self.log(format!("market {source} {git_ref:?}"));
+        Ok(json!({ "name": "curated" }))
+    }
+    async fn start_login(&self, server: &str, redirect_uri: &str) -> anyhow::Result<Value> {
+        self.log(format!("login {server} {redirect_uri}"));
+        Ok(json!({ "authorizationUrl": "https://as.example/authorize" }))
+    }
+    async fn finish_login(&self, params: OAuthCallback) -> anyhow::Result<String> {
+        match params.state.as_deref() {
+            Some("good") => Ok("linear".into()),
+            _ => anyhow::bail!("unknown or expired login"),
+        }
+    }
+    async fn set_token(&self, server: &str, token: Option<String>) -> anyhow::Result<Value> {
+        self.log(format!("token {server} {token:?}"));
+        Ok(json!({ "name": server }))
+    }
 }
 
 fn event(seq: u64, kind: &str) -> SessionEvent {
@@ -98,13 +158,21 @@ impl Backend for Fake {
     fn stream(&self) -> broadcast::Receiver<StreamMessage> {
         self.tx.subscribe()
     }
+    fn extensions(&self) -> Option<Arc<dyn Extensions>> {
+        self.ext.clone().map(|e| e as Arc<dyn Extensions>)
+    }
 }
 
 async fn start() -> (String, Arc<Fake>) {
+    start_with(None).await
+}
+
+async fn start_with(ext: Option<Arc<FakeExt>>) -> (String, Arc<Fake>) {
     let fake = Arc::new(Fake {
         events: Mutex::new(vec![event(0, "turn/start"), event(1, "step/start")]),
         prompts: Mutex::new(vec![]),
         tx: broadcast::channel(64).0,
+        ext,
     });
     let (addr, _handle) = serve(fake.clone(), "secret".into(), 0).await.unwrap();
     (format!("127.0.0.1:{}", addr.port()), fake)
@@ -269,4 +337,145 @@ async fn serves_ui_with_csp_and_accepts_after_minus_one() {
     let first: Value =
         serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
     assert_eq!(first["event"]["seq"], 0);
+}
+
+#[tokio::test]
+async fn plugin_routes_map_to_extensions() {
+    let ext = Arc::new(FakeExt::default());
+    let (addr, _) = start_with(Some(ext.clone())).await;
+    let http = reqwest::Client::new();
+    let url = |p: &str| format!("http://{addr}/api{p}");
+    let info: Value = http
+        .get(url("/info"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["version"], "test");
+    assert_eq!(info["extensions"]["mcpServers"], 3);
+    let r = http.get(url("/plugins")).send().await.unwrap();
+    assert_eq!(r.status(), 401, "the plugin routes need the token");
+    let list: Value = http
+        .get(url("/plugins"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(list[0]["id"], "linear@curated");
+    let r = http
+        .post(url("/plugins"))
+        .bearer_auth("secret")
+        .json(&json!({ "marketplace": "curated", "name": "linear" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.json::<Value>().await.unwrap()["id"], "linear@curated");
+    http.post(url("/plugins/linear@curated/disable"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap();
+    let r = http
+        .get(url("/plugins/linear@curated/assets/assets/logo.svg"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.headers()["content-type"], "image/svg+xml");
+    assert!(
+        r.headers()["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .contains("default-src 'none'")
+    );
+    http.post(url("/marketplaces"))
+        .bearer_auth("secret")
+        .json(&json!({ "source": "openai/plugins", "ref": "main" }))
+        .send()
+        .await
+        .unwrap();
+    // The callback URL uses the port the browser used (an SSH tunnel's).
+    let r = http
+        .post(url("/mcp/servers/linear/login"))
+        .bearer_auth("secret")
+        .header("host", "localhost:3082")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        r.json::<Value>().await.unwrap()["authorizationUrl"],
+        "https://as.example/authorize"
+    );
+    http.put(url("/mcp/servers/github/token"))
+        .bearer_auth("secret")
+        .json(&json!({ "token": "ghp_x" }))
+        .send()
+        .await
+        .unwrap();
+    // Not implemented by the fake: 404.
+    let r = http
+        .get(url("/connectors"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
+    assert_eq!(
+        ext.calls.lock().unwrap().as_slice(),
+        [
+            "install linear@curated true",
+            "enable linear@curated false",
+            "asset linear@curated assets/logo.svg",
+            "market openai/plugins Some(\"main\")",
+            "login linear http://127.0.0.1:3082/api/oauth/callback",
+            "token github Some(\"ghp_x\")",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn oauth_callback_needs_no_token_but_a_pending_state() {
+    let (addr, _) = start_with(Some(Arc::new(FakeExt::default()))).await;
+    let http = reqwest::Client::new();
+    let r = http
+        .get(format!(
+            "http://{addr}/api/oauth/callback?code=c&state=good"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.headers()["referrer-policy"], "no-referrer");
+    assert!(r.text().await.unwrap().contains("Connected: linear"));
+    let r = http
+        .get(format!(
+            "http://{addr}/api/oauth/callback?code=c&state=forged"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains("unknown or expired login"));
+    let r = http
+        .get(format!("http://{addr}/api/oauth/callback?state=good"))
+        .header("host", "evil.example")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 401);
+    // Without extensions the routes are 404.
+    let (addr, _) = start().await;
+    let r = http
+        .get(format!("http://{addr}/api/plugins"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
 }
