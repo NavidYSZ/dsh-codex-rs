@@ -34,6 +34,9 @@ pub struct BrowserOptions {
     pub locale: String,
     /// Screenshot JPEG quality, 0…1.
     pub quality: f32,
+    /// macOS: `--use-mock-keychain`, so Chrome never asks for the login
+    /// keychain (tests, dev runs, sandboxed agents).
+    pub mock_keychain: bool,
 }
 
 impl BrowserOptions {
@@ -47,6 +50,9 @@ impl BrowserOptions {
             idle: Duration::from_secs(u64::from(config.idle_minutes) * 60),
             locale: locale.to_owned(),
             quality: config.quality,
+            mock_keychain: config.mock_keychain
+                || std::env::var("DSHX_BROWSER_MOCK_KEYCHAIN")
+                    .is_ok_and(|v| !v.is_empty() && v != "0"),
         }
     }
 }
@@ -1112,6 +1118,11 @@ pub(crate) fn launch_args(opts: &BrowserOptions, visible: bool) -> Vec<String> {
     }
     if running_as_root_on_linux() {
         args.push("--no-sandbox".to_owned());
+    }
+    // Without a reachable login keychain (other HOME, sandboxed shell) macOS
+    // would ask the user to reset it on every start.
+    if cfg!(target_os = "macos") && opts.mock_keychain {
+        args.push("--use-mock-keychain".to_owned());
     }
     args.push("about:blank".to_owned());
     args

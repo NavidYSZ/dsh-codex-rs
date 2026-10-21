@@ -218,6 +218,13 @@ python3 tools/dev/mock_deepseek.py 18090 2   # instant DeepSeek stand-in
 python3 tools/bench/compare.py               # speed vs. the official dsh
 ```
 
+On macOS, dev and test runs must not touch the login keychain or the real
+browser profile: set your own `DSHX_HOME` (it then gets its own
+`browser-profile`) and `DSHX_BROWSER_MOCK_KEYCHAIN=1` (Chrome starts with
+`--use-mock-keychain`; the Chrome tests do this themselves). Never change
+`HOME` for such runs: Chrome then misses the keychain and macOS offers to
+reset it on every start.
+
 Golden data in `docs/rust/upstream/` and the crates' `tests/fixtures/` was
 recorded from the official dsh 0.2.0-rc.2 against the mock, with a fake key.
 

@@ -21,6 +21,10 @@
 - Codex app default theme values: accent `#0285ff`, grey user bubble, 16 px
   composer and bubble radius, 46 px header.
 - Debug builds serve `ui/` with `no-cache`.
+- macOS: an explicit `$DSHX_HOME` gets its own `browser-profile` instead of
+  sharing the plugin's; `[codex.browser] mockKeychain` /
+  `DSHX_BROWSER_MOCK_KEYCHAIN=1` start Chrome with `--use-mock-keychain`, which
+  the Chrome tests now always do, so they never prompt for the login keychain.
 
 ## 0.2.0 – 2026-10-17
 

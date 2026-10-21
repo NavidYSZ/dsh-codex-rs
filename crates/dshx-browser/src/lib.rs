@@ -69,9 +69,12 @@ pub fn find_chrome(explicit: Option<&Path>) -> Option<PathBuf> {
 
 /// `~/.dsh-codex/browser-profile` (`$DSHX_HOME` respected); on macOS the
 /// plugin's `~/Library/Application Support/dsh-codex/browser-profile`, so
-/// existing sign-ins carry over.
+/// existing sign-ins carry over. An explicit `$DSHX_HOME` (another instance,
+/// a dev or test run) always gets its own profile next to it.
 pub fn default_profile_dir() -> PathBuf {
+    let own_home = std::env::var_os("DSHX_HOME").is_some_and(|h| !h.is_empty());
     if cfg!(target_os = "macos")
+        && !own_home
         && let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty())
     {
         return PathBuf::from(home).join("Library/Application Support/dsh-codex/browser-profile");

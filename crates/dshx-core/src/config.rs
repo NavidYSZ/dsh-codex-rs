@@ -195,6 +195,11 @@ pub struct BrowserConfig {
     pub height: u32,
     pub idle_minutes: u32,
     pub quality: f32,
+    /// macOS: keep Chrome away from the login keychain (`--use-mock-keychain`).
+    /// Meant for throwaway profiles; cookies are then encrypted with a fixed
+    /// key, so switching it on for a profile with sign-ins loses them.
+    /// `DSHX_BROWSER_MOCK_KEYCHAIN=1` turns it on too.
+    pub mock_keychain: bool,
 }
 
 impl Default for BrowserConfig {
@@ -206,6 +211,7 @@ impl Default for BrowserConfig {
             height: 800,
             idle_minutes: 15,
             quality: 0.7,
+            mock_keychain: false,
         }
     }
 }

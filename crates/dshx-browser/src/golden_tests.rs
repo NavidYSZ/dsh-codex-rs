@@ -128,6 +128,7 @@ fn launch_flags_match_browser_js() {
         idle: std::time::Duration::from_secs(900),
         locale: "de".into(),
         quality: 0.7,
+        mock_keychain: false,
     };
     // SAFETY: geteuid has no preconditions.
     let root = cfg!(target_os = "linux") && unsafe { libc::geteuid() } == 0;
@@ -151,12 +152,24 @@ fn launch_flags_match_browser_js() {
     let visible = launch_args(
         &BrowserOptions {
             locale: "en".into(),
-            ..opts
+            ..opts.clone()
         },
         true,
     );
     assert!(visible.contains(&"--window-size=1280,888".to_owned()));
     assert!(visible.contains(&"--lang=en-US".to_owned()));
     assert!(!visible.iter().any(|a| a.starts_with("--headless")));
+    let mocked = launch_args(
+        &BrowserOptions {
+            mock_keychain: true,
+            ..opts
+        },
+        false,
+    );
+    assert_eq!(
+        mocked.contains(&"--use-mock-keychain".to_owned()),
+        cfg!(target_os = "macos"),
+        "only macOS has a keychain to keep out of"
+    );
     assert!(!visible.iter().any(|a| a.contains("port")));
 }

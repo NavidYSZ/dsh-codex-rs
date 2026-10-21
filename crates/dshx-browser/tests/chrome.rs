@@ -222,6 +222,8 @@ fn options(chrome: PathBuf, profile: &Path) -> BrowserOptions {
         idle: Duration::from_secs(15 * 60),
         locale: "en".into(),
         quality: 0.7,
+        // Throwaway profiles: never touch the developer's login keychain.
+        mock_keychain: true,
     }
 }
 
