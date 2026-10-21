@@ -16,8 +16,18 @@
 - **Steer or queue** follow-ups while a turn runs (`prompt.steer`),
   notifications and a Dock badge hook for the Mac app.
 
+- **Merged branches:** native Mac app with instances (`desktop/`), plugins,
+  marketplaces and OAuth connectors (`dshx-plugins`, `dshx-mcp`), goals,
+  schedules and Agent Teams (`dshx-goal`, `dshx-schedule`, `dshx-team`).
+- **Plugins** and **Automations** pages, goal bar and goal form, Team tab,
+  readable rows for schedule/goal/team tools, goal-round/reminder/Team-mail
+  lines in the transcript.
+- Prompts carry the browser's time zone (dsh `clientTimeZone`).
+
 ### Changed
 
+- Mac app: the local instance reuses its last port, so browser storage
+  (sidebar, theme, panel) survives restarts.
 - Codex app default theme values: accent `#0285ff`, grey user bubble, 16 px
   composer and bubble radius, 46 px header.
 - Debug builds serve `ui/` with `no-cache`.

@@ -91,6 +91,12 @@ Options: `-C <dir>`, `--model deepseek-flash|deepseek-v4-pro`,
   rows, links and inline code open in the panel.
 - **Live view:** the background browser's screencast (and the Mac tools'
   screenshots) as a floating picture or in the panel, with Stop.
+- **Plugins** (sidebar): installed plugins and marketplaces (Codex or Claude
+  format), connectors with sign-in (OAuth or token), skills and MCP servers.
+- **Automations** (sidebar): reminders and recurring tasks the agent created
+  with `schedule_create`, with next run, chat, prompt and delivery history.
+  The **goal bar** above the composer shows a chat's goal (set one from the
+  composer's +), and a **Team** tab in the panel shows an Agent Team.
 - **While the agent works,** Enter adds a message to the running task and ⌘↩
   queues it for afterwards (switchable in Settings). Notifications report
   chats that finish, fail or wait for approval in the background.

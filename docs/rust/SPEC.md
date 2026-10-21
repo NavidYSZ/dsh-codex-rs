@@ -280,7 +280,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | POST | `/api/sessions/:id/preview` | → `{base, root}`: `base` is `/preview/<grant>/`, a 2-hour read-only capability for the chat's folder |
 | GET | `/api/sessions/:id/files?dir=` | → `{dir, entries:[{name, path, kind:"dir"\|"file"\|"broken", size}], truncated}` (inside the chat's folder only) |
 | GET | `/preview/:grant/*path` | no bearer; a file of the granted folder (folders serve `index.html`); HTML/SVG/XML get `CSP: sandbox` (opaque origin), everything `nosniff`, `no-store` |
-| POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?, steer?}` → 202; while a turn runs the text queues as the next turn, with `steer: true` its next step takes it |
+| POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?, steer?, timeZone?}` → 202; while a turn runs the text queues as the next turn, with `steer: true` its next step takes it; `timeZone` (IANA) makes the message source dsh's web form `{kind:"user", rpcId, clientTimeZone}` for the time context |
 | POST | `/api/sessions/:id/cancel` | → 202 |
 | DELETE | `/api/sessions/:id` | → 204 |
 | POST | `/api/approvals/:callId` | `{decision:"allowed-once"\|"rejected"}` → 204 |
@@ -352,6 +352,10 @@ WebSocket messages (JSON):
 - `{"kind":"goal","sessionId","goal":GoalView|null}` — goal or activation changed (session clients
   and the session-less sidebar feed).
 - `{"kind":"schedule-changed"}` — a task was created, updated, delivered or deleted; to every client.
+- `{"kind":"live","sessionId", tool, args?, active, ended, activity?, place?, width?, height?, cursor?:{x,y,click},
+  image?:base64 JPEG, attachment?:ImageAttachmentRef, meta?, error?, time}` — live view of browser/computer work of
+  that session (merged state, at most 4 frames/s), sent from `Backend::live` on its own channel; the latest one also
+  follows the backlog. Never persisted; a lagging client just misses frames.
 - `/api/info` additionally carries `automation: {goals, schedules, timeContext, team}`.
 
 ## 7. Conventions

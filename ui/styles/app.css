@@ -897,6 +897,7 @@ html.dshx-desktop:not(.dshx-fullscreen) .app.sidebar-collapsed .topbar { padding
 @media (max-width: 860px) {
   .plug-grid { grid-template-columns: 1fr; }
   .page-form { flex-wrap: wrap; }
+  .page-form .input { flex: 1 1 100%; }
   .mcp-name { flex: 1 1 100% !important; }
   .auto-body { padding-left: 16px; }
   .sidebar, .app.sidebar-collapsed .sidebar {
