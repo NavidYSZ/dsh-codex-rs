@@ -13,6 +13,7 @@ import { Settings } from './settings.js';
 import { Sidebar, ChatMenu } from './sidebar.js';
 import { Palette } from './palette.js';
 import { Panel } from './panel.js';
+import { LiveFloat, useLiveTab } from './live.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
@@ -87,13 +88,15 @@ function Chat() {
   const title = hero ? '' : listed?.title || tx.title || (pending?.text ?? '') || t.newChat;
   const cwd = header?.cwd ?? listed?.cwd ?? '';
   const sub = hero || listed?.scratch ? '' : workspaceName(cwd);
+  const liveTab = useLiveTab();
   return html`<div class="workspace">
     <div class=${cx('chat', hero && 'is-hero')}>
       <${TopBar} title=${title} sub=${sub} row=${listed} />
       ${hero ? html`<${Hero} />` : html`<${Transcript} tx=${tx} deltas=${deltas} status=${status} pending=${pending} cwd=${cwd} />`}
       <${ComposerSeat} hero=${hero} tx=${hero ? null : tx} />
+      ${hero ? null : html`<${LiveFloat} />`}
     </div>
-    ${hero ? null : html`<${Panel} tx=${tx} />`}
+    ${hero ? null : html`<${Panel} tx=${tx} extraTabs=${liveTab ? { live: liveTab } : null} />`}
   </div>`;
 }
 

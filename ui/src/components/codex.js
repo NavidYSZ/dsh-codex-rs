@@ -79,11 +79,14 @@ function label(args) {
   }
 }
 
-const CursorGlyph = () => html`<svg viewBox="0 0 22 22" aria-hidden="true">
+/** Step label for the live view: the same words as the transcript rows. */
+export const liveLabel = (tool, args, target) => (tool === 'computer' ? label(args ?? {}) : bgLabel(tool, args ?? {}, target));
+
+export const CursorGlyph = () => html`<svg viewBox="0 0 22 22" aria-hidden="true">
   <path d=${ARROW} fill="#0d0d0d" stroke="#fff" stroke-width="2" stroke-linejoin="round" paint-order="stroke"/>
 </svg>`;
 
-const ICONS = { computer: IconPointer, app: IconWindow, browser: IconGlobe };
+export const ICONS = { computer: IconPointer, app: IconWindow, browser: IconGlobe };
 
 // Codex-like motion in screenshot pixel space: a bowed path for long
 // moves with the tip turning into the direction of travel, a tilted

@@ -57,6 +57,14 @@ pub enum StreamMessage {
         summary: String,
         justification: Option<String>,
     },
+    /// Live view of browser/computer work (frames, steps); never persisted
+    /// and sent through [`Backend::live`], where a slow client just drops frames.
+    Live {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(flatten)]
+        data: Value,
+    },
 }
 
 impl StreamMessage {
@@ -65,7 +73,8 @@ impl StreamMessage {
             StreamMessage::Event { session_id, .. }
             | StreamMessage::Delta { session_id, .. }
             | StreamMessage::Status { session_id, .. }
-            | StreamMessage::Approval { session_id, .. } => session_id,
+            | StreamMessage::Approval { session_id, .. }
+            | StreamMessage::Live { session_id, .. } => session_id,
         }
     }
 }
@@ -104,6 +113,16 @@ pub trait Backend: Send + Sync + 'static {
     async fn update_session(&self, id: &str, patch: Value) -> anyhow::Result<Value> {
         let _ = (id, patch);
         anyhow::bail!("not supported")
+    }
+    /// Feed of [`StreamMessage::Live`] messages, separate from [`Backend::stream`]
+    /// so bulky frames cannot push session events out of the buffer.
+    fn live(&self) -> Option<broadcast::Receiver<StreamMessage>> {
+        None
+    }
+    /// The last live message of a session, for a viewer that just connected.
+    fn live_latest(&self, id: &str) -> Option<StreamMessage> {
+        let _ = id;
+        None
     }
     /// The chat's working folder; the side panel previews files inside it.
     async fn session_root(&self, id: &str) -> anyhow::Result<PathBuf> {
@@ -591,6 +610,7 @@ async fn pump(
 ) {
     // Subscribe before reading the backlog so nothing falls between the two.
     let mut live = backend.stream();
+    let mut frames = session.as_ref().and_then(|_| backend.live());
     let mut last_seq = after;
     if let Some(id) = &session {
         match backend.events_after(id, after).await {
@@ -629,9 +649,30 @@ async fn pump(
         if send(&mut socket, &msg).await.is_err() {
             return;
         }
+        if let Some(latest) = backend.live_latest(id)
+            && send(&mut socket, &latest).await.is_err()
+        {
+            return;
+        }
     }
     loop {
+        let next_frame = async {
+            match frames.as_mut() {
+                Some(rx) => rx.recv().await,
+                None => std::future::pending().await,
+            }
+        };
         tokio::select! {
+            frame = next_frame => match frame {
+                Ok(msg) => {
+                    if session.as_deref() == Some(msg.session_id()) && send(&mut socket, &msg).await.is_err() {
+                        return;
+                    }
+                }
+                // Frames are disposable: skip what was missed.
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                Err(broadcast::error::RecvError::Closed) => frames = None,
+            },
             msg = live.recv() => match msg {
                 Ok(msg) => {
                     let wanted = match &session {

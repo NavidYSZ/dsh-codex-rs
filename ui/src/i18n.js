@@ -118,6 +118,9 @@ const EN = {
   noChanges: 'No files changed in this chat yet', notFound: 'File not found', tooLarge: 'Too large to preview',
   binary: 'Binary file, no preview', outsideFolder: 'Only files in this chat’s folder can be previewed',
   emptyFolder: 'Empty folder', firstRows: (n) => `First ${n} rows`, loading: 'Loading…', open: 'Open',
+  // live view
+  live: 'Live', liveActive: 'Working', liveIdle: 'Paused', liveEnded: 'Done', liveWaiting: 'Waiting for the first picture…',
+  showInPanel: 'Show in panel', hide: 'Hide', stopAgent: 'Stop agent',
 };
 
 const DE = {
@@ -226,6 +229,8 @@ const DE = {
   noChanges: 'In diesem Chat wurden noch keine Dateien geändert', notFound: 'Datei nicht gefunden', tooLarge: 'Zu groß für die Vorschau',
   binary: 'Binärdatei, keine Vorschau', outsideFolder: 'Vorschau nur für Dateien im Ordner dieses Chats',
   emptyFolder: 'Leerer Ordner', firstRows: (n) => `Erste ${n} Zeilen`, loading: 'Lädt …', open: 'Öffnen',
+  live: 'Live', liveActive: 'Arbeitet', liveIdle: 'Pausiert', liveEnded: 'Fertig', liveWaiting: 'Warte auf das erste Bild …',
+  showInPanel: 'Im Panel zeigen', hide: 'Ausblenden', stopAgent: 'Agent stoppen',
 };
 
 export const t = de ? DE : EN;

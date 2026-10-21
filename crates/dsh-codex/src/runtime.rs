@@ -19,6 +19,8 @@ use dshx_llm::{DeepSeekClient, DeepSeekConfig, SharedApiKey};
 use dshx_session::{Credentials, FileAttachments, SessionStore};
 use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
 
+use crate::live::{LiveHub, LiveMini, Watched};
+
 pub struct Runtime {
     pub home: PathBuf,
     config: RwLock<Config>,
@@ -30,6 +32,8 @@ pub struct Runtime {
     /// One background Chrome per process, shared by all sessions.
     browser: Option<Arc<dshx_browser::BrowserTool>>,
     macos: Vec<Arc<dyn Tool>>,
+    /// Browser frames and Mac tool screenshots for the web UI's live view.
+    pub live: Arc<LiveHub>,
     /// In-process subagents of every agent this runtime starts.
     pub subagents: Arc<dshx_subagent::SubagentRuntime>,
     /// Local skills behind the `skill` tool and the session skill catalog.
@@ -74,7 +78,11 @@ impl Runtime {
             }))
             .build()
             .map_err(|e| anyhow::anyhow!("DeepSeek client: {e}"))?;
-        let mini = dshx_macos::browser_mini(&config.codex);
+        let live = LiveHub::new();
+        let mini = Arc::new(LiveMini {
+            inner: dshx_macos::browser_mini(&config.codex),
+            hub: live.clone(),
+        });
         let browser = if config.codex.browser.enabled {
             let locale = config
                 .codex
@@ -118,6 +126,7 @@ impl Runtime {
             llm,
             browser,
             macos,
+            live,
             subagents,
             skills,
             mcp: OnceLock::new(),
@@ -233,10 +242,16 @@ impl Runtime {
             tools.register(tool);
         }
         if let Some(browser) = &self.browser {
-            tools.register(browser.clone() as Arc<dyn Tool>);
+            tools.register(Arc::new(Watched {
+                inner: browser.clone(),
+                hub: self.live.clone(),
+            }));
         }
         for tool in &self.macos {
-            tools.register(tool.clone());
+            tools.register(Arc::new(Watched {
+                inner: tool.clone(),
+                hub: self.live.clone(),
+            }));
         }
         for tool in dshx_subagent::subagent_tools(self.subagents.clone()) {
             tools.register(tool);

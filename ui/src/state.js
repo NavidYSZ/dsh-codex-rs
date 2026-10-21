@@ -123,7 +123,7 @@ function setHash(hash, replace) {
 let closeStream = null;
 let openToken = 0;
 
-const EMPTY_SESSION = { header: null, events: [], status: 'idle', statusError: null, deltas: null, approval: null };
+const EMPTY_SESSION = { header: null, events: [], status: 'idle', statusError: null, deltas: null, approval: null, live: null, liveHidden: null };
 
 /** Another chat: file tabs belong to the old one. */
 const freshPanel = (p) => ({ ...p, files: [], tab: p.tab.startsWith('file:') ? 'changes' : p.tab });
@@ -213,6 +213,7 @@ function onMessage(id, m) {
       break;
     }
     case 'approval': store.set({ approval: m }); break;
+    case 'live': onLive(m); break;
     default: break;
   }
 }
@@ -257,6 +258,17 @@ function appendEvent(ev) {
   if (visible()) markSeen(store.get().activeId);
 }
 
+/** Browser/computer work: a new call brings the live view forward. */
+function onLive(m) {
+  const prev = store.get().live;
+  const fresh = m.active && (!prev?.active || JSON.stringify(prev.args) !== JSON.stringify(m.args));
+  store.set({ live: m });
+  const p = store.get().panel;
+  if (fresh && p.open && (p.tab === 'changes' || p.tab === 'files')) setPanelTab('live');
+}
+
+export const hideLive = () => store.set((s) => ({ liveHidden: s.live?.time ?? Date.now() }));
+
 /** Status of every chat (running dots, unread after a background run finishes). */
 function watchAll() {
   api.stream(null, -1, {
@@ -288,7 +300,13 @@ let refreshTimer = 0;
 export function refreshSessions() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(async () => {
-    try { store.set({ sessions: await api.sessions() }); } catch { /* keep the old list */ }
+    try {
+      const rows = await api.sessions();
+      // The chat on screen is read, even if its "seen" mark is still on the way.
+      const { activeId, view } = store.get();
+      const watching = view === 'chat' && visible() ? activeId : null;
+      store.set({ sessions: rows.map((r) => (r.id === watching && r.unread ? { ...r, unread: false } : r)) });
+    } catch { /* keep the old list */ }
   }, 250);
 }
 

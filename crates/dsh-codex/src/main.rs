@@ -2,6 +2,7 @@
 mod chats;
 mod headless;
 mod jsonrpc;
+mod live;
 mod runtime;
 mod sdk;
 mod web;

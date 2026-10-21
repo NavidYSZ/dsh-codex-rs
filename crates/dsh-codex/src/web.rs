@@ -72,6 +72,7 @@ impl WebBackend {
         let (tx, _) = broadcast::channel(4096);
         let workspaces_file = runtime.home.join("workspaces.json");
         let chats = ChatState::load(&runtime.home);
+        runtime.live.enable_viewers();
         WebBackend {
             approvals: Arc::new(Approvals {
                 pending: Mutex::new(HashMap::new()),
@@ -329,6 +330,14 @@ impl Backend for WebBackend {
         }
         let _ = self.chats.update(&id, &json!({ "seen": true }), now_ms());
         Ok(id)
+    }
+
+    fn live(&self) -> Option<broadcast::Receiver<StreamMessage>> {
+        Some(self.runtime.live.subscribe())
+    }
+
+    fn live_latest(&self, id: &str) -> Option<StreamMessage> {
+        self.runtime.live.latest(id)
     }
 
     async fn session_root(&self, id: &str) -> anyhow::Result<PathBuf> {
