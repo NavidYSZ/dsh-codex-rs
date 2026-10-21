@@ -49,6 +49,9 @@ export const store = createStore({
   palette: false,
   renaming: null,
   desktop: readDesktop(),
+  // Right side panel: 'changes', 'files', 'live' or 'file:<path relative to the chat folder>'.
+  panel: { open: readLocal('dshx-panel', '') === 'open', tab: 'changes', files: [] },
+  panelWidth: Number(readLocal('dshx-panel-width', '0')) || 0,
 });
 
 /** The Mac app's bridge (instances, notifications); null in a plain browser. */
@@ -122,11 +125,14 @@ let openToken = 0;
 
 const EMPTY_SESSION = { header: null, events: [], status: 'idle', statusError: null, deltas: null, approval: null };
 
+/** Another chat: file tabs belong to the old one. */
+const freshPanel = (p) => ({ ...p, files: [], tab: p.tab.startsWith('file:') ? 'changes' : p.tab });
+
 function showNewChat() {
   closeStream?.();
   closeStream = null;
   openToken++;
-  store.set({ ...EMPTY_SESSION, activeId: null, view: 'chat', pending: null, sidebarOpen: false, composer: {} });
+  store.set((s) => ({ ...EMPTY_SESSION, activeId: null, view: 'chat', pending: null, sidebarOpen: false, composer: {}, panel: freshPanel(s.panel) }));
 }
 
 /** Start page; with a `cwd` ('' = no project) the new chat goes there. */
@@ -160,7 +166,7 @@ export async function openSession(id, { fresh = false, replace = false } = {}) {
   const my = ++openToken;
   store.set({
     ...EMPTY_SESSION, activeId: id, view: 'chat', sidebarOpen: false,
-    pending: fresh ? s.pending : null, composer: fresh ? s.composer : {},
+    pending: fresh ? s.pending : null, composer: fresh ? s.composer : {}, panel: freshPanel(s.panel),
   });
   try {
     const data = await api.session(id);
@@ -410,6 +416,50 @@ export function toggleFolded(path) {
   const folded = store.get().folded.includes(path) ? store.get().folded.filter((p) => p !== path) : [...store.get().folded, path];
   writeLocal('dshx-folded', JSON.stringify(folded));
   store.set({ folded });
+}
+
+// ---- side panel ----------------------------------------------------------
+
+function setPanel(patch) {
+  const panel = { ...store.get().panel, ...patch };
+  writeLocal('dshx-panel', panel.open ? 'open' : '');
+  store.set({ panel });
+}
+
+export const openPanel = (tab) => setPanel({ open: true, ...(tab ? { tab } : {}) });
+export const closePanel = () => setPanel({ open: false });
+export const togglePanel = () => setPanel({ open: !store.get().panel.open });
+export const setPanelTab = (tab) => setPanel({ tab });
+
+export function setPanelWidth(px) {
+  writeLocal('dshx-panel-width', String(Math.round(px)));
+  store.set({ panelWidth: px });
+}
+
+/** Path relative to the chat's folder, or null when it lies outside. */
+export function relTo(cwd, path) {
+  if (!path) return null;
+  const p = path.replace(/:\d+(-\d+)?$/, '');
+  if (!p.startsWith('/')) return p.replace(/^\.\//, '');
+  if (cwd && p.startsWith(`${cwd}/`)) return p.slice(cwd.length + 1);
+  return null;
+}
+
+/** Opens a file of the active chat as a panel tab (at most eight tabs). */
+export function openFile(path) {
+  const s = store.get();
+  const cwd = s.header?.cwd ?? s.sessions.find((x) => x.id === s.activeId)?.cwd ?? '';
+  const rel = relTo(cwd, path);
+  if (rel == null || !s.activeId) { toast(t.outsideFolder); return; }
+  const files = s.panel.files.includes(rel) ? s.panel.files : [...s.panel.files, rel].slice(-8);
+  setPanel({ open: true, files, tab: `file:${rel}` });
+}
+
+export function closeFile(rel) {
+  const p = store.get().panel;
+  const files = p.files.filter((f) => f !== rel);
+  const tab = p.tab === `file:${rel}` ? (files.length ? `file:${files[files.length - 1]}` : 'changes') : p.tab;
+  setPanel({ files, tab });
 }
 
 export const openPalette = () => store.set({ palette: true });

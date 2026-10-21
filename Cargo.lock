@@ -595,14 +595,17 @@ dependencies = [
  "base64 0.22.1",
  "dshx-core",
  "futures",
+ "mime_guess",
  "reqwest",
  "rust-embed",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "tokio-tungstenite 0.28.0",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -11,6 +11,7 @@ import {
 } from '../icons.js';
 import { Shimmer, useImage } from './common.js';
 import { CodexRow } from './codex.js';
+import { openFile } from '../state.js';
 
 const resultText = (r) => (r?.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
 const errorReason = (r) => r?.error?.reason || resultText(r).replace(/^Error:\s*/, '') || t.failed;
@@ -24,14 +25,19 @@ export function relPath(path, cwd) {
 
 const extOf = (p) => (p.match(/\.([a-z0-9+]+)$/i)?.[1] ?? '').toLowerCase();
 
-function Row({ icon, title, summary, mono, running, error, badge, open, onToggle, children, state }) {
+/** `path` makes the summary a link that opens the file in the side panel. */
+function Row({ icon, title, summary, mono, running, error, badge, open, onToggle, children, state, path }) {
   const expandable = !!onToggle;
+  const click = (e) => {
+    if (path && e.target.closest('.row-path')) { e.stopPropagation(); openFile(path); return; }
+    onToggle?.();
+  };
   return html`<div class=${cx('tool', open && 'is-open')} data-state=${state ?? (running ? 'running' : error ? 'error' : 'done')}>
-    <button type="button" class=${cx('row', expandable && 'is-expandable')} onClick=${onToggle} aria-expanded=${expandable ? !!open : undefined}
-      tabindex=${expandable ? 0 : -1}>
+    <button type="button" class=${cx('row', (expandable || path) && 'is-expandable')} onClick=${click} aria-expanded=${expandable ? !!open : undefined}
+      tabindex=${expandable || path ? 0 : -1}>
       <span class="lead">${icon}</span>
       <${Shimmer} active=${running}><span class="row-title">${title}</span></${Shimmer}>
-      ${summary ? html`<span class="sep" /><span class=${cx('row-summary', mono && 'mono', error && 'is-error')} title=${summary}>${summary}</span>` : null}
+      ${summary ? html`<span class="sep" /><span class=${cx('row-summary', mono && 'mono', error && 'is-error', path && !error && 'row-path')} title=${summary}>${summary}</span>` : null}
       ${badge}
       ${expandable ? html`<span class="chev"><${IconChevronRight} size=${12} /></span>` : null}
     </button>
@@ -101,7 +107,7 @@ function ReadRow({ item, cwd }) {
   const range = lines?.length ? t.lines(lines[0].number, lines[lines.length - 1].number) : '';
   const lang = meta?.lang ?? extOf(path);
   return html`<${Row} icon=${html`<${IconFile} size=${14} />`} title=${running ? t.reading : t.read}
-      summary=${failed ? errorReason(result) : path} running=${running} error=${failed}
+      summary=${failed ? errorReason(result) : path} running=${running} error=${failed} path=${failed ? null : meta?.path ?? args.file_path}
       badge=${range && !failed ? html`<span class="row-meta">${range}</span>` : null}
       open=${open} onToggle=${lines ? toggle : undefined}>
     ${lines ? html`<div class="code-panel"><${Clamp} lines=${lines} max=${18} render=${(ls) => html`<table class="code-lines"><tbody>
@@ -112,7 +118,7 @@ function ReadRow({ item, cwd }) {
 
 // ---- write / edit ----------------------------------------------------------
 
-function Diff({ hunks, lang }) {
+export function Diff({ hunks, lang }) {
   const rows = hunks.flatMap((h, i) => [...(i ? [{ op: 'gap' }] : []), ...h]);
   return html`<div class="diff"><${Clamp} lines=${rows} max=${24} render=${(rs) => html`<table class="diff-table"><tbody>
     ${rs.map((r) => (r.op === 'gap'
@@ -123,19 +129,27 @@ function Diff({ hunks, lang }) {
   </tbody></table>`} /></div>`;
 }
 
+/** Diff hunks of an edit or write: the tool's own diffs, else the arguments. */
+export function editHunks(item) {
+  const { args, result, name } = item;
+  const meta = result?.meta;
+  if (meta?.diffs?.length) return meta.diffs.map((d) => diffLines(d.oldText, d.newText));
+  if (name === 'write') return [diffLines(null, args.content ?? '')];
+  if (name === 'edit' && (args.old_string || args.new_string)) return [diffLines(args.old_string || null, args.new_string ?? '')];
+  return [];
+}
+
+/** Absolute or relative path an edit/write touched. */
+export const editPath = (item) => item.result?.meta?.path ?? item.args.file_path ?? item.result?.meta?.diffs?.[0]?.path ?? '';
+
 function EditRow({ item, cwd }) {
   const { args, result, name } = item;
   const running = !result;
   const failed = result?.isError;
   const meta = result?.meta;
-  const path = relPath(meta?.path ?? args.file_path ?? meta?.diffs?.[0]?.path, cwd);
+  const path = relPath(editPath(item), cwd);
   const create = name === 'write' && (meta?.operation === 'create' || (!meta?.diffs?.length && running));
-  const hunks = useMemo(() => {
-    if (meta?.diffs?.length) return meta.diffs.map((d) => diffLines(d.oldText, d.newText));
-    if (name === 'write') return [diffLines(null, args.content ?? '')];
-    if (name === 'edit' && (args.old_string || args.new_string)) return [diffLines(args.old_string || null, args.new_string ?? '')];
-    return [];
-  }, [result, item.argsRaw]);
+  const hunks = useMemo(() => editHunks(item), [result, item.argsRaw]);
   const { add, del } = countChanges(hunks.flat());
   const [open, toggle] = useOpen(!failed);
   const title = create ? (running ? t.creating : t.created) : running ? t.editing : t.edited;
@@ -144,6 +158,7 @@ function EditRow({ item, cwd }) {
     : null;
   return html`<${Row} icon=${html`<${IconPencil} size=${14} />`} title=${title}
       summary=${failed ? `${path} · ${errorReason(result)}` : path} running=${running} error=${failed}
+      path=${failed || running ? null : editPath(item)}
       badge=${html`<${ApprovalBadge} item=${item} />${counts}`}
       open=${open} onToggle=${hunks.length && !failed ? toggle : undefined}>
     <${Diff} hunks=${hunks} lang=${extOf(path)} />

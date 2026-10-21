@@ -46,6 +46,9 @@ export const IconPanelRight = icon(html`<rect x="1.75" y="2.75" width="12.5" hei
 export const IconUnread = icon(html`<path d="M13.25 7.2v4.55a1.5 1.5 0 0 1-1.5 1.5h-7.5a1.5 1.5 0 0 1-1.5-1.5v-7.5a1.5 1.5 0 0 1 1.5-1.5H8.8" ...${S}/><circle cx="12.25" cy="3.75" r="1.75" fill="currentColor"/>`);
 export const IconCopy = icon(html`<rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.75" ...${S}/><path d="M10.75 5.25V3.5A1.25 1.25 0 0 0 9.5 2.25h-6A1.25 1.25 0 0 0 2.25 3.5v6a1.25 1.25 0 0 0 1.25 1.25h1.75" ...${S}/>`);
 export const IconSun = icon(html`<circle cx="8" cy="8" r="2.75" ...${S}/><path d="M8 1.75v1.5M8 12.75v1.5M14.25 8h-1.5M3.25 8h-1.5M12.4 3.6l-1.05 1.05M4.65 11.35 3.6 12.4M12.4 12.4l-1.05-1.05M4.65 4.65 3.6 3.6" ...${S}/>`);
+export const IconRefresh = icon(html`<path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71" ...${S}/><path d="M13.4 2.6v3h-3" ...${S}/>`);
+export const IconExternal = icon(html`<path d="M9.25 2.75h4v4M13.1 2.9 7.75 8.25" ...${S}/><path d="M11.75 9.5v2.75a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1H6.5" ...${S}/>`);
+export const IconDiff = icon(html`<path d="M4.5 2.25v6.5M1.25 5.5h6.5M8.25 12.5h6.5" ...${S}/><path d="M11.5 2.5 9.75 13.5" ...${S}/>`);
 export const IconKey = icon(html`<circle cx="5.5" cy="10.5" r="2.75" ...${S}/><path d="m7.5 8.5 5.75-5.75M11 5l1.75 1.75M9.5 6.5l1.25 1.25" ...${S}/>`);
 
 /**

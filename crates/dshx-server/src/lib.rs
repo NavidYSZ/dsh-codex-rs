@@ -3,7 +3,10 @@
 //! The server only translates HTTP to calls on a [`Backend`]; the binary wires the
 //! backend to the agent, the session store and the settings.
 
+mod preview;
+
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -102,6 +105,11 @@ pub trait Backend: Send + Sync + 'static {
         let _ = (id, patch);
         anyhow::bail!("not supported")
     }
+    /// The chat's working folder; the side panel previews files inside it.
+    async fn session_root(&self, id: &str) -> anyhow::Result<PathBuf> {
+        let _ = id;
+        anyhow::bail!("not supported")
+    }
     async fn approve(&self, call_id: &str, decision: &str) -> anyhow::Result<()>;
     async fn save_attachment(
         &self,
@@ -141,6 +149,7 @@ struct UiAssets;
 struct AppState {
     backend: Arc<dyn Backend>,
     token: Arc<str>,
+    previews: Arc<preview::Grants>,
 }
 
 struct ApiError(anyhow::Error);
@@ -169,6 +178,7 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
     let state = AppState {
         backend,
         token: token.into(),
+        previews: Arc::default(),
     };
     let api = Router::new()
         .route("/info", get(info))
@@ -181,6 +191,8 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         )
         .route("/sessions/{id}/prompt", post(prompt))
         .route("/sessions/{id}/cancel", post(cancel))
+        .route("/sessions/{id}/preview", post(preview_grant))
+        .route("/sessions/{id}/files", get(list_files))
         .route("/approvals/{call_id}", post(approve))
         .route("/attachments", post(save_attachment))
         .route("/attachments/{id}", get(load_attachment))
@@ -191,6 +203,8 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         ));
     Router::new()
         .nest("/api", api)
+        .route("/preview/{grant}/", get(preview_index))
+        .route("/preview/{grant}/{*path}", get(preview_file))
         .fallback(get(static_file))
         .with_state(state)
 }
@@ -219,15 +233,7 @@ async fn require_token(
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    // Only localhost may talk to us (DNS-rebinding guard).
-    let host_ok = headers
-        .get(header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .map(|h| {
-            let name = h.rsplit_once(':').map_or(h, |(n, _)| n);
-            matches!(name, "127.0.0.1" | "localhost" | "[::1]")
-        })
-        .unwrap_or(false);
+    let host_ok = local_host(&headers);
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -246,6 +252,18 @@ async fn require_token(
             .into_response();
     }
     next.run(request).await
+}
+
+/// Only localhost may talk to us (DNS-rebinding guard).
+fn local_host(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .map(|h| {
+            let name = h.rsplit_once(':').map_or(h, |(n, _)| n);
+            matches!(name, "127.0.0.1" | "localhost" | "[::1]")
+        })
+        .unwrap_or(false)
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -449,6 +467,102 @@ async fn load_attachment(State(s): State<AppState>, Path(id): Path<String>) -> A
         data,
     )
         .into_response())
+}
+
+async fn preview_grant(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let root = s.backend.session_root(&id).await?.canonicalize()?;
+    let grant = s.previews.grant(&root);
+    Ok(Json(
+        json!({ "base": format!("/preview/{grant}/"), "root": root.display().to_string() }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct DirQuery {
+    #[serde(default)]
+    dir: String,
+}
+
+async fn list_files(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<DirQuery>,
+) -> ApiResult<Json<Value>> {
+    let root = s.backend.session_root(&id).await?;
+    let dir = preview::resolve_inside(&root, &q.dir).ok_or_else(|| NotFound(q.dir.clone()))?;
+    let (entries, truncated) =
+        tokio::task::spawn_blocking(move || preview::list(&root, &dir)).await??;
+    Ok(Json(
+        json!({ "dir": q.dir.trim_matches('/'), "entries": entries, "truncated": truncated }),
+    ))
+}
+
+async fn preview_index(
+    State(s): State<AppState>,
+    Path(grant): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    serve_preview(&s, &grant, "", &headers).await
+}
+
+async fn preview_file(
+    State(s): State<AppState>,
+    Path((grant, path)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    serve_preview(&s, &grant, &path, &headers).await
+}
+
+/// One file of a granted folder; folders serve their `index.html`.
+async fn serve_preview(s: &AppState, grant: &str, rel: &str, headers: &HeaderMap) -> Response {
+    let not_found = || StatusCode::NOT_FOUND.into_response();
+    if !local_host(headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let Some(root) = s.previews.root(grant) else {
+        return not_found();
+    };
+    let Some(mut path) = preview::resolve_inside(&root, rel) else {
+        return not_found();
+    };
+    if path.is_dir() {
+        path.push("index.html");
+        if !path.is_file() {
+            return not_found();
+        }
+    }
+    match tokio::fs::metadata(&path).await {
+        Ok(m) if m.len() <= preview::MAX_FILE => {}
+        Ok(_) => return StatusCode::PAYLOAD_TOO_LARGE.into_response(),
+        Err(_) => return not_found(),
+    }
+    let Ok(data) = tokio::fs::read(&path).await else {
+        return not_found();
+    };
+    let (mime, active) = preview::content_type(&path);
+    let mut response = (
+        [
+            (header::CONTENT_TYPE, mime),
+            (header::CACHE_CONTROL, "no-store".to_owned()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (header::REFERRER_POLICY, "no-referrer".to_owned()),
+        ],
+        data,
+    )
+        .into_response();
+    if active {
+        // Scripts may run, but in an opaque origin: no access to this app.
+        response.headers_mut().insert(
+            header::CONTENT_SECURITY_POLICY,
+            header::HeaderValue::from_static(
+                "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads",
+            ),
+        );
+    }
+    response
 }
 
 #[derive(Deserialize)]

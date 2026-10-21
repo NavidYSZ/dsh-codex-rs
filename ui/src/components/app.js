@@ -4,14 +4,15 @@ import { useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, newChat, toggleSidebar, renameSession } from '../state.js';
+import { store, newChat, toggleSidebar, renameSession, togglePanel } from '../state.js';
 import { buildTranscript } from '../reduce.js';
-import { IconCompose, IconSidebar, IconMore, Mark } from '../icons.js';
+import { IconCompose, IconSidebar, IconMore, IconPanelRight, Mark } from '../icons.js';
 import { Transcript } from './transcript.js';
 import { ComposerSeat, WorkspaceMenu, workspaceName } from './composer.js';
 import { Settings } from './settings.js';
 import { Sidebar, ChatMenu } from './sidebar.js';
 import { Palette } from './palette.js';
+import { Panel } from './panel.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
@@ -33,6 +34,7 @@ function EditableTitle({ row, title }) {
 
 function TopBar({ title, sub, row }) {
   const collapsed = useStore(store, (s) => s.sidebarCollapsed);
+  const panelOpen = useStore(store, (s) => s.panel.open);
   const [menu, setMenu] = useState(false);
   const anchor = useRef(null);
   return html`<header class=${cx('topbar', collapsed && 'is-collapsed')}>
@@ -45,6 +47,8 @@ function TopBar({ title, sub, row }) {
       ${sub ? html`<span class="tb-sub">${sub}</span>` : null}
     </div>
     <span class="spacer" />
+    ${row ? html`<button type="button" class=${cx('icon-btn', panelOpen && 'is-on')} aria-label=${t.sidePanel} title=${t.sidePanel}
+        aria-pressed=${panelOpen} onClick=${togglePanel}><${IconPanelRight} size=${16} /></button>` : null}
     ${row ? html`<button type="button" ref=${anchor} class="icon-btn" aria-label=${t.more} title=${t.more} aria-haspopup="menu"
         onClick=${() => setMenu((v) => !v)}><${IconMore} size=${16} /></button>
       <${ChatMenu} s=${row} open=${menu} onClose=${() => setMenu(false)} anchor=${anchor} />` : null}
@@ -83,10 +87,13 @@ function Chat() {
   const title = hero ? '' : listed?.title || tx.title || (pending?.text ?? '') || t.newChat;
   const cwd = header?.cwd ?? listed?.cwd ?? '';
   const sub = hero || listed?.scratch ? '' : workspaceName(cwd);
-  return html`<div class=${cx('chat', hero && 'is-hero')}>
-    <${TopBar} title=${title} sub=${sub} row=${listed} />
-    ${hero ? html`<${Hero} />` : html`<${Transcript} tx=${tx} deltas=${deltas} status=${status} pending=${pending} cwd=${cwd} />`}
-    <${ComposerSeat} hero=${hero} tx=${hero ? null : tx} />
+  return html`<div class="workspace">
+    <div class=${cx('chat', hero && 'is-hero')}>
+      <${TopBar} title=${title} sub=${sub} row=${listed} />
+      ${hero ? html`<${Hero} />` : html`<${Transcript} tx=${tx} deltas=${deltas} status=${status} pending=${pending} cwd=${cwd} />`}
+      <${ComposerSeat} hero=${hero} tx=${hero ? null : tx} />
+    </div>
+    ${hero ? null : html`<${Panel} tx=${tx} />`}
   </div>`;
 }
 

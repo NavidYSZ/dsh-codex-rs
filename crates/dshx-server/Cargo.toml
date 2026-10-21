@@ -18,7 +18,10 @@ axum = { version = "0.8", features = ["ws"] }
 base64.workspace = true
 sha2 = "0.10"
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
+mime_guess = "2"
+uuid.workspace = true
 
 [dev-dependencies]
 reqwest.workspace = true
+tempfile.workspace = true
 tokio-tungstenite = "0.28"

@@ -3,8 +3,15 @@
 import { Marked } from 'marked';
 import { highlight, esc } from './highlight.js';
 import { t } from './i18n.js';
+import { openFile } from './state.js';
 
 const safeHref = (href) => (/^(https?:|mailto:|#)/i.test(href ?? '') ? href : null);
+
+// File references open in the side panel: links without a scheme, and inline
+// code that names a file with a known extension ("src/app.js", "README.md:12").
+const EXT = 'md|mdx|txt|js|mjs|cjs|ts|tsx|jsx|json|jsonl|py|rs|go|java|kt|swift|c|h|cc|cpp|hpp|cs|rb|php|html?|css|scss|less|sql|sh|zsh|bash|ya?ml|toml|ini|cfg|conf|env|csv|tsv|xml|svg|png|jpe?g|gif|webp|pdf|lock|vue|svelte|lua|r|dart|ex|exs|log|ipynb|mp4|mp3|wav|docx|xlsx|pptx|gradle|dockerfile';
+const FILE_RE = new RegExp(`^(\\.{0,2}/|/)?[\\w@.+-]+(/[\\w@.+-]+)*\\.(${EXT})(:\\d+(-\\d+)?)?$`, 'i');
+const isFileRef = (s) => !/^[a-z][a-z0-9+.-]*:/i.test(s) && FILE_RE.test(s.trim());
 
 const md = new Marked({
   gfm: true,
@@ -16,8 +23,16 @@ const md = new Marked({
     link({ href, title, tokens }) {
       const label = this.parser.parseInline(tokens);
       const h = safeHref(href);
+      if (!h && href && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+        return `<a href="#" class="md-path" data-path="${esc(decodeURI(href))}">${label}</a>`;
+      }
       if (!h) return label;
       return `<a href="${esc(h)}" target="_blank" rel="noopener noreferrer"${title ? ` title="${esc(title)}"` : ''}>${label}</a>`;
+    },
+    codespan({ text }) {
+      // marked 18 hands over raw text; escaping is the renderer's job.
+      if (isFileRef(text)) return `<code class="md-path" data-path="${esc(text)}" title="${esc(t.open)}">${esc(text)}</code>`;
+      return `<code>${esc(text)}</code>`;
     },
     image({ href, text }) {
       return `<span class="md-img">${esc(text || href || '')}</span>`;
@@ -53,6 +68,12 @@ export function renderMarkdown(src) {
 
 /** Delegated click handler for the copy buttons inside rendered Markdown. */
 export function onMarkdownClick(ev) {
+  const ref = ev.target.closest?.('[data-path]');
+  if (ref) {
+    ev.preventDefault();
+    openFile(ref.dataset.path);
+    return;
+  }
   const btn = ev.target.closest?.('[data-copy]');
   if (!btn) return;
   const code = btn.closest('.md-code')?.querySelector('pre')?.textContent ?? '';

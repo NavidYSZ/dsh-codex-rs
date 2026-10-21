@@ -12,6 +12,7 @@ struct Fake {
     events: Mutex<Vec<SessionEvent>>,
     prompts: Mutex<Vec<String>>,
     tx: broadcast::Sender<StreamMessage>,
+    root: Mutex<Option<std::path::PathBuf>>,
 }
 
 fn event(seq: u64, kind: &str) -> SessionEvent {
@@ -98,6 +99,11 @@ impl Backend for Fake {
     fn stream(&self) -> broadcast::Receiver<StreamMessage> {
         self.tx.subscribe()
     }
+    async fn session_root(&self, id: &str) -> anyhow::Result<std::path::PathBuf> {
+        let root = self.root.lock().unwrap().clone();
+        root.filter(|_| id == "s1")
+            .ok_or_else(|| NotFound(id.to_owned()).into())
+    }
 }
 
 async fn start() -> (String, Arc<Fake>) {
@@ -105,6 +111,7 @@ async fn start() -> (String, Arc<Fake>) {
         events: Mutex::new(vec![event(0, "turn/start"), event(1, "step/start")]),
         prompts: Mutex::new(vec![]),
         tx: broadcast::channel(64).0,
+        root: Mutex::new(None),
     });
     let (addr, _handle) = serve(fake.clone(), "secret".into(), 0).await.unwrap();
     (format!("127.0.0.1:{}", addr.port()), fake)
@@ -287,4 +294,87 @@ async fn serves_ui_with_csp_and_accepts_after_minus_one() {
     let first: Value =
         serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
     assert_eq!(first["event"]["seq"], 0);
+}
+
+#[tokio::test]
+async fn previews_serve_only_the_chats_folder() {
+    let (addr, fake) = start().await;
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("project");
+    std::fs::create_dir_all(root.join("site")).unwrap();
+    std::fs::write(root.join("site/index.html"), "<h1>hi</h1>").unwrap();
+    std::fs::write(root.join("notes.md"), "# notes").unwrap();
+    std::fs::write(tmp.path().join("secret.txt"), "no").unwrap();
+    *fake.root.lock().unwrap() = Some(root);
+    let http = reqwest::Client::new();
+    let api = |p: &str| format!("http://{addr}/api{p}");
+
+    let grant: Value = http
+        .post(api("/sessions/s1/preview"))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let base = format!("http://{addr}{}", grant["base"].as_str().unwrap());
+
+    // A folder serves its index.html, sandboxed into an opaque origin.
+    let r = http.get(format!("{base}site/")).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let csp = r.headers()["content-security-policy"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(csp.starts_with("sandbox allow-scripts"), "{csp}");
+    assert_eq!(r.text().await.unwrap(), "<h1>hi</h1>");
+    let r = http.get(format!("{base}notes.md")).send().await.unwrap();
+    assert_eq!(r.headers()["x-content-type-options"], "nosniff");
+    assert!(r.headers().get("content-security-policy").is_none());
+
+    // Nothing outside the folder, no made-up grants, no foreign hosts.
+    let r = http
+        .get(format!("{base}..%2Fsecret.txt"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
+    let r = http
+        .get(format!("http://{addr}/preview/nope/notes.md"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
+    let r = http
+        .get(format!("{base}notes.md"))
+        .header("host", "evil.example")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 401);
+
+    let list: Value = http
+        .get(api("/sessions/s1/files?dir="))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let names: Vec<_> = list["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["path"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(names, ["site", "notes.md"], "folders first");
+    let r = http
+        .get(api("/sessions/s1/files?dir=.."))
+        .bearer_auth("secret")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
 }

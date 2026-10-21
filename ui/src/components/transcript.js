@@ -4,10 +4,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { html, cx } from '../html.js';
 import { t, duration } from '../i18n.js';
 import { renderMarkdown, onMarkdownClick } from '../markdown.js';
-import { IconAlert, IconArrowDown, IconChevronRight } from '../icons.js';
+import { IconAlert, IconArrowDown, IconChevronRight, IconFile } from '../icons.js';
 import { Shimmer, Thumb } from './common.js';
 import { ToolItem } from './tools.js';
-import { openSettings } from '../state.js';
+import { openSettings, openPanel, openFile } from '../state.js';
+import { collectChanges, Counts } from './panel.js';
 
 export function Markdown({ text, class: klass }) {
   const htmlText = useMemo(() => renderMarkdown(text), [text]);
@@ -62,6 +63,25 @@ function Retry({ retry }) {
   return html`<div class="notice-line tone-warn">${t.retrying(retry.retry, retry.max ?? '∞', duration(Math.max(left, 1000)), why)}</div>`;
 }
 
+/** Codex's "N files changed" card under a finished turn. */
+function ChangesCard({ turn, cwd }) {
+  const changes = useMemo(() => collectChanges([turn], cwd), [turn, cwd]);
+  if (!changes.length) return null;
+  const total = changes.reduce((n, f) => ({ add: n.add + f.add, del: n.del + f.del }), { add: 0, del: 0 });
+  const shown = changes.slice(0, 6);
+  return html`<div class="changes-card">
+    <div class="changes-head">
+      <span class="changes-title">${t.filesChanged(changes.length)}</span><${Counts} ...${total} />
+      <span class="spacer" />
+      <button type="button" class="link-btn" onClick=${() => openPanel('changes')}>${t.review}</button>
+    </div>
+    ${shown.map((f) => html`<button type="button" key=${f.path} class="changes-file" onClick=${() => openFile(f.path)}>
+      <${IconFile} size=${13} /><span class="changes-path" title=${f.rel}>${f.rel}</span><${Counts} add=${f.add} del=${f.del} />
+    </button>`)}
+    ${changes.length > shown.length ? html`<button type="button" class="changes-file changes-more" onClick=${() => openPanel('changes')}>+${changes.length - shown.length}</button>` : null}
+  </div>`;
+}
+
 /** Work items between the prompt and the final answer can fold under "Worked for …". */
 function Turn({ turn, live, deltas, cwd }) {
   const [folded, setFolded] = useState(false);
@@ -108,6 +128,7 @@ function Turn({ turn, live, deltas, cwd }) {
         : html`<${Markdown} key=${`live-t-${deltas.key}-${index}`} text=${b.text} class=${next ? '' : 'is-streaming'} />`);
     });
   }
+  if (done) out.push(html`<${ChangesCard} key="changes" turn=${turn} cwd=${cwd} />`);
   if (live && turn.retry) out.push(html`<${Retry} key="retry" retry=${turn.retry} />`);
   const busyTool = items.some((x) => x.kind === 'tool' && !x.result);
   if (live && !streaming && !busyTool && !turn.retry) {

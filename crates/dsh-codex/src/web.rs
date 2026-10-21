@@ -331,6 +331,16 @@ impl Backend for WebBackend {
         Ok(id)
     }
 
+    async fn session_root(&self, id: &str) -> anyhow::Result<PathBuf> {
+        if let Some(s) = self.open.lock().await.get(id) {
+            return Ok(s.cwd.clone());
+        }
+        let row = self.runtime.store.list()?.into_iter().find(|r| r.id == id);
+        Ok(PathBuf::from(
+            row.ok_or_else(|| NotFound(id.to_owned()))?.cwd,
+        ))
+    }
+
     async fn update_session(&self, id: &str, patch: Value) -> anyhow::Result<Value> {
         if self.runtime.store.locate(id)?.is_none() && !self.open.lock().await.contains_key(id) {
             return Err(NotFound(id.to_owned()).into());

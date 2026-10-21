@@ -90,6 +90,9 @@ class HttpApi {
   updateSession(id, patch) { return this.req('PATCH', `/api/sessions/${enc(id)}`, patch); }
   prompt(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/prompt`, body); }
   cancel(id) { return this.req('POST', `/api/sessions/${enc(id)}/cancel`); }
+  /** `{base, root}`: `base` serves the chat's folder read-only for previews. */
+  preview(id) { return this.req('POST', `/api/sessions/${enc(id)}/preview`); }
+  files(id, dir) { return this.req('GET', `/api/sessions/${enc(id)}/files?dir=${enc(dir ?? '')}`); }
   deleteSession(id) { return this.req('DELETE', `/api/sessions/${enc(id)}`); }
   decide(callId, decision) { return this.req('POST', `/api/approvals/${enc(callId)}`, { decision }); }
   upload(file) { return this.req('POST', '/api/attachments', undefined, file); }
@@ -417,6 +420,19 @@ class FixtureApi {
     this.fx.approval = null;
     this.setStatus('idle');
     return null;
+  }
+
+  async preview() {
+    await this.ready;
+    return { base: 'fixtures/files/', root: this.sessionData?.header.cwd ?? '' };
+  }
+
+  async files(_id, dir) {
+    await this.ready;
+    const all = this.fx.files ?? this.shared.files ?? [];
+    const prefix = dir ? `${dir}/` : '';
+    const entries = all.filter((e) => e.path.startsWith(prefix) && !e.path.slice(prefix.length).includes('/'));
+    return { dir: dir ?? '', entries, truncated: false };
   }
 
   async deleteSession(id) {

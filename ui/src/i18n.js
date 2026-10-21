@@ -111,6 +111,13 @@ const EN = {
   toggleTheme: 'Switch light or dark', inProject: (n) => `in ${n}`,
   // desktop instances
   instances: 'Instances', addInstance: 'Add instance…', manageInstances: 'Manage instances…',
+  // side panel
+  changes: 'Changes', filesTab: 'Files', sidePanel: 'Side panel', closePanel: 'Close panel', closeTab: 'Close',
+  filesChanged: (n) => `${n} ${n === 1 ? 'file' : 'files'} changed`, review: 'Review',
+  preview: 'Preview', source: 'Source', reload: 'Reload', openNewTab: 'Open in new tab', openInEditor: 'Open in editor',
+  noChanges: 'No files changed in this chat yet', notFound: 'File not found', tooLarge: 'Too large to preview',
+  binary: 'Binary file, no preview', outsideFolder: 'Only files in this chat’s folder can be previewed',
+  emptyFolder: 'Empty folder', firstRows: (n) => `First ${n} rows`, loading: 'Loading…', open: 'Open',
 };
 
 const DE = {
@@ -213,6 +220,12 @@ const DE = {
   paletteHint: 'Chats und Aktionen suchen', actions: 'Aktionen', noResults: 'Keine Treffer',
   toggleTheme: 'Hell oder dunkel', inProject: (n) => `in ${n}`,
   instances: 'Instanzen', addInstance: 'Instanz hinzufügen …', manageInstances: 'Instanzen verwalten …',
+  changes: 'Änderungen', filesTab: 'Dateien', sidePanel: 'Seitenpanel', closePanel: 'Panel schließen', closeTab: 'Schließen',
+  filesChanged: (n) => `${n} ${n === 1 ? 'Datei' : 'Dateien'} geändert`, review: 'Ansehen',
+  preview: 'Vorschau', source: 'Quelle', reload: 'Neu laden', openNewTab: 'In neuem Tab öffnen', openInEditor: 'Im Editor öffnen',
+  noChanges: 'In diesem Chat wurden noch keine Dateien geändert', notFound: 'Datei nicht gefunden', tooLarge: 'Zu groß für die Vorschau',
+  binary: 'Binärdatei, keine Vorschau', outsideFolder: 'Vorschau nur für Dateien im Ordner dieses Chats',
+  emptyFolder: 'Leerer Ordner', firstRows: (n) => `Erste ${n} Zeilen`, loading: 'Lädt …', open: 'Öffnen',
 };
 
 export const t = de ? DE : EN;
