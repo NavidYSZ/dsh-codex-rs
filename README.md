@@ -47,8 +47,9 @@ parallel agents, many short jobs, and on small machines.
 - **No JS plugins.** Extensions are skills, MCP servers and plugins in the
   Codex/Claude formats (skills and MCP servers; hooks, commands and agents
   are not loaded).
-- Not ported: web search, agent teams, workflows/`run_code`, schedules, goals, voice,
-  office documents, the Electron app.
+- Not ported: web search, workflows/`run_code`, voice, office documents, the
+  Electron app. Goals, schedules and Agent Teams are ported (see
+  [Configuration](#configuration)).
 
 ## Build
 
@@ -173,6 +174,37 @@ chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 doneAfter = 6
 ```
 
+Goals, schedules and Agent Teams work like in DSH 0.2.0-rc.2. Goals are on
+(as in dsh-base); schedules (with the request clock) and Agent Teams are
+opt-in like the DSH experimental bundles:
+
+```toml
+[codex.goal]
+default_max_goal_rounds = 256          # cap of a goal created without max_goal_rounds
+blocked_after_consecutive_rounds = 3   # rounds before the model may report "blocked"
+
+[codex.schedule]
+enabled = true                         # schedule_* tools; `dsh-codex web` delivers reminders
+delivery_history_days = 30
+delivery_history_records = 200
+
+[codex.time_context]                   # follows schedule.enabled unless set
+time_zone = "Europe/Berlin"            # default: the system zone
+refresh_interval_ms = 600000
+
+[codex.team]
+enabled = true                         # Team tools replace subagent/subagent_fork
+max_members = 8
+max_tasks = 256
+max_pending_messages_per_member = 64
+max_message_bytes = 65536
+```
+
+Reminders live in `~/.dsh-codex/storages/schedule.json`. The web server
+exposes them, the session goal and the Team under `/api/schedules`,
+`/api/sessions/:id/goal` and `/api/sessions/:id/team`
+([protocol](docs/rust/SPEC.md#6-ui--server-protocol)).
+
 MCP servers and skills work like in DSH:
 
 ```toml
@@ -243,6 +275,9 @@ Sessions live in `~/.dsh-codex/sessions`, attachments in
 | `crates/dshx-tools` | bash, files, search, jobs, web fetch, skills, sandbox |
 | `crates/dshx-agent` | Agent loop, prompt, AGENTS.md, compaction |
 | `crates/dshx-subagent` | In-process subagents (`subagent`, `subagent_fork`, `send_message`, …) |
+| `crates/dshx-goal` | Goals (`get_goal`, `create_goal`, `update_goal`) and the goal-round driver |
+| `crates/dshx-schedule` | Reminders (`schedule_*`), their store and delivery, the request clock |
+| `crates/dshx-team` | Agent Teams: teammates, Team mailbox, shared task board |
 | `crates/dshx-mcp` | MCP client (stdio and Streamable HTTP), OAuth logins, connector catalog |
 | `crates/dshx-plugins` | Plugin manifests, plugin MCP servers, marketplaces |
 | `crates/dshx-browser` | Background Chrome over a DevTools pipe (`browser` tool) |

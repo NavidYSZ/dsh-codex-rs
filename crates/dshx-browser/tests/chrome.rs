@@ -210,6 +210,7 @@ fn ctx_with(store: Arc<MemStore>, images: bool, cancel: CancellationToken) -> To
         model_accepts_images: images,
         approver: Arc::new(AllowAll),
         state: Arc::new(()),
+        caller: None,
     }
 }
 

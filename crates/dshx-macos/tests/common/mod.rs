@@ -263,6 +263,7 @@ pub fn context(store: Arc<MemStore>, images: bool) -> ToolContext {
         model_accepts_images: images,
         approver: Arc::new(Deny),
         state: Arc::new(()),
+        caller: None,
     }
 }
 

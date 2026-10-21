@@ -20,7 +20,8 @@ Workers propose changes in their final report instead of editing this file.
    no telemetry. Only what the model request needs.
 
 Non-goals: Cordis/JS plugin compatibility, the official DSH web API, Electron desktop, voice,
-office, workflow/PTC (`run_code`, `workflow`), agent teams, schedules, goals (later maybe).
+office, workflow/PTC (`run_code`, `workflow`). Goals, schedules (with time context) and Agent
+Teams are ported (§5.9).
 
 ## 2. Reference material (read-only)
 
@@ -58,6 +59,9 @@ crates/dshx-macos          Swift-helper client + `computer`, `app` tools, mini (
 crates/dshx-mcp            MCP client, OAuth connector logins, connector catalog
 crates/dshx-plugins        plugin manifests, plugin MCP servers, marketplaces
 crates/dshx-server         HTTP/WebSocket server for the UI                    (wave 2)
+crates/dshx-goal           goals: get_goal/create_goal/update_goal, round driver   (automation)
+crates/dshx-schedule       schedules, `storages/schedule.json`, time context       (automation)
+crates/dshx-team           Agent Teams: roster, mailbox, task board, tools         (automation)
 crates/dsh-codex           the binary: CLI (headless, web, sdk)                (wave 2)
 ui/                        Codex-style web UI, no build step                   (worker: ui)
 helper/                    Swift helper — unchanged except additive commands   (worker: macos)
@@ -82,10 +86,14 @@ Read the source; it is short. Summary:
   `Finish { reason, replay_state }`; errors are `FinishReason::Error { failure: LlmFailure }` with
   dsh codes. Retries are done by the agent, not the adapter.
 - `Tool` trait: `schema()`, `concurrency_safe()`, `timeout()`, `describe(args)`, `execute(args, ToolContext)`
-  → `ToolOutput { content: Vec<ToolResultPart>, is_error, value, meta }`. `ToolError` becomes an error
-  result for the model, never a crash.
+  → `ToolOutput { content: Vec<ToolResultPart>, is_error, value, meta, contexts }`; `contexts` are
+  messages for the next step of the turn (dsh `exec.deferContext`). `ToolError` becomes an error
+  result for the model, never a crash; `ToolError::Coded { name, code, message }` (dsh `HarnessError`)
+  additionally logs `error: {name, code}` beside the result.
 - `ToolContext` gives cwd, sandbox mode, cancel token, `AttachmentStore`, `model_accepts_images`,
-  `Approver`, and per-session shared `state`.
+  `Approver`, per-session shared `state`, and `caller: Option<CallerInfo>` (root agent or not, the
+  open turn and its `turn/start` seq, read access to the caller's own log: dsh `exec.agent` plus the
+  turn-boundary projection).
 - `SessionLog` trait: `append(Vec<NewEvent>) -> Vec<SessionEvent>`, `flush()`, `events()`, `subscribe()`.
   `SessionEvent { type, seq, time, data, ..extra }`, header `SessionHeader`. Event names in `kinds`.
 - `Config` (`~/.dsh-codex/config.toml`, `$DSHX_HOME`), incl. `[codex]` = the plugin's
@@ -223,6 +231,37 @@ CLI: `dsh-codex "task"` (headless; flags `--json` NDJSON like dsh, `--session-id
 `initialize`, `session/prompt`, `session/resume`, `session/wait`, `session/working-directory/{get,set}`,
 `shutdown`; notifications `session.event`, `session.status`, `subagent.started`, `subagent.finished`).
 
+### 5.9 Automation: `dshx-goal`, `dshx-schedule`, `dshx-team`
+Ports of the dsh 0.2.0-rc.2 packages, with tool names, descriptions and schemas byte-identical to
+the goldens in `docs/rust/upstream/tools-0.2.0-rc.2/` (compiled with `tools/dev/extract_tool_schemas.mjs`;
+goal and Team tools also checked against captured request headers).
+
+- **Goals** (`dsh-goal`, `dsh-tool-goal`, `dsh-goal-round-driver`; on by default like dsh-base):
+  `goal/change` v1 events in the session (strict replay fold, compare-and-set mutations, process-local
+  `armed`/`disarmed` activation that starts disarmed on every attach). `create_goal`, `edit`, `pause`,
+  `resume` need a direct human turn on a root agent; `complete`/`blocked` are also allowed inside the
+  goal's own round (then the `<goal_complete>`/`<goal_blocked>` wrap-up is deferred as context).
+  The driver (web and SDK hosts) queues one `<goal_round>` follow-up (`source: {kind: "goal", goalId,
+  revision, round}`) whenever the agent is idle and the goal active and armed; a pre-step check admits
+  only that exact round and starts a request series for it. Round cap → `blocked` `round-limit`;
+  a user abort of a round → `pause`; `max-tokens`, agent errors and other aborted turns → disarm.
+- **Schedules** (`dsh-schedule`, opt-in `[codex.schedule] enabled`): host-wide tasks in
+  `$DSHX_HOME/storages/schedule.json` (dsh `storage-json` unit `schedule` v1); `after_seconds`, `at`,
+  `every_seconds`, `daily`, `weekly`, Vixie `cron` with IANA zones (earlier instant of repeated local
+  times, gaps skipped); after downtime a recurring task delivers only its latest missed occurrence; the
+  recurring due tasks of one session go out as one `[SCHEDULE REMINDER BATCH]`. Delivery = follow-up
+  (`source: {kind: "schedule"}`) into the reopened session, flush, then commit target and receipt.
+  Tools only for root agents; only `dsh-codex web` delivers.
+- **Time context** (`dsh-time-context`, follows `schedule.enabled` unless `[codex.time_context]
+  enabled` says otherwise): a `time-context` snapshot user message as the last message of a step,
+  at most once per `refresh_interval_ms` (600000).
+- **Agent Teams** (`dsh-experimental-agent-team-profile`, opt-in `[codex.team] enabled`): replaces
+  the subagent tools with `spawn_teammate`, `send_message`, `list_agents`, `wait_agent`,
+  `interrupt_agent`, `team_task_{create,list,get,update}`; `team/member`, `team/task`,
+  `team/message/queued`, `team/message/delivered` v2 events in the Lead session; teammates are
+  continuable children (explicit child id, two-block prompt without return guidance, peer messages
+  steered with `source: {kind: "team-message", ...}`), the system prompt gets `team:policy` (600).
+
 ## 6. UI ↔ server protocol
 
 Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI then sends
@@ -247,6 +286,14 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | POST | `/api/approvals/:callId` | `{decision:"allowed-once"\|"rejected"}` → 204 |
 | POST | `/api/attachments` | raw image body, `Content-Type` → `ImageAttachmentRef` |
 | GET | `/api/attachments/:id` | → image bytes |
+| GET | `/api/sessions/:id/goal` | → `{goal: GoalView \| null}`; `GoalView` = `{id, revision, objective, phase, maxGoalRounds, blockedReason?, roundsStarted, createdAt, updatedAt, activation}` |
+| POST | `/api/sessions/:id/goal` | `{action: "create"\|"edit"\|"pause"\|"resume"\|"clear", objective?, maxGoalRounds?}` (dsh `/goal`) → `{goal}`; refused transitions → 400 |
+| GET | `/api/schedules` | → `[{...record, sessionId, status: "active"\|"inactive", lastDelivery?}]` by `scheduledAt` |
+| GET | `/api/sessions/:id/schedules` | → active reminder views `[{...record, state: "scheduled"\|"overdue", deliveryMode: "host"}]` |
+| PUT | `/api/schedules/:id` | `{title?, prompt?, at?\|every_seconds?\|daily?\|weekly?\|cron?}` (`schedule_update` fields) → view; invalid/ended/conflict → 400, unknown → 404 |
+| DELETE | `/api/schedules/:id` | → `{id, deleted: true}`; unknown → 404 |
+| GET | `/api/schedules/:id/history?limit=&before=` | → `{id, records: [{scheduledAt, deliveredAt, messageId, prompt?}], earlierRecordsUnavailable, earlierRecordsPruned, retention, nextBefore?}` (newest first, `limit` 1-100, default 20) |
+| GET | `/api/sessions/:id/team` | → `{members: [{id, name, role, phase, error?}], tasks: [TaskView], roster: [list_agents rows], failure?}` |
 | WS | `/api/stream?session=:id&after=:seq` | server → client messages below |
 
 ### Plugins page (`Backend::extensions`, routes in `dshx-server/src/extensions.rs`)
@@ -302,6 +349,10 @@ WebSocket messages (JSON):
   streaming text, not persisted; the final `assistant/message` event replaces it.
 - `{"kind":"status","sessionId","status":"idle"|"running"|"waiting-approval"|"error","error"?}`
 - `{"kind":"approval","sessionId","callId","tool","summary","justification"}` — pending approval.
+- `{"kind":"goal","sessionId","goal":GoalView|null}` — goal or activation changed (session clients
+  and the session-less sidebar feed).
+- `{"kind":"schedule-changed"}` — a task was created, updated, delivered or deleted; to every client.
+- `/api/info` additionally carries `automation: {goals, schedules, timeContext, team}`.
 
 ## 7. Conventions
 - Rust 2024, stable toolchain in `~/.cargo/bin` (`export PATH=$HOME/.cargo/bin:$PATH`). `cargo fmt`,

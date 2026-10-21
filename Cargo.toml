@@ -22,6 +22,9 @@ dshx-testkit = { path = "crates/dshx-testkit" }
 dshx-mcp = { path = "crates/dshx-mcp" }
 dshx-subagent = { path = "crates/dshx-subagent" }
 dshx-plugins = { path = "crates/dshx-plugins" }
+dshx-goal = { path = "crates/dshx-goal" }
+dshx-schedule = { path = "crates/dshx-schedule" }
+dshx-team = { path = "crates/dshx-team" }
 
 anyhow = "1"
 async-trait = "0.1"

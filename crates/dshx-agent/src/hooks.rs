@@ -3,9 +3,10 @@
 //! instructions and the runtime context (e.g. `tool-skill`'s session skill
 //! catalog and `/name` invocations). Hooks run in registration order, after
 //! the runtime-context snapshot was appended; each sees the batch the
-//! previous one left.
+//! previous one left. A hook may reject the step (the turn ends `blocked`,
+//! later hooks do not run) or mark it as the start of a request series.
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use dshx_core::{Message, SessionEvent};
@@ -23,7 +24,18 @@ pub struct PreStep<'a> {
     /// Names of the tools offered to the model, sorted.
     pub tools: &'a [String],
     pub cancel: &'a CancellationToken,
+    /// The turn and step being prepared.
+    pub turn: u64,
+    pub step: u64,
     journal: &'a Journal,
+    decision: Mutex<Decision>,
+}
+
+/// What the hooks decided beyond the entering batch.
+#[derive(Debug, Default)]
+pub(crate) struct Decision {
+    pub reject: Option<Vec<Message>>,
+    pub starts_series: bool,
 }
 
 impl PreStep<'_> {
@@ -33,6 +45,24 @@ impl PreStep<'_> {
     pub fn read_history<R>(&self, f: impl FnOnce(&[SessionEvent], &dyn Fn(u64) -> bool) -> R) -> R {
         self.journal
             .read(|events, surface| f(events, &|seq| surface.nodes.contains(&seq)))
+    }
+
+    /// Rejects the step (dsh pre-step `{kind: "reject"}`): nothing enters,
+    /// the turn ends `blocked`, and `restore` goes back to the front of the
+    /// next-step inbox (claimed input that must not be lost).
+    pub fn reject(&self, restore: Vec<Message>) {
+        self.decision.lock().unwrap().reject = Some(restore);
+    }
+
+    /// Whether an earlier hook rejected the step.
+    pub fn rejected(&self) -> bool {
+        self.decision.lock().unwrap().reject.is_some()
+    }
+
+    /// The step's request starts a new request series (dsh
+    /// `startsRequestSeries`, e.g. an automatic goal round).
+    pub fn start_request_series(&self) {
+        self.decision.lock().unwrap().starts_series = true;
     }
 }
 
@@ -52,11 +82,13 @@ pub(crate) async fn run(
     inner: &Arc<Inner>,
     claimed: &[Message],
     entering: &mut Vec<Message>,
+    turn: u64,
+    step: u64,
     cancel: &CancellationToken,
-) {
+) -> Decision {
     let hooks = inner.pre_step_hooks.lock().unwrap().clone();
     if hooks.is_empty() {
-        return;
+        return Decision::default();
     }
     let cwd = inner.config.lock().unwrap().cwd.clone();
     let tools: Vec<String> = inner.tool_schemas().into_iter().map(|t| t.name).collect();
@@ -65,14 +97,18 @@ pub(crate) async fn run(
         claimed,
         tools: &tools,
         cancel,
+        turn,
+        step,
         journal: &inner.journal,
+        decision: Mutex::new(Decision::default()),
     };
     for hook in hooks {
-        if cancel.is_cancelled() {
-            return;
+        if cancel.is_cancelled() || step.rejected() {
+            break;
         }
         if let Err(e) = hook.pre_step(&step, entering).await {
             tracing::warn!("pre-step hook failed: {e:#}");
         }
     }
+    step.decision.into_inner().unwrap()
 }

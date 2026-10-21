@@ -183,6 +183,7 @@ impl Tool for ReadImageTool {
             is_error: false,
             value: Some(value),
             meta: Some(json!({"path": path})),
+            contexts: Vec::new(),
         })
     }
 }

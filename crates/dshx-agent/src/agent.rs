@@ -19,7 +19,7 @@ use crate::events::{
     surface_append, surface_replace,
 };
 use crate::journal::Journal;
-use crate::observer::{AgentObserver, AgentStatus, DeltaKind, NoopObserver, StreamDelta};
+use crate::observer::{AgentObserver, AgentStatus, DeltaKind, StreamDelta};
 use crate::prompt;
 use crate::recovery::ToolCallRecovery;
 use crate::stream::{BlockAssembler, StreamAccumulator};
@@ -78,6 +78,8 @@ pub(crate) struct LoopState {
     pub instructions_prepared: Option<(String, HashSet<String>)>,
     /// The queued prompt the running driver owns (claimed instead of the head).
     pub own_prompt: Option<String>,
+    /// The running turn and the `seq` of its `turn/start`.
+    pub open_turn: Option<(u64, u64)>,
     /// Whether this session already has a title (skips the per-request scan).
     pub titled: bool,
 }
@@ -98,7 +100,7 @@ pub(crate) struct Inner {
     pub journal: Journal,
     pub attachments: Arc<dyn AttachmentStore>,
     pub approver: Arc<dyn Approver>,
-    pub observer: Arc<dyn AgentObserver>,
+    pub observer: Observers,
     pub tool_state: Arc<dyn Any + Send + Sync>,
     pub state: Mutex<LoopState>,
     driver: tokio::sync::Mutex<()>,
@@ -113,6 +115,35 @@ pub(crate) struct Inner {
     pub pre_step_hooks: Mutex<Vec<Arc<dyn crate::hooks::PreStepHook>>>,
 }
 
+/// The agent's live observers: the one from [`AgentDeps`] plus every
+/// [`Agent::add_observer`], notified in that order.
+#[derive(Default)]
+pub(crate) struct Observers(Mutex<Vec<Arc<dyn AgentObserver>>>);
+
+impl Observers {
+    fn all(&self) -> Vec<Arc<dyn AgentObserver>> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl AgentObserver for Observers {
+    fn on_delta(&self, delta: &StreamDelta) {
+        for o in self.all() {
+            o.on_delta(delta);
+        }
+    }
+    fn on_status(&self, status: &AgentStatus) {
+        for o in self.all() {
+            o.on_status(status);
+        }
+    }
+    fn on_attempt(&self, turn: u64, step: u64, attempt: u32) {
+        for o in self.all() {
+            o.on_attempt(turn, step, attempt);
+        }
+    }
+}
+
 /// One coding agent over one session log. Cheap to clone; all clones drive the
 /// same session. Turns are serialized: concurrent [`Agent::run_turn`] calls
 /// queue in the inbox and run in order.
@@ -124,6 +155,11 @@ pub struct Agent {
 /// What one step decided to enter (dsh `PreparedStep`).
 pub(crate) struct Entering {
     pub messages: Vec<Message>,
+    /// The step's first request starts a request series (dsh `startsRequestSeries`).
+    pub starts_series: bool,
+    /// A hook rejected the step: the turn ends `blocked`, these messages
+    /// return to the front of the next-step inbox.
+    pub rejected: Option<Vec<Message>>,
 }
 
 type StepEnd = Option<TurnEndReason>;
@@ -178,7 +214,7 @@ impl Agent {
             journal,
             attachments: deps.attachments,
             approver: deps.approver,
-            observer: deps.observer.unwrap_or_else(|| Arc::new(NoopObserver)),
+            observer: Observers(Mutex::new(deps.observer.into_iter().collect())),
             tool_state,
             state: Mutex::new(LoopState {
                 status: AgentStatus::Idle,
@@ -194,6 +230,7 @@ impl Agent {
                 pending_approvals: 0,
                 instructions_prepared: None,
                 own_prompt: None,
+                open_turn: None,
                 titled: false,
             }),
             driver: tokio::sync::Mutex::new(()),
@@ -233,6 +270,11 @@ impl Agent {
         *self.inner.tools.lock().unwrap() = tools;
     }
 
+    /// Adds a live observer after the existing ones (status, deltas, attempts).
+    pub fn add_observer(&self, observer: Arc<dyn AgentObserver>) {
+        self.inner.observer.0.lock().unwrap().push(observer);
+    }
+
     /// Adds a hook that runs at every step after the runtime-context
     /// snapshot (see [`crate::PreStepHook`]).
     pub fn add_pre_step_hook(&self, hook: Arc<dyn crate::hooks::PreStepHook>) {
@@ -269,18 +311,56 @@ impl Agent {
     /// Runs any user-role message (e.g. a job notice or a subagent report) as
     /// the prompt of its own turn, like dsh `followup`.
     pub async fn run_message(&self, message: Message) -> anyhow::Result<TurnOutcome> {
+        let id = self.accept(Target::NextTurn, message).await?;
+        self.drive_queued(&id).await
+    }
+
+    /// Queues a prebuilt message as the prompt of its own turn and returns
+    /// once the inbox accepted it (dsh `followup`); the turn runs in the
+    /// background behind earlier input.
+    pub async fn followup(&self, message: Message) -> anyhow::Result<()> {
+        let id = self.accept(Target::NextTurn, message).await?;
+        let agent = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = agent.drive_queued(&id).await {
+                tracing::warn!("follow-up turn failed: {e:#}");
+            }
+        });
+        Ok(())
+    }
+
+    /// Delivers a prebuilt message at the nearest step and returns once the
+    /// inbox accepted it (dsh `steer`); an idle agent opens a turn for it in
+    /// the background.
+    pub async fn steer_detached(&self, message: Message) -> anyhow::Result<()> {
+        let id = self.accept(Target::NextStep, message).await?;
+        let agent = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = agent.drive_steered(&id).await {
+                tracing::warn!("steered turn failed: {e:#}");
+            }
+        });
+        Ok(())
+    }
+
+    /// Appends `message` to an inbox list (one durable splice); returns its id.
+    async fn accept(&self, target: Target, message: Message) -> anyhow::Result<String> {
         let inner = &self.inner;
         inner.ensure_initialized().await?;
         let id = message.id.clone();
-        let len = inner.state.lock().unwrap().next_turn.len();
-        inner
-            .splice(Target::NextTurn, len, 0, vec![message], false)
-            .await?;
+        let len = inner.state.lock().unwrap().list(target).len();
+        inner.splice(target, len, 0, vec![message], false).await?;
+        Ok(id)
+    }
+
+    /// Drives turns while the queued prompt `id` is pending.
+    async fn drive_queued(&self, id: &str) -> anyhow::Result<TurnOutcome> {
+        let inner = &self.inner;
         let _driver = inner.driver.lock().await;
         let pending = {
             let mut st = inner.state.lock().unwrap();
             let pending = st.next_turn.iter().any(|m| m.id == id);
-            st.own_prompt = pending.then(|| id.clone());
+            st.own_prompt = pending.then(|| id.to_owned());
             pending
         };
         if !pending {
@@ -300,13 +380,13 @@ impl Agent {
     /// that claims it from the next-step inbox. Resolves when the turn that
     /// took it ends; `None` when an already running turn took it.
     pub async fn steer_message(&self, message: Message) -> anyhow::Result<Option<TurnOutcome>> {
+        let id = self.accept(Target::NextStep, message).await?;
+        self.drive_steered(&id).await
+    }
+
+    /// Drives a turn for the steered message `id` unless a running turn took it.
+    async fn drive_steered(&self, id: &str) -> anyhow::Result<Option<TurnOutcome>> {
         let inner = &self.inner;
-        inner.ensure_initialized().await?;
-        let id = message.id.clone();
-        let len = inner.state.lock().unwrap().next_step.len();
-        inner
-            .splice(Target::NextStep, len, 0, vec![message], false)
-            .await?;
         let _driver = inner.driver.lock().await;
         let pending = inner
             .state
@@ -349,6 +429,28 @@ impl Agent {
     /// Number of events in the session log (the next `seq`).
     pub fn log_len(&self) -> u64 {
         self.inner.journal.len()
+    }
+
+    /// Events with `seq >= from` (cheaper than [`Agent::events`] for a tail).
+    pub fn events_from(&self, from: u64) -> Vec<SessionEvent> {
+        dshx_core::CallerSession::events_from(&self.inner.journal, from)
+    }
+
+    /// Live feed of the events appended to this agent's session log.
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<SessionEvent> {
+        self.inner.journal.subscribe()
+    }
+
+    /// Whether neither inbox list holds input.
+    pub fn inbox_is_empty(&self) -> bool {
+        let st = self.inner.state.lock().unwrap();
+        st.next_turn.is_empty() && st.next_step.is_empty()
+    }
+
+    /// Whether the inbox still holds the message `id`.
+    pub fn inbox_contains(&self, id: &str) -> bool {
+        let st = self.inner.state.lock().unwrap();
+        st.next_turn.iter().chain(&st.next_step).any(|m| m.id == id)
     }
 
     /// Appends one log-only event (e.g. a parent's `subagent/catalog` fact).
@@ -683,14 +785,21 @@ impl Inner {
             });
             st.last_turn + 1
         };
-        if let Err(e) = self
+        let start = match self
             .append(event(kinds::TURN_START, json!({"turn": turn})))
             .await
         {
-            self.state.lock().unwrap().running = None;
-            return Err(e);
+            Ok(start) => start,
+            Err(e) => {
+                self.state.lock().unwrap().running = None;
+                return Err(e);
+            }
+        };
+        {
+            let mut st = self.state.lock().unwrap();
+            st.last_turn = turn;
+            st.open_turn = Some((turn, start.seq));
         }
-        self.state.lock().unwrap().last_turn = turn;
         let result = self.turn_body(turn, target, &cancel).await;
         let cause = self
             .state
@@ -719,7 +828,11 @@ impl Inner {
                 json!({"turn": turn, "reason": reason}),
             ))
             .await;
-        self.state.lock().unwrap().running = None;
+        {
+            let mut st = self.state.lock().unwrap();
+            st.running = None;
+            st.open_turn = None;
+        }
         end?;
         // Completions that arrived after the last step wake the agent.
         let wake = crate::jobs::drain(self).await;
@@ -742,7 +855,13 @@ impl Inner {
         loop {
             check(cancel)?;
             let step = current_step + 1;
-            let entering = self.pre_step(target, turn, step, cancel).await?;
+            let mut entering = self.pre_step(target, turn, step, cancel).await?;
+            if let Some(restore) = entering.rejected.take() {
+                if !restore.is_empty() {
+                    self.splice(Target::NextStep, 0, 0, restore, false).await?;
+                }
+                return Ok(TurnEndReason::Blocked);
+            }
             if turn_ends.is_some() && entering.messages.is_empty() {
                 break;
             }
@@ -845,11 +964,16 @@ impl Inner {
             messages.push(ctx);
         }
         // dsh skips the step's listeners when nothing at all enters step 1.
+        let mut decision = crate::hooks::Decision::default();
         if !(step == 1 && messages.is_empty()) {
-            crate::hooks::run(self, &claimed, &mut messages, cancel).await;
+            decision = crate::hooks::run(self, &claimed, &mut messages, turn, step, cancel).await;
             check(cancel)?;
         }
-        Ok(Entering { messages })
+        Ok(Entering {
+            messages,
+            starts_series: decision.starts_series,
+            rejected: decision.reject,
+        })
     }
 
     /// The runtime-context snapshot when it differs from the retained one.
@@ -1044,6 +1168,7 @@ impl Inner {
     }
 
     /// Logs the request envelope as needed and derives the request (dsh `buildRequest`).
+    #[allow(clippy::too_many_arguments)]
     async fn build_request(
         self: &Arc<Self>,
         header: Value,
@@ -1052,6 +1177,7 @@ impl Inner {
         tools: &[ToolSchema],
         turn: u64,
         step: u64,
+        starts_request_series: bool,
     ) -> anyhow::Result<GenerateRequest> {
         let baseline = self.journal.request_header();
         let generation = self.journal.surface().content_generation;
@@ -1059,7 +1185,7 @@ impl Inner {
             let st = self.state.lock().unwrap();
             (st.request_header_logged, st.request_surface_generation)
         };
-        let starts_series = prev_generation != generation;
+        let starts_series = starts_request_series || prev_generation != generation;
         let mut header_seq = None;
         let with_series = |mut d: Map<String, Value>| {
             if starts_series {
@@ -1204,7 +1330,9 @@ impl Inner {
             let route = self.config.lock().unwrap().route();
             check(cancel)?;
             let generation = self.journal.surface().content_generation;
-            let starts_series = self.state.lock().unwrap().request_surface_generation != generation
+            let forced = first_attempt && entering.starts_series;
+            let starts_series = forced
+                || self.state.lock().unwrap().request_surface_generation != generation
                 || (route.tool_update.is_none() && self.tools_changed(&header));
             for commit in self.system_prompt_commits(
                 &rendered,
@@ -1223,7 +1351,7 @@ impl Inner {
             }
             first_attempt = false;
             let request = self
-                .build_request(header, effort, max_tokens, &tools, turn, step)
+                .build_request(header, effort, max_tokens, &tools, turn, step, forced)
                 .await?;
             self.journal.flush().await?;
             check(cancel)?;

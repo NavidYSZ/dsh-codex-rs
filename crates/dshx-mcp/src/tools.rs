@@ -119,6 +119,7 @@ impl Tool for McpTool {
             is_error: false,
             value: Some(Value::Object(value)),
             meta: None,
+            contexts: Vec::new(),
         })
     }
 }

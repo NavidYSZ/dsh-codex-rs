@@ -77,6 +77,12 @@ pub(crate) fn own_descriptor(header: &SessionHeader, events: &[SessionEvent]) ->
         .filter(|d| d["version"] == DESCRIPTOR_VERSION)
 }
 
+/// dsh `foldSubagentDescriptor` over a session's own events: the
+/// `subagent/descriptor` of a provider-owned child, `None` for other sessions.
+pub fn subagent_descriptor(header: &SessionHeader, events: &[SessionEvent]) -> Option<Value> {
+    own_descriptor(header, events)
+}
+
 /// One direct-child row of a parent's catalog projection.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CatalogEntry {

@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use dshx_core::{
-    ApprovalDecision, Approver, ContentBlock, Message, MessageSource, Role, Tool, ToolContext,
-    ToolError, ToolOutput, ToolResultPart, kinds,
+    ApprovalDecision, Approver, CallerInfo, ContentBlock, Message, MessageSource, Role, Tool,
+    ToolContext, ToolError, ToolOutput, ToolResultPart, kinds,
 };
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
@@ -92,7 +92,7 @@ impl ExecResult {
             error_info: None,
             meta: out.meta,
             value: out.value,
-            contexts: Vec::new(),
+            contexts: out.contexts,
             aborted: false,
         }
     }
@@ -331,6 +331,7 @@ impl Inner {
             model_accepts_images: self.model_accepts_images(),
             approver,
             state: self.tool_state.clone(),
+            caller: self.caller_info(),
         };
         let timeout = tool.timeout();
         let fut = tool.execute(call.args.clone(), ctx);
@@ -364,7 +365,24 @@ impl Inner {
                 ExecResult::error(&m, Some(("ToolArgsError", "INVALID_ARGS")))
             }
             Some(Err(ToolError::Failed(m))) => ExecResult::error(&m, None),
+            Some(Err(ToolError::Coded {
+                name,
+                code,
+                message,
+            })) => ExecResult::error(&message, Some((&name, &code))),
         }
+    }
+
+    /// The calling agent as tools see it (`ToolContext::caller`).
+    fn caller_info(&self) -> Option<CallerInfo> {
+        let (turn, turn_start_seq) = self.state.lock().unwrap().open_turn?;
+        let root = !self.journal.header().extra.contains_key("parentSession");
+        Some(CallerInfo {
+            root,
+            turn,
+            turn_start_seq,
+            session: Arc::new(self.journal.clone()),
+        })
     }
 
     /// Commits contiguous settled slots in model order.
