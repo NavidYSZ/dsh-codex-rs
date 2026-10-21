@@ -141,6 +141,7 @@ pub(crate) async fn finish(
         is_error: false,
         value: Some(value.into_value()),
         meta: Some(meta),
+        contexts: Vec::new(),
     })
 }
 

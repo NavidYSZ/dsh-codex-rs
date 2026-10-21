@@ -1,7 +1,9 @@
 //! User configuration (`$DSHX_HOME/config.toml`, default `~/.dsh-codex/config.toml`).
 //!
 //! The `[codex]` table carries the settings of the original plugin bundle
-//! (`computerUse`, `apps`, `browser`, `mini`), with the same keys and defaults.
+//! (`computerUse`, `apps`, `browser`, `mini`), with the same keys and defaults,
+//! plus the dsh automation features (`goal`, `schedule`, `time_context`,
+//! `team`) with dsh 0.2.0-rc.2's defaults.
 //! `[mcp_servers.<name>]` tables configure MCP servers (dsh `mcp-client`).
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -128,6 +130,124 @@ pub struct CodexConfig {
     pub apps: AppsConfig,
     pub browser: BrowserConfig,
     pub mini: MiniConfig,
+    pub goal: GoalConfig,
+    pub schedule: ScheduleConfig,
+    #[serde(rename = "time_context", alias = "timeContext")]
+    pub time_context: TimeContextConfig,
+    pub team: TeamConfig,
+}
+
+/// Same-session goals (dsh `goal`, `tool-goal`, `goal-round-driver`; on in dsh-base).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct GoalConfig {
+    pub enabled: bool,
+    /// Round cap of a goal created without `max_goal_rounds`.
+    #[serde(alias = "defaultMaxGoalRounds")]
+    pub default_max_goal_rounds: u32,
+    /// Rounds a goal round must reach before the model may report `blocked`.
+    #[serde(alias = "blockedAfterConsecutiveRounds")]
+    pub blocked_after_consecutive_rounds: u32,
+}
+
+impl Default for GoalConfig {
+    fn default() -> Self {
+        GoalConfig {
+            enabled: true,
+            default_max_goal_rounds: 256,
+            blocked_after_consecutive_rounds: 3,
+        }
+    }
+}
+
+/// Host reminders (dsh `dsh-experimental-schedule-bundle`, opt-in). Tasks
+/// live in `$DSHX_HOME/storages/schedule.json`; only `dsh-codex web`
+/// delivers them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct ScheduleConfig {
+    pub enabled: bool,
+    /// Days of delivery history kept per task.
+    #[serde(alias = "deliveryHistoryDays")]
+    pub delivery_history_days: u32,
+    /// Delivery records kept per task.
+    #[serde(alias = "deliveryHistoryRecords")]
+    pub delivery_history_records: u32,
+}
+
+impl Default for ScheduleConfig {
+    fn default() -> Self {
+        ScheduleConfig {
+            enabled: false,
+            delivery_history_days: 30,
+            delivery_history_records: 200,
+        }
+    }
+}
+
+/// Request clock readings (dsh `time-context`, part of the schedule bundle).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct TimeContextConfig {
+    /// `None` follows `schedule.enabled`, like the dsh bundle.
+    pub enabled: Option<bool>,
+    /// IANA zone of the readings; `None` = the system zone.
+    #[serde(alias = "timeZone")]
+    pub time_zone: Option<String>,
+    /// Minimum time between two readings (0 = every step).
+    #[serde(alias = "refreshIntervalMs")]
+    pub refresh_interval_ms: u64,
+}
+
+impl Default for TimeContextConfig {
+    fn default() -> Self {
+        TimeContextConfig {
+            enabled: None,
+            time_zone: None,
+            refresh_interval_ms: 600_000,
+        }
+    }
+}
+
+/// Agent Teams (dsh `dsh-experimental-agent-team-profile`, opt-in): replaces
+/// the subagent tools with the team tools. Limits are the profile's.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct TeamConfig {
+    pub enabled: bool,
+    #[serde(alias = "maxMembers")]
+    pub max_members: u32,
+    #[serde(alias = "maxTasks")]
+    pub max_tasks: u32,
+    #[serde(alias = "maxPendingMessagesPerMember")]
+    pub max_pending_messages_per_member: u32,
+    #[serde(alias = "maxMessageBytes")]
+    pub max_message_bytes: u32,
+    #[serde(alias = "freshProvider")]
+    pub fresh_provider: String,
+    #[serde(alias = "forkProvider")]
+    pub fork_provider: String,
+}
+
+impl Default for TeamConfig {
+    fn default() -> Self {
+        TeamConfig {
+            enabled: false,
+            max_members: 8,
+            max_tasks: 256,
+            max_pending_messages_per_member: 64,
+            max_message_bytes: 65_536,
+            fresh_provider: "spawn".into(),
+            fork_provider: "fork".into(),
+        }
+    }
+}
+
+impl CodexConfig {
+    /// Whether request clock readings are on (`time_context.enabled`, else `schedule.enabled`).
+    pub fn time_context_enabled(&self) -> bool {
+        self.time_context.enabled.unwrap_or(self.schedule.enabled)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -280,5 +400,46 @@ mod tests {
         assert_eq!(web.reconnect.max_attempts, 2);
         assert_eq!(web.reconnect.initial_delay_ms, 500);
         assert!(Config::default().mcp_servers.is_empty());
+    }
+
+    #[test]
+    fn automation_tables() {
+        let config: Config = toml::from_str(
+            r#"
+            [codex.goal]
+            blocked_after_consecutive_rounds = 5
+
+            [codex.schedule]
+            enabled = true
+            deliveryHistoryDays = 7
+
+            [codex.time_context]
+            time_zone = "Europe/Berlin"
+
+            [codex.team]
+            enabled = true
+            max_members = 4
+            "#,
+        )
+        .unwrap();
+        let codex = &config.codex;
+        assert!(codex.goal.enabled);
+        assert_eq!(codex.goal.default_max_goal_rounds, 256);
+        assert_eq!(codex.goal.blocked_after_consecutive_rounds, 5);
+        assert!(codex.schedule.enabled);
+        assert_eq!(codex.schedule.delivery_history_days, 7);
+        assert_eq!(codex.schedule.delivery_history_records, 200);
+        assert!(codex.time_context_enabled());
+        assert_eq!(
+            codex.time_context.time_zone.as_deref(),
+            Some("Europe/Berlin")
+        );
+        assert_eq!(codex.time_context.refresh_interval_ms, 600_000);
+        assert!(codex.team.enabled);
+        assert_eq!(codex.team.max_members, 4);
+        assert_eq!(codex.team.max_tasks, 256);
+        let defaults = CodexConfig::default();
+        assert!(!defaults.schedule.enabled && !defaults.team.enabled);
+        assert!(!defaults.time_context_enabled());
     }
 }

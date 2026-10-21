@@ -38,9 +38,10 @@ mod tools;
 pub use error::SubagentError;
 pub use events::{SubagentFinished, SubagentObserver, SubagentStarted};
 pub use records::DELEGATION_CONTEXT;
+pub use records::subagent_descriptor;
 pub use runtime::{
-    ChildAgentHook, ChildObserverHook, ChildToolsHook, RuntimeDeps, SubagentRuntime,
-    SubagentSettings,
+    ChildAgentHook, ChildObserverHook, ChildToolsHook, ContinuableSpec, RuntimeDeps,
+    SubagentRuntime, SubagentSettings,
 };
 pub use sessions::{MemorySessions, SessionFactory, StoreSessions};
 pub use tools::{subagent_tools, upstream_schema};

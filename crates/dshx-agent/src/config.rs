@@ -103,6 +103,8 @@ pub struct PromptConfig {
     /// Runtime-context contributions after `sandbox:policy` and
     /// `approval:policy`, in `order` (e.g. a subagent's `subagent:delegation`).
     pub extra_context: Vec<ExtraSection>,
+    /// `tool-goal`'s `blockedAfterConsecutiveRounds`, stated in `tool:goal`.
+    pub goal_blocked_after: u32,
 }
 
 impl Default for PromptConfig {
@@ -114,6 +116,7 @@ impl Default for PromptConfig {
             include_runtime_context: true,
             extra_sections: Vec::new(),
             extra_context: Vec::new(),
+            goal_blocked_after: 3,
         }
     }
 }
@@ -326,6 +329,7 @@ impl AgentConfig {
         c.max_tokens = (core.max_tokens != 256_000).then_some(core.max_tokens);
         c.sandbox = core.sandbox;
         c.approval = ApprovalPolicy::parse(&core.approval);
+        c.prompt.goal_blocked_after = core.codex.goal.blocked_after_consecutive_rounds;
         c
     }
 

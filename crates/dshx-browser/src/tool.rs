@@ -710,6 +710,7 @@ impl BrowserTool {
             is_error: false,
             value: Some(Value::Object(value)),
             meta: Some(meta),
+            contexts: Vec::new(),
         })
     }
 }

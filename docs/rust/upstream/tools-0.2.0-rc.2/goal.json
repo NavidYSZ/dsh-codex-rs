@@ -1,0 +1,345 @@
+{
+  "tools": [
+    {
+      "name": "get_goal",
+      "description": "Read the current session goal, including the id and revision that update_goal requires.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "output": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "goal"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer"
+                  },
+                  "objective": {
+                    "type": "string"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "paused",
+                      "blocked",
+                      "complete"
+                    ]
+                  },
+                  "roundsStarted": {
+                    "type": "integer"
+                  },
+                  "maxGoalRounds": {
+                    "type": "integer"
+                  },
+                  "blockedReason": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "objective",
+                  "phase",
+                  "roundsStarted",
+                  "maxGoalRounds"
+                ]
+              },
+              "activation": {
+                "type": "string",
+                "enum": [
+                  "armed",
+                  "disarmed"
+                ]
+              }
+            },
+            "required": [
+              "goal",
+              "activation"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "create_goal",
+      "description": "Create a persisted goal that keeps this session working across automatic continuation rounds. Use it when the direct human request is a long-running objective, even if the user did not say \"goal\"; not for single-turn work.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "description": "The concrete completion objective inferred from the direct human request."
+          },
+          "max_goal_rounds": {
+            "type": "number",
+            "description": "Optional positive safe-integer limit on automatic continuation rounds."
+          }
+        },
+        "required": [
+          "objective"
+        ]
+      },
+      "output": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "goal"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer"
+                  },
+                  "objective": {
+                    "type": "string"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "paused",
+                      "blocked",
+                      "complete"
+                    ]
+                  },
+                  "roundsStarted": {
+                    "type": "integer"
+                  },
+                  "maxGoalRounds": {
+                    "type": "integer"
+                  },
+                  "blockedReason": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "objective",
+                  "phase",
+                  "roundsStarted",
+                  "maxGoalRounds"
+                ]
+              },
+              "activation": {
+                "type": "string",
+                "enum": [
+                  "armed",
+                  "disarmed"
+                ]
+              }
+            },
+            "required": [
+              "goal",
+              "activation"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "update_goal",
+      "description": "Update the current goal.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goal_id": {
+            "type": "string",
+            "description": "Exact id returned by get_goal."
+          },
+          "revision": {
+            "type": "number",
+            "description": "Exact positive revision returned by get_goal."
+          },
+          "action": {
+            "type": "string",
+            "description": "edit, pause, and resume require a direct top-level human request. complete and blocked are also allowed during an automatic continuation of this goal; blocked is rejected before the configured minimum round count.",
+            "enum": [
+              "edit",
+              "pause",
+              "resume",
+              "complete",
+              "blocked"
+            ]
+          },
+          "objective": {
+            "type": "string",
+            "description": "Replacement objective; valid only with action edit."
+          },
+          "max_goal_rounds": {
+            "type": "number",
+            "description": "Replacement cap; valid only with action edit."
+          },
+          "blocked_reason": {
+            "type": "string",
+            "description": "Required only with action blocked: the concrete condition that persisted across rounds and blocks progress."
+          }
+        },
+        "required": [
+          "goal_id",
+          "revision",
+          "action"
+        ]
+      },
+      "output": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "goal"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "goal": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer"
+                  },
+                  "objective": {
+                    "type": "string"
+                  },
+                  "phase": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "paused",
+                      "blocked",
+                      "complete"
+                    ]
+                  },
+                  "roundsStarted": {
+                    "type": "integer"
+                  },
+                  "maxGoalRounds": {
+                    "type": "integer"
+                  },
+                  "blockedReason": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "objective",
+                  "phase",
+                  "roundsStarted",
+                  "maxGoalRounds"
+                ]
+              },
+              "activation": {
+                "type": "string",
+                "enum": [
+                  "armed",
+                  "disarmed"
+                ]
+              }
+            },
+            "required": [
+              "goal",
+              "activation"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "sections": [
+    {
+      "name": "tool:goal",
+      "order": 2400,
+      "text": "create_goal may infer goal intent from a direct human request in any language. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked."
+    }
+  ]
+}

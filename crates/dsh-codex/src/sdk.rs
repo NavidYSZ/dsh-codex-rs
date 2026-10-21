@@ -16,6 +16,7 @@ use crate::runtime::{NoApprover, Overrides, Runtime};
 
 pub async fn run(runtime: Arc<Runtime>) -> anyhow::Result<i32> {
     let (notifier, outgoing) = jsonrpc::channel();
+    runtime.automation.enable_goal_driver();
     runtime
         .subagents
         .set_observer(Arc::new(SubagentNotifier(notifier.clone())));

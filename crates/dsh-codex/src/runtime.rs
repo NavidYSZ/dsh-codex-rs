@@ -19,6 +19,8 @@ use dshx_llm::{DeepSeekClient, DeepSeekConfig, SharedApiKey};
 use dshx_session::{Credentials, FileAttachments, SessionStore};
 use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
 
+use crate::automation::Automation;
+
 pub struct Runtime {
     pub home: PathBuf,
     config: RwLock<Config>,
@@ -37,6 +39,8 @@ pub struct Runtime {
     /// Connected MCP servers; unset until [`Runtime::start_mcp`] ran (or
     /// when none are configured).
     mcp: OnceLock<dshx_mcp::McpHandle>,
+    /// Goals, schedules, time context and Agent Teams.
+    pub automation: Arc<Automation>,
 }
 
 impl Runtime {
@@ -94,20 +98,25 @@ impl Runtime {
         let macos = dshx_macos::macos_tools(&config.codex);
         let store = Arc::new(store);
         let llm = Arc::new(llm);
+        let sessions = Arc::new(dshx_subagent::StoreSessions::new(store.clone()));
         let subagents = dshx_subagent::SubagentRuntime::new(dshx_subagent::RuntimeDeps {
             llm: llm.clone() as Arc<dyn LlmClient>,
-            sessions: Arc::new(dshx_subagent::StoreSessions::new(store.clone())),
+            sessions: sessions.clone(),
             attachments: attachments.clone() as Arc<dyn AttachmentStore>,
             approver: Arc::new(NoApprover),
         });
+        let automation = Arc::new(Automation::new(&config, &subagents, sessions));
         let skills = Arc::new(SkillRegistry::new(SkillConfig::default()));
         // Children see the skill catalog too, like in dsh.
         let child_skills = skills.clone();
+        let child_automation = automation.clone();
         subagents.set_child_agent(Arc::new(move |child: &Agent| {
             child.add_pre_step_hook(Arc::new(SkillsHook {
                 skills: child_skills.clone(),
             }));
+            child_automation.attach_child(child);
         }));
+        subagents.set_child_tools(Arc::new(Automation::child_tools));
         Ok(Arc::new(Runtime {
             home,
             config: RwLock::new(config),
@@ -121,6 +130,7 @@ impl Runtime {
             subagents,
             skills,
             mcp: OnceLock::new(),
+            automation,
         }))
     }
 
@@ -238,9 +248,7 @@ impl Runtime {
         for tool in &self.macos {
             tools.register(tool.clone());
         }
-        for tool in dshx_subagent::subagent_tools(self.subagents.clone()) {
-            tools.register(tool);
-        }
+        self.automation.register_tools(&mut tools, &self.subagents);
         tools.register(Arc::new(SkillTool::new(self.skills.clone())));
         if let Some(mcp) = self.mcp.get() {
             for tool in mcp.tools() {
@@ -308,12 +316,14 @@ impl Runtime {
             skills: self.skills.clone(),
         }));
         self.subagents.attach(&agent);
+        self.automation.attach_root(&agent);
         agent
     }
 
     /// Stops an agent and everything it delegated.
     pub async fn close_agent(&self, agent: &Agent) {
         let id = agent.session_id();
+        self.automation.close(&id).await;
         self.subagents.drain_descendants(&id).await;
         agent.dispose().await;
         self.subagents.detach(&id);
@@ -322,6 +332,7 @@ impl Runtime {
     /// Closes the browser so its profile is saved cleanly, and stops the MCP
     /// servers (stdio servers with their whole process group).
     pub async fn shutdown(&self) {
+        self.automation.shutdown().await;
         self.subagents.shutdown().await;
         if let Some(browser) = &self.browser {
             browser.browser().close().await;

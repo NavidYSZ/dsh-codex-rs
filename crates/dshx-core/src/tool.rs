@@ -9,7 +9,9 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::attachment::{AttachmentStore, ImageAttachmentRef};
+use crate::event::SessionEvent;
 use crate::llm::ToolSchema;
+use crate::message::Message;
 
 /// File-system policy for tools (dsh sandbox modes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -59,6 +61,34 @@ pub struct ToolContext {
     pub approver: Arc<dyn Approver>,
     /// Per-session shared state between tools (e.g. read-before-write tracking).
     pub state: Arc<dyn std::any::Any + Send + Sync>,
+    /// The agent the call runs in (dsh `exec.agent`); `None` outside an agent loop.
+    pub caller: Option<CallerInfo>,
+}
+
+/// Read access to the calling agent's own session log.
+pub trait CallerSession: Send + Sync {
+    /// Events with `seq >= from`, in order.
+    fn events_from(&self, from: u64) -> Vec<SessionEvent>;
+}
+
+/// What a tool knows about its calling agent: dsh's `agents.roots()`
+/// membership and the session's open-turn boundary, which policy tools
+/// (goals) read to tell direct human input from automatic continuation.
+#[derive(Clone)]
+pub struct CallerInfo {
+    /// A top-level agent: its session has no `parentSession`.
+    pub root: bool,
+    /// The open turn and the `seq` of its `turn/start`.
+    pub turn: u64,
+    pub turn_start_seq: u64,
+    pub session: Arc<dyn CallerSession>,
+}
+
+impl CallerInfo {
+    /// Events of the open turn after its `turn/start`, up to now.
+    pub fn open_turn_events(&self) -> Vec<SessionEvent> {
+        self.session.events_from(self.turn_start_seq + 1)
+    }
 }
 
 /// Content of a tool result as the model sees it.
@@ -77,6 +107,8 @@ pub struct ToolOutput {
     pub value: Option<Value>,
     /// Data for the transcript row in the UI (dsh `presentationMeta`).
     pub meta: Option<Value>,
+    /// Messages for the next step of the turn (dsh `exec.deferContext`).
+    pub contexts: Vec<Message>,
 }
 
 impl ToolOutput {
@@ -106,6 +138,24 @@ pub enum ToolError {
     Cancelled,
     #[error("timed out after {0:?}")]
     Timeout(Duration),
+    /// A typed failure (dsh `HarnessError`): the model sees `message`, the
+    /// log records `{name, code}` beside the result.
+    #[error("{message}")]
+    Coded {
+        name: String,
+        code: String,
+        message: String,
+    },
+}
+
+impl ToolError {
+    pub fn coded(name: &str, code: &str, message: impl Into<String>) -> Self {
+        ToolError::Coded {
+            name: name.to_owned(),
+            code: code.to_owned(),
+            message: message.into(),
+        }
+    }
 }
 
 #[async_trait]

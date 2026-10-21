@@ -16,7 +16,16 @@ use tokio::sync::{broadcast, oneshot};
 use crate::runtime::{Overrides, Runtime};
 
 pub async fn run(runtime: Arc<Runtime>, port: u16, open: bool) -> anyhow::Result<i32> {
+    runtime.automation.enable_goal_driver();
     let backend = Arc::new(WebBackend::new(runtime.clone()));
+    let resolver = Arc::new(Resolver(Arc::downgrade(&backend)));
+    if let Err(e) = runtime
+        .automation
+        .start_schedules(&runtime.home, &runtime.config(), resolver)
+    {
+        tracing::warn!("schedule: {e:#}; reminders are off");
+    }
+    runtime.automation.forward(backend.tx.clone());
     let token = uuid::Uuid::new_v4().simple().to_string();
     let (addr, server) = dshx_server::serve(backend.clone(), token.clone(), port).await?;
     let url = format!("http://127.0.0.1:{}/?token={token}", addr.port());
@@ -181,6 +190,7 @@ impl WebBackend {
             },
             "apiKeyConfigured": self.runtime.api_key_configured(),
             "tools": { "browser": browser, "app": app, "computer": computer },
+            "automation": self.runtime.automation.features(),
         })
     }
 
@@ -418,6 +428,7 @@ impl Backend for WebBackend {
     }
 
     async fn delete_session(&self, id: &str) -> anyhow::Result<()> {
+        crate::automation::session_deleted(&self.runtime, id).await;
         if let Some(s) = self.open.lock().await.remove(id) {
             self.runtime.close_agent(&s.agent).await;
         }
@@ -468,6 +479,61 @@ impl Backend for WebBackend {
 
     fn stream(&self) -> broadcast::Receiver<StreamMessage> {
         self.tx.subscribe()
+    }
+
+    async fn goal(&self, id: &str) -> anyhow::Result<Value> {
+        crate::automation::goal(&self.runtime, id)
+    }
+
+    async fn goal_command(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        self.session_handle(id, &Overrides::default()).await?;
+        crate::automation::goal_command(&self.runtime, id, &body).await
+    }
+
+    async fn schedules(&self) -> anyhow::Result<Value> {
+        crate::automation::schedule_catalog(&self.runtime)
+    }
+
+    async fn session_schedules(&self, id: &str) -> anyhow::Result<Value> {
+        crate::automation::session_schedules(&self.runtime, id)
+    }
+
+    async fn update_schedule(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        crate::automation::update_schedule(&self.runtime, id, &body).await
+    }
+
+    async fn delete_schedule(&self, id: &str) -> anyhow::Result<Value> {
+        crate::automation::delete_schedule(&self.runtime, id).await
+    }
+
+    async fn schedule_history(
+        &self,
+        id: &str,
+        limit: Option<i64>,
+        before: Option<String>,
+    ) -> anyhow::Result<Value> {
+        crate::automation::schedule_history(&self.runtime, id, limit, before.as_deref())
+    }
+
+    async fn team(&self, id: &str) -> anyhow::Result<Value> {
+        crate::automation::team(&self.runtime, id)
+    }
+}
+
+/// Opens a session for reminder delivery like a prompt would.
+struct Resolver(std::sync::Weak<WebBackend>);
+
+#[async_trait]
+impl dshx_schedule::SessionResolver for Resolver {
+    async fn resolve(&self, session_id: &str) -> anyhow::Result<Agent> {
+        let backend = self
+            .0
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("the web backend stopped"))?;
+        let s = backend
+            .session_handle(session_id, &Overrides::default())
+            .await?;
+        Ok((*s.agent).clone())
     }
 }
 

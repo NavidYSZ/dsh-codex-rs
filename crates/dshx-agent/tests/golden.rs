@@ -160,6 +160,7 @@ fn tools(events: &[SessionEvent]) -> Vec<Arc<dyn Tool>> {
                 is_error: m["isError"] == true,
                 value: None,
                 meta: e.data.get("meta").cloned(),
+                contexts: Vec::new(),
             },
         );
     }

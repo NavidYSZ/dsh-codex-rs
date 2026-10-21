@@ -181,6 +181,7 @@ pub fn builder(cwd: &Path) -> ContextBuilder {
             model_accepts_images: true,
             approver: FixedApprover::new(ApprovalDecision::Rejected),
             state: Arc::new(ToolState::new()),
+            caller: None,
         },
     }
 }

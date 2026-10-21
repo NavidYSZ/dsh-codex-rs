@@ -54,6 +54,16 @@ pub enum StreamMessage {
         summary: String,
         justification: Option<String>,
     },
+    /// The current goal of a session changed (phase, revision, rounds or
+    /// activation); `goal` is `null` once cleared.
+    Goal {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        goal: Option<Value>,
+    },
+    /// Some scheduled task was created, changed, delivered or deleted
+    /// (dsh `schedule/changed`); reload `/api/schedules`.
+    ScheduleChanged,
 }
 
 impl StreamMessage {
@@ -62,7 +72,9 @@ impl StreamMessage {
             StreamMessage::Event { session_id, .. }
             | StreamMessage::Delta { session_id, .. }
             | StreamMessage::Status { session_id, .. }
-            | StreamMessage::Approval { session_id, .. } => session_id,
+            | StreamMessage::Approval { session_id, .. }
+            | StreamMessage::Goal { session_id, .. } => session_id,
+            StreamMessage::ScheduleChanged => "",
         }
     }
 }
@@ -109,6 +121,53 @@ pub trait Backend: Send + Sync + 'static {
     async fn status(&self, id: &str) -> Option<String> {
         let _ = id;
         None
+    }
+
+    // Automation (goals, schedules, Agent Teams); unsupported by default.
+
+    /// `{goal: GoalView | null}` of a session.
+    async fn goal(&self, id: &str) -> anyhow::Result<Value> {
+        let _ = id;
+        Err(NotFound("goals".into()).into())
+    }
+    /// `{action: "create"|"edit"|"pause"|"resume"|"clear", objective?}` → `{goal}`.
+    async fn goal_command(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        let _ = (id, body);
+        Err(NotFound("goals".into()).into())
+    }
+    /// Every scheduled task with its session binding (dsh `catalog`).
+    async fn schedules(&self) -> anyhow::Result<Value> {
+        Err(NotFound("schedules".into()).into())
+    }
+    /// The active reminders of one session.
+    async fn session_schedules(&self, id: &str) -> anyhow::Result<Value> {
+        let _ = id;
+        Err(NotFound("schedules".into()).into())
+    }
+    /// `{title?, prompt?, at?|every_seconds?|daily?|weekly?|cron?}` → the updated reminder.
+    async fn update_schedule(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        let _ = (id, body);
+        Err(NotFound("schedules".into()).into())
+    }
+    /// → `{id, deleted}`.
+    async fn delete_schedule(&self, id: &str) -> anyhow::Result<Value> {
+        let _ = id;
+        Err(NotFound("schedules".into()).into())
+    }
+    /// Newest-first delivery records (`limit` 1-100, default 20; `before` = message id cursor).
+    async fn schedule_history(
+        &self,
+        id: &str,
+        limit: Option<i64>,
+        before: Option<String>,
+    ) -> anyhow::Result<Value> {
+        let _ = (id, limit, before);
+        Err(NotFound("schedules".into()).into())
+    }
+    /// `{members, tasks, roster, failure?}` of the Team a Lead session leads.
+    async fn team(&self, id: &str) -> anyhow::Result<Value> {
+        let _ = id;
+        Err(NotFound("team".into()).into())
     }
 }
 
@@ -175,6 +234,16 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/approvals/{call_id}", post(approve))
         .route("/attachments", post(save_attachment))
         .route("/attachments/{id}", get(load_attachment))
+        // Automation: goals, schedules, Agent Teams.
+        .route("/sessions/{id}/goal", get(goal).post(goal_command))
+        .route("/sessions/{id}/schedules", get(session_schedules))
+        .route("/sessions/{id}/team", get(team))
+        .route("/schedules", get(schedules))
+        .route(
+            "/schedules/{id}",
+            put(update_schedule).delete(delete_schedule),
+        )
+        .route("/schedules/{id}/history", get(schedule_history))
         .route("/stream", get(stream))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -430,6 +499,64 @@ async fn load_attachment(State(s): State<AppState>, Path(id): Path<String>) -> A
         .into_response())
 }
 
+async fn goal(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.goal(&id).await?))
+}
+
+async fn goal_command(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.goal_command(&id, body).await?))
+}
+
+async fn schedules(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.schedules().await?))
+}
+
+async fn session_schedules(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.session_schedules(&id).await?))
+}
+
+async fn update_schedule(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.update_schedule(&id, body).await?))
+}
+
+async fn delete_schedule(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.delete_schedule(&id).await?))
+}
+
+#[derive(Deserialize)]
+struct HistoryQuery {
+    limit: Option<i64>,
+    before: Option<String>,
+}
+
+async fn schedule_history(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<HistoryQuery>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(
+        s.backend.schedule_history(&id, q.limit, q.before).await?,
+    ))
+}
+
+async fn team(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.team(&id).await?))
+}
+
 #[derive(Deserialize)]
 struct StreamQuery {
     session: Option<String>,
@@ -500,8 +627,9 @@ async fn pump(
             msg = live.recv() => match msg {
                 Ok(msg) => {
                     let wanted = match &session {
+                        _ if matches!(msg, StreamMessage::ScheduleChanged) => true,
                         Some(id) => msg.session_id() == id,
-                        None => matches!(msg, StreamMessage::Status { .. } | StreamMessage::Approval { .. }),
+                        None => matches!(msg, StreamMessage::Status { .. } | StreamMessage::Approval { .. } | StreamMessage::Goal { .. }),
                     };
                     if !wanted {
                         continue;

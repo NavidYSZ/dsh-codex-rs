@@ -1,0 +1,24 @@
+[package]
+name = "dshx-goal"
+description = "dsh-codex same-session goals: get_goal, create_goal, update_goal and the goal-round driver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dshx-core.workspace = true
+dshx-agent.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+dshx-testkit.workspace = true
+dshx-llm.workspace = true
+dshx-session.workspace = true
+tempfile.workspace = true

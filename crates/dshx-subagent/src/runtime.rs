@@ -63,6 +63,23 @@ impl Default for SubagentSettings {
     }
 }
 
+/// What [`SubagentRuntime::start_continuable_child`] establishes (dsh
+/// `ContinuableStartSpec`).
+#[derive(Debug, Clone)]
+pub struct ContinuableSpec {
+    /// The child's session id; `None` = a fresh UUID. An id already in use
+    /// is refused (`DUPLICATE_CHILD`).
+    pub child_id: Option<String>,
+    /// `spawn` (fresh child) or `fork` (seeded with the parent's completed turns).
+    pub provider: String,
+    /// The catalog label (dsh `label`).
+    pub label: String,
+    /// The initial task. The adjacent-agent return guidance follows it when
+    /// the child's `send_message` is the subagent tool.
+    pub prompt: Vec<ContentBlock>,
+    pub max_depth: Option<u32>,
+}
+
 /// Builds a child's tools from its parent's registry (default: the same set,
 /// like dsh's preset composition).
 pub type ChildToolsHook = Arc<dyn Fn(&ToolRegistry) -> ToolRegistry + Send + Sync>;
@@ -437,6 +454,18 @@ impl SubagentRuntime {
         }
     }
 
+    /// Fork: the balanced completed-turn prefix of the parent's log.
+    fn fork_seed(provider: &str, facts: &ParentFacts) -> Option<Vec<SessionEvent>> {
+        if provider != "fork" {
+            return None;
+        }
+        facts
+            .events
+            .iter()
+            .rposition(|e| e.kind == kinds::TURN_END)
+            .map(|end| facts.events[..=end].to_vec())
+    }
+
     /// dsh `appendDelegatedPolicyOverrides`.
     fn delegated_events(facts: &ParentFacts) -> Vec<NewEvent> {
         let mut out = Vec::new();
@@ -546,8 +575,9 @@ impl SubagentRuntime {
         setup: Vec<NewEvent>,
         one_shot_descriptor: Option<Value>,
         cancel: Option<CancellationToken>,
+        id: Option<String>,
     ) -> Result<Child, SubagentError> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let mut extra = serde_json::Map::new();
         extra.insert("parentSession".into(), json!(facts.header.id));
         extra.insert("origin".into(), json!("subagent"));
@@ -687,16 +717,7 @@ impl SubagentRuntime {
         }
         let facts = Self::parent_facts(&parent.agent);
         let depth = Self::child_depth(&facts.header, max_depth)?;
-        // Fork: the balanced completed-turn prefix of the parent's log.
-        let seed = (provider == "fork")
-            .then(|| {
-                facts
-                    .events
-                    .iter()
-                    .rposition(|e| e.kind == kinds::TURN_END)
-                    .map(|end| facts.events[..=end].to_vec())
-            })
-            .flatten();
+        let seed = Self::fork_seed(provider, &facts);
         let setup = Self::delegated_events(&facts);
         let child = self
             .create_child(
@@ -707,6 +728,7 @@ impl SubagentRuntime {
                 setup,
                 Some(records::one_shot_descriptor(provider, label)),
                 Some(cancel.clone()),
+                None,
             )
             .await?;
         let catalog = NewEvent::new(
@@ -908,8 +930,61 @@ impl SubagentRuntime {
         prompt: &str,
         max_depth: Option<u32>,
     ) -> Result<(String, String), SubagentError> {
+        self.start_continuable_spec(
+            parent,
+            ContinuableSpec {
+                child_id: None,
+                provider: provider.to_owned(),
+                label: label.to_owned(),
+                prompt: vec![ContentBlock::text(prompt)],
+                max_depth,
+            },
+        )
+        .await
+    }
+
+    /// dsh `subagents.startContinuable(spec)` for host services (Agent
+    /// Teams): `parent_id` must be an attached live agent. Returns the child
+    /// id and the accepted prompt's message id.
+    pub async fn start_continuable_child(
+        &self,
+        parent_id: &str,
+        spec: ContinuableSpec,
+    ) -> Result<(String, String), SubagentError> {
+        let parent = self.live(parent_id).ok_or_else(|| {
+            SubagentError::new(
+                "UNAUTHORIZED",
+                format!("agent \"{parent_id}\" is not live in this runtime"),
+            )
+        })?;
+        self.start_continuable_spec(&parent, spec).await
+    }
+
+    async fn start_continuable_spec(
+        &self,
+        parent: &Live,
+        spec: ContinuableSpec,
+    ) -> Result<(String, String), SubagentError> {
+        let ContinuableSpec {
+            child_id,
+            provider,
+            label,
+            prompt,
+            max_depth,
+        } = spec;
+        let label = label.as_str();
+        let provider = provider.as_str();
         let parent_id = parent.id();
         self.assert_admitting(&parent_id)?;
+        if let Some(id) = &child_id {
+            let taken = self.live(id).is_some() || self.deps.sessions.read(id).await.is_ok();
+            if taken {
+                return Err(SubagentError::new(
+                    "DUPLICATE_CHILD",
+                    format!("subagent \"{id}\" already exists"),
+                ));
+            }
+        }
         let facts = Self::parent_facts(&parent.agent);
         let depth = Self::child_depth(&facts.header, max_depth)?;
         let descriptor = records::continuable_descriptor(
@@ -923,8 +998,18 @@ impl SubagentRuntime {
         self.reserve(&pool)?;
         let mut setup = vec![NewEvent::new(records::DESCRIPTOR, descriptor)];
         setup.extend(Self::delegated_events(&facts));
+        let seed = Self::fork_seed(provider, &facts);
         let child = match self
-            .create_child(&parent.agent, &facts, depth, None, setup, None, None)
+            .create_child(
+                &parent.agent,
+                &facts,
+                depth,
+                seed,
+                setup,
+                None,
+                None,
+                child_id,
+            )
             .await
         {
             Ok(child) => child,
@@ -943,8 +1028,15 @@ impl SubagentRuntime {
             }
         };
         let act = self.publish(&child, &parent_id, provider, &pool);
-        let mut content = vec![ContentBlock::text(prompt)];
-        if child.agent.tools().get("send_message").is_some() {
+        let mut content = prompt;
+        // dsh appends the guidance only for the adjacent-agent `send_message`
+        // (whose target is `agent_id`), not for a replacement such as Teams'.
+        let adjacent = child.agent.tools().get("send_message").is_some_and(|t| {
+            t.schema().parameters["properties"]
+                .get("agent_id")
+                .is_some()
+        });
+        if adjacent {
             content.push(ContentBlock::text(records::return_guidance(&parent_id)));
         }
         let message = records::prompt_message(content);
@@ -1188,18 +1280,23 @@ impl SubagentRuntime {
             ));
         }
         let held = self.hold(&sender_id, target)?;
-        let result = self.deliver_to_child(sender, target, text).await;
+        let message = records::agent_message(&sender_id, text);
+        let result = self.deliver_to_child(sender, target, message, false).await;
         if result.is_err() && held {
             self.release_hold(&sender_id, target);
         }
         result
     }
 
+    /// Steers `message` into a direct continuable child, cold-resuming an
+    /// absent one. With `accepted` the call returns only after the child's
+    /// inbox holds the message (dsh's synchronous `steer`).
     async fn deliver_to_child(
         &self,
         parent: &Live,
         child_id: &str,
-        text: &str,
+        message: Message,
+        accepted: bool,
     ) -> Result<String, SubagentError> {
         let guard = self.child_lock(child_id).await;
         let parent_id = parent.id();
@@ -1211,18 +1308,99 @@ impl SubagentRuntime {
                         "UNAUTHORIZED",
                         format!("subagent \"{child_id}\" belongs to another parent session"),
                     ))
+                } else if act.st.lock().unwrap().closing {
+                    Err(SubagentError::new(
+                        "ACTIVATION_CLOSING",
+                        format!(
+                            "subagent \"{child_id}\" activation is being disposed; the message was not accepted"
+                        ),
+                    ))
                 } else {
-                    let message = records::agent_message(&parent_id, text);
                     let id = message.id.clone();
-                    self.submit(&act, message, Delivery::Steer);
+                    self.deliver(&act, message, accepted).await?;
                     act.st.lock().unwrap().announced = true;
                     Ok(id)
                 }
             }
-            None => self.cold_resume(parent, child_id, text).await,
+            None => self.cold_resume(parent, child_id, message, accepted).await,
         };
         drop(guard);
         result
+    }
+
+    /// Steers into a resident child: in the background, or (with
+    /// `accepted`) once the child's inbox accepted it.
+    async fn deliver(
+        &self,
+        act: &Arc<Activation>,
+        message: Message,
+        accepted: bool,
+    ) -> Result<(), SubagentError> {
+        if !accepted {
+            self.submit(act, message, Delivery::Steer);
+            return Ok(());
+        }
+        act.st.lock().unwrap().in_flight += 1;
+        let result = act.agent.steer_detached(message).await;
+        act.st.lock().unwrap().in_flight -= 1;
+        act.poke();
+        self.bump();
+        result.map_err(failed)
+    }
+
+    /// dsh `steerHostSubagentPrompt`: steers a host-authored message (its own
+    /// `source`, e.g. a Team mailbox item) into a direct continuable child
+    /// of `parent_id`, cold-resuming an absent child. Returns the message id
+    /// once the child's inbox accepted it.
+    pub async fn steer_prompt(
+        &self,
+        parent_id: &str,
+        child_id: &str,
+        message: Message,
+    ) -> Result<String, SubagentError> {
+        let parent = self.live(parent_id).ok_or_else(|| {
+            SubagentError::new(
+                "UNAUTHORIZED",
+                format!("subagent \"{child_id}\" delivery requires the exact live parent agent"),
+            )
+        })?;
+        self.assert_admitting(parent_id)?;
+        let held = self.hold(parent_id, child_id)?;
+        let result = self
+            .deliver_to_child(&parent, child_id, message, true)
+            .await;
+        if result.is_err() && held {
+            self.release_hold(parent_id, child_id);
+        }
+        result
+    }
+
+    /// dsh `drainContinuableChildren`: releases the selected resident direct
+    /// children of `parent_id`; absent targets are accepted no-ops.
+    pub async fn drain_children(
+        &self,
+        parent_id: &str,
+        child_ids: &[String],
+    ) -> Result<(), SubagentError> {
+        let mut targets = Vec::new();
+        {
+            let reg = self.reg.lock().unwrap();
+            for id in child_ids {
+                if let Some(act) = reg.resident.get(id) {
+                    if act.parent_id != parent_id {
+                        return Err(SubagentError::new(
+                            "UNAUTHORIZED",
+                            format!(
+                                "subagent \"{id}\" is not a direct child of agent \"{parent_id}\""
+                            ),
+                        ));
+                    }
+                    targets.push(act.clone());
+                }
+            }
+        }
+        futures::future::join_all(targets.iter().map(|a| self.dispose_activation(a))).await;
+        Ok(())
     }
 
     /// Reads a session, preferring the live agent's log.
@@ -1239,7 +1417,8 @@ impl SubagentRuntime {
         &self,
         parent: &Live,
         child_id: &str,
-        text: &str,
+        message: Message,
+        accepted: bool,
     ) -> Result<String, SubagentError> {
         let unavailable = || {
             SubagentError::new(
@@ -1331,9 +1510,11 @@ impl SubagentRuntime {
             .unwrap_or("spawn")
             .to_owned();
         let act = self.publish(&child, &parent_id, &provider, &pool);
-        let message = records::agent_message(&parent_id, text);
         let id = message.id.clone();
-        self.submit(&act, message, Delivery::Steer);
+        if let Err(e) = self.deliver(&act, message, accepted).await {
+            self.dispose_activation(&act).await;
+            return Err(e);
+        }
         act.st.lock().unwrap().announced = true;
         self.start_watch(&act);
         Ok(id)
@@ -1342,7 +1523,7 @@ impl SubagentRuntime {
     /// dsh `interrupt` under an ancestor's authority: cancels the target's
     /// current turn (cause `parent`) and keeps its queued input. Absent and
     /// one-shot targets are accepted no-ops.
-    pub(crate) fn interrupt(&self, target: &str, caller: &str) -> Result<(), SubagentError> {
+    pub fn interrupt(&self, target: &str, caller: &str) -> Result<(), SubagentError> {
         if caller == target {
             return Err(SubagentError::new(
                 "UNAUTHORIZED",
@@ -1367,7 +1548,7 @@ impl SubagentRuntime {
     }
 
     /// Whether `id` is working (dsh `agents.get(id)?.status === "running"`).
-    pub(crate) fn is_running(&self, id: &str) -> bool {
+    pub fn is_running(&self, id: &str) -> bool {
         self.live(id)
             .is_some_and(|l| l.agent.status() == AgentStatus::Running)
     }

@@ -188,6 +188,10 @@ impl Journal {
         f(&st.events, &st.surface)
     }
 
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<SessionEvent> {
+        self.log.subscribe()
+    }
+
     pub fn len(&self) -> u64 {
         self.state.lock().unwrap().events.len() as u64
     }
@@ -221,5 +225,16 @@ impl Journal {
     /// Data of the latest `request/context` event.
     pub fn request_context(&self) -> Option<Value> {
         self.last_of(kinds::REQUEST_CONTEXT).map(|e| e.data)
+    }
+}
+
+impl dshx_core::CallerSession for Journal {
+    fn events_from(&self, from: u64) -> Vec<SessionEvent> {
+        self.read(|events, _| {
+            events
+                .get(from.min(events.len() as u64) as usize..)
+                .map(<[SessionEvent]>::to_vec)
+                .unwrap_or_default()
+        })
     }
 }
