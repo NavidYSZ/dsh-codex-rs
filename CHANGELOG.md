@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased (branch `codex-app`)
+
+### Added
+
+- **Codex-app sidebar:** Pinned / Projects / Chats sections, chats without a
+  project, row menu and right-click, activity view behind the bell, ⌘K palette,
+  archived chats in Settings. Sidebar state lives in `ui-state.json`
+  (`PATCH /api/sessions/:id`).
+- **Side panel:** Changes, Files, file previews (code, Markdown, CSV/TSV, JSON,
+  images, PDF, media, sandboxed HTML) via `/preview/<grant>/…`; "N files
+  changed" card under finished turns.
+- **Live view** of the browser screencast and Mac tool steps, with Stop
+  (`StreamMessage::Live` on its own channel).
+- **Steer or queue** follow-ups while a turn runs (`prompt.steer`),
+  notifications and a Dock badge hook for the Mac app.
+
+### Changed
+
+- Codex app default theme values: accent `#0285ff`, grey user bubble, 16 px
+  composer and bubble radius, 46 px header.
+- Debug builds serve `ui/` with `no-cache`.
+
 ## 0.2.0 – 2026-10-17
 
 First public release.

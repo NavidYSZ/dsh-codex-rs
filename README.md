@@ -72,6 +72,26 @@ dsh-codex sdk                          # DSH SDK JSON-RPC on stdio
 Options: `-C <dir>`, `--model deepseek-flash|deepseek-v4-pro`,
 `--effort off|low|high|max`, `--sandbox read-only|workspace-write|danger-full-access`.
 
+## Web UI
+
+`dsh-codex web` follows the layout of the Codex app:
+
+- **Sidebar:** Pinned, Projects (one group per folder, new chat per project)
+  and Chats without a project, each in a private folder under
+  `$DSHX_HOME/chats/`. Rename, pin, mark unread, archive and delete from the
+  row menu or with a right-click. The bell lists every chat by activity with
+  running, waiting and unread marks. ⌘K searches chats and actions.
+- **Side panel** (button top right): all file changes of the chat, the chat's
+  folder, open files and the live view. Files preview as code, Markdown,
+  CSV/TSV, JSON, images, PDF, video/audio or rendered HTML; they load through a
+  read-only grant for the chat's folder, and pages run sandboxed. Paths in tool
+  rows, links and inline code open in the panel.
+- **Live view:** the background browser's screencast (and the Mac tools'
+  screenshots) as a floating picture or in the panel, with Stop.
+- **While the agent works,** Enter adds a message to the running task and ⌘↩
+  queues it for afterwards (switchable in Settings). Notifications report
+  chats that finish, fail or wait for approval in the background.
+
 ## Try it on a Mac
 
 Everything so far was tested on Linux and against a scripted DeepSeek
