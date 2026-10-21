@@ -441,8 +441,14 @@ impl Backend for WebBackend {
         let agent = s.agent.clone();
         let tx = self.tx.clone();
         let session_id = id.to_owned();
+        let steer = request.steer;
         tokio::spawn(async move {
-            if let Err(e) = agent.run_turn(content).await {
+            let result = if steer {
+                agent.steer(content).await.map(|_| ())
+            } else {
+                agent.run_turn(content).await.map(|_| ())
+            };
+            if let Err(e) = result {
                 let _ = tx.send(StreamMessage::Status {
                     session_id,
                     status: "error".into(),

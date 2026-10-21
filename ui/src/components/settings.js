@@ -3,7 +3,9 @@ import { useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, age } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, setTheme, updateSettings, closeSettings, toggleSidebar, setArchived, deleteSession } from '../state.js';
+import {
+  store, setTheme, updateSettings, closeSettings, toggleSidebar, setArchived, deleteSession, setFollowup, setNotify,
+} from '../state.js';
 import { IconChevronLeft, IconCheck, IconKey, IconSidebar, IconArchive } from '../icons.js';
 import { workspaceName } from './composer.js';
 
@@ -70,6 +72,9 @@ function Archived() {
 export function Settings() {
   const info = useStore(store, (s) => s.info);
   const theme = useStore(store, (s) => s.theme);
+  const followup = useStore(store, (s) => s.followup);
+  const notify = useStore(store, (s) => s.notify);
+  const desktop = useStore(store, (s) => !!s.desktop);
   const s = info?.settings ?? {};
   const models = info?.models ?? [];
   const model = models.find((m) => m.id === s.model) ?? models[0];
@@ -117,6 +122,13 @@ export function Settings() {
         <${Field} label=${t.theme}>
           <${Segmented} label=${t.theme} value=${theme} onChange=${setTheme} options=${Object.entries(t.themes)} />
         </${Field}>
+        <${Field} label=${t.followup} hint=${t.followupHint}>
+          <${Segmented} label=${t.followup} value=${followup} onChange=${setFollowup} options=${Object.entries(t.followups)} />
+        </${Field}>
+        ${desktop ? null : html`<${Field} label=${t.notifications} hint=${t.notificationsHint}>
+          <${Segmented} label=${t.notifications} value=${notify ? 'on' : 'off'} onChange=${(v) => setNotify(v === 'on')}
+            options=${[['on', t.on], ['off', t.off]]} />
+        </${Field}>`}
         <${Field} label=${t.language}><span class="field-value">${t.languageValue}</span></${Field}>
       </section>
 

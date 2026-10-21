@@ -52,6 +52,9 @@ export const store = createStore({
   // Right side panel: 'changes', 'files', 'live' or 'file:<path relative to the chat folder>'.
   panel: { open: readLocal('dshx-panel', '') === 'open', tab: 'changes', files: [] },
   panelWidth: Number(readLocal('dshx-panel-width', '0')) || 0,
+  // Message sent while a turn runs: 'steer' joins it, 'queue' waits for it.
+  followup: readLocal('dshx-followup', 'steer'),
+  notify: readLocal('dshx-notify', '') === 'on',
 });
 
 /** The Mac app's bridge (instances, notifications); null in a plain browser. */
@@ -274,7 +277,12 @@ function watchAll() {
   api.stream(null, -1, {
     message: (m) => {
       if (m.kind !== 'status' || !m.sessionId) return;
-      const known = store.get().sessions.some((x) => x.id === m.sessionId);
+      const before = store.get().sessions.find((x) => x.id === m.sessionId);
+      const known = !!before;
+      const wasBusy = before?.status === 'running' || before?.status === 'waiting-approval';
+      if ((wasBusy && (m.status === 'idle' || m.status === 'error')) || (m.status === 'waiting-approval' && before?.status !== m.status)) {
+        notifyStatus(m.sessionId, m.status);
+      }
       store.set((st) => ({ sessions: st.sessions.map((x) => (x.id === m.sessionId ? { ...x, status: m.status } : x)) }));
       if (!known || m.status === 'idle' || m.status === 'error') refreshSessions();
     },
@@ -419,6 +427,43 @@ export function toggleSidebar() {
     store.set({ sidebarCollapsed: collapsed });
   }
 }
+
+export function setFollowup(followup) {
+  writeLocal('dshx-followup', followup);
+  store.set({ followup });
+}
+
+/** Browser notifications need a permission; the Mac app shows its own. */
+export async function setNotify(on) {
+  if (on && !store.get().desktop && 'Notification' in window && Notification.permission !== 'granted') {
+    on = (await Notification.requestPermission()) === 'granted';
+  }
+  writeLocal('dshx-notify', on ? 'on' : '');
+  store.set({ notify: on });
+}
+
+/** A chat that is not on screen finished, failed or waits for approval. */
+function notifyStatus(id, status) {
+  const s = store.get();
+  if (id === s.activeId && s.view === 'chat' && visible() && document.hasFocus()) return;
+  const body = status === 'waiting-approval' ? t.notifyWaiting : status === 'error' ? t.notifyFailed : t.notifyDone;
+  const title = s.sessions.find((x) => x.id === id)?.title || t.brand;
+  if (s.desktop) { window.dshxDesktop?.notify?.(title, body); return; }
+  if (!s.notify || !('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, { body, tag: id });
+    n.onclick = () => { window.focus(); openSession(id); n.close(); };
+  } catch { /* some browsers only notify from a service worker */ }
+}
+
+// The Mac app's Dock badge counts unread chats.
+let lastBadge = -1;
+store.subscribe(() => {
+  const s = store.get();
+  if (!s.desktop) return;
+  const n = s.sessions.filter((x) => x.unread && !x.archived).length;
+  if (n !== lastBadge) { lastBadge = n; window.dshxDesktop?.setBadge?.(n); }
+});
 
 export function setSidebarMode(mode) {
   writeLocal('dshx-sidebar-mode', mode);

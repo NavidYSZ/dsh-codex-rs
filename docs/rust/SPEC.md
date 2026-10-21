@@ -239,7 +239,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | POST | `/api/sessions/:id/preview` | → `{base, root}`: `base` is `/preview/<grant>/`, a 2-hour read-only capability for the chat's folder |
 | GET | `/api/sessions/:id/files?dir=` | → `{dir, entries:[{name, path, kind:"dir"\|"file"\|"broken", size}], truncated}` (inside the chat's folder only) |
 | GET | `/preview/:grant/*path` | no bearer; a file of the granted folder (folders serve `index.html`); HTML/SVG/XML get `CSP: sandbox` (opaque origin), everything `nosniff`, `no-store` |
-| POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?}` → 202 |
+| POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?, steer?}` → 202; while a turn runs the text queues as the next turn, with `steer: true` its next step takes it |
 | POST | `/api/sessions/:id/cancel` | → 202 |
 | DELETE | `/api/sessions/:id` | → 204 |
 | POST | `/api/approvals/:callId` | `{decision:"allowed-once"\|"rejected"}` → 204 |

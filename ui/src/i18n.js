@@ -121,6 +121,13 @@ const EN = {
   // live view
   live: 'Live', liveActive: 'Working', liveIdle: 'Paused', liveEnded: 'Done', liveWaiting: 'Waiting for the first picture…',
   showInPanel: 'Show in panel', hide: 'Hide', stopAgent: 'Stop agent',
+  // follow-ups and notifications
+  placeholderRunning: { steer: 'Add to the running task (⌘↩ to queue)', queue: 'Queue a follow-up (⌘↩ to add now)' },
+  followup: 'Messages while working', followups: { steer: 'Add to the running task', queue: 'Queue for afterwards' },
+  followupHint: '⌘↩ does the other one',
+  notifications: 'Notifications', notificationsHint: 'When a chat in the background finishes or needs you',
+  notifyDone: 'Finished', notifyFailed: 'Failed', notifyWaiting: 'Waiting for your approval',
+  revealInFinder: 'Show in Finder',
 };
 
 const DE = {
@@ -231,6 +238,12 @@ const DE = {
   emptyFolder: 'Leerer Ordner', firstRows: (n) => `Erste ${n} Zeilen`, loading: 'Lädt …', open: 'Öffnen',
   live: 'Live', liveActive: 'Arbeitet', liveIdle: 'Pausiert', liveEnded: 'Fertig', liveWaiting: 'Warte auf das erste Bild …',
   showInPanel: 'Im Panel zeigen', hide: 'Ausblenden', stopAgent: 'Agent stoppen',
+  placeholderRunning: { steer: 'In die laufende Aufgabe einbringen (⌘↩ für danach)', queue: 'Für danach einreihen (⌘↩ sofort einbringen)' },
+  followup: 'Nachrichten während der Arbeit', followups: { steer: 'Sofort einbringen', queue: 'Danach senden' },
+  followupHint: '⌘↩ macht jeweils das andere',
+  notifications: 'Mitteilungen', notificationsHint: 'Wenn ein Chat im Hintergrund fertig ist oder dich braucht',
+  notifyDone: 'Fertig', notifyFailed: 'Fehlgeschlagen', notifyWaiting: 'Wartet auf deine Freigabe',
+  revealInFinder: 'Im Finder zeigen',
 };
 
 export const t = de ? DE : EN;

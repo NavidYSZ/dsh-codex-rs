@@ -87,6 +87,10 @@ pub struct PromptRequest {
     pub model: Option<String>,
     pub effort: Option<String>,
     pub sandbox: Option<String>,
+    /// While a turn runs: hand the text to its next step instead of queueing
+    /// a turn of its own (dsh `steer`).
+    #[serde(default)]
+    pub steer: bool,
 }
 
 /// Everything the UI can ask for. Errors map to HTTP 400 unless they are [`NotFound`].
@@ -313,10 +317,16 @@ async fn static_file(uri: Uri) -> Response {
         )
             .into_response();
     }
+    // Debug builds read ui/ from disk: never let the browser keep a stale copy.
+    let cache = if cfg!(debug_assertions) {
+        "no-cache"
+    } else {
+        "public, max-age=300"
+    };
     (
         [
             (header::CONTENT_TYPE, mime),
-            (header::CACHE_CONTROL, "public, max-age=300".to_owned()),
+            (header::CACHE_CONTROL, cache.to_owned()),
         ],
         file.data,
     )

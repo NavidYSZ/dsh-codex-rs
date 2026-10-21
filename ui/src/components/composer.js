@@ -159,25 +159,30 @@ export function Composer({ hero, tx }) {
     }
   };
 
-  const submit = async () => {
+  // While a turn runs, a message either steers it (taken at its next step) or
+  // queues as the next turn; ⌘↩ picks the other one for this message.
+  const followup = useStore(store, (s) => s.followup);
+  const submit = async (other = false) => {
     if (running && !canSend) { cancel(); return; }
     if (!canSend) return;
     const body = text.trim();
     const refs = images.map((i) => i.ref);
     setText('');
     setImages([]);
-    const ok = await send(body, refs, { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}), sandbox: sel.sandbox });
+    const steer = running && (followup === 'steer') !== other;
+    const ok = await send(body, refs, { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}), sandbox: sel.sandbox, ...(steer ? { steer } : {}) });
     if (!ok) { setText(body); }
   };
 
   const onKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !composing.current && !e.isComposing) {
       e.preventDefault();
-      submit();
+      submit(e.metaKey || e.ctrlKey);
     }
   };
 
-  const placeholder = noKey ? t.placeholderNoKey : hero ? t.placeholderHero : t.placeholder;
+  const placeholder = noKey ? t.placeholderNoKey : hero ? t.placeholderHero
+    : running ? t.placeholderRunning[followup] : t.placeholder;
   const showStop = running && !canSend;
   return html`<div class=${cx('composer', drag && 'is-drag')}
       onDragOver=${(e) => { if ([...(e.dataTransfer?.types ?? [])].includes('Files')) { e.preventDefault(); setDrag(true); } }}
@@ -199,7 +204,7 @@ export function Composer({ hero, tx }) {
       ${hero ? null : html`<${AccessChip} sel=${sel} />`}
       <span class="spacer" />
       <button type="button" class=${cx('send', showStop && 'is-stop')} disabled=${!showStop && !canSend}
-        aria-label=${showStop ? t.stop : t.send} title=${showStop ? t.stop : t.send} onClick=${submit}>
+        aria-label=${showStop ? t.stop : t.send} title=${showStop ? t.stop : t.send} onClick=${() => submit()}>
         ${showStop ? html`<${IconStop} size=${16} />` : html`<${IconArrowUp} size=${16} />`}
       </button>
     </div>
