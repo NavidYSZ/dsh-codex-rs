@@ -21,6 +21,7 @@ dshx-server = { path = "crates/dshx-server" }
 dshx-testkit = { path = "crates/dshx-testkit" }
 dshx-mcp = { path = "crates/dshx-mcp" }
 dshx-subagent = { path = "crates/dshx-subagent" }
+dshx-plugins = { path = "crates/dshx-plugins" }
 
 anyhow = "1"
 async-trait = "0.1"

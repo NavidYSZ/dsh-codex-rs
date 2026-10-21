@@ -586,6 +586,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dshx-plugins"
+version = "0.3.0-alpha.0"
+dependencies = [
+ "anyhow",
+ "dshx-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "dshx-server"
 version = "0.3.0-alpha.0"
 dependencies = [

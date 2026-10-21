@@ -8,6 +8,7 @@
 use std::cmp::Ordering;
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
+use std::sync::RwLock;
 
 use serde_json::{Map, Value};
 
@@ -36,7 +37,8 @@ pub struct SkillConfig {
     pub dsh_home: Option<PathBuf>,
     /// Shared agents home (`$DSH_AGENTS_HOME` or `~/.agents`).
     pub agents_home: Option<PathBuf>,
-    /// Extra roots scanned after the project roots and before the user roots.
+    /// Extra roots scanned after the project roots and before the user roots
+    /// (plugin skill folders); [`SkillRegistry::set_custom_dirs`] replaces them.
     pub custom_dirs: Vec<PathBuf>,
     /// Bundled skills, scanned last.
     pub bundled_dir: Option<PathBuf>,
@@ -133,22 +135,65 @@ struct Root {
 }
 
 /// Discovers skills on every call; no caching, so edits apply at the next step.
-#[derive(Debug, Clone)]
+/// The custom roots can change while the registry is shared.
+#[derive(Debug)]
 pub struct SkillRegistry {
-    config: SkillConfig,
+    config: RwLock<SkillConfig>,
+}
+
+impl Clone for SkillRegistry {
+    fn clone(&self) -> Self {
+        SkillRegistry::new(self.config())
+    }
 }
 
 impl SkillRegistry {
     pub fn new(config: SkillConfig) -> Self {
-        SkillRegistry { config }
+        SkillRegistry {
+            config: RwLock::new(config),
+        }
     }
 
-    pub fn config(&self) -> &SkillConfig {
-        &self.config
+    /// The current settings (custom roots included).
+    pub fn config(&self) -> SkillConfig {
+        self.config.read().unwrap().clone()
+    }
+
+    /// Replaces the custom roots; every holder of this registry sees them
+    /// from its next discovery on.
+    pub fn set_custom_dirs(&self, dirs: Vec<PathBuf>) {
+        self.config.write().unwrap().custom_dirs = dirs;
     }
 
     /// Winning skills for a workspace, sorted by name (all invocation policies).
     pub fn snapshot(&self, cwd: &Path) -> SkillSnapshot {
+        let (candidates, complete) = self.discover(cwd);
+        let mut winners: Vec<SkillSummary> = Vec::new();
+        for skill in candidates {
+            if winners.iter().any(|w| w.name == skill.name) {
+                tracing::warn!(
+                    "skill \"{}\" from {} ignored because a higher-priority skill already exists",
+                    skill.name,
+                    skill.source
+                );
+                continue;
+            }
+            winners.push(skill);
+        }
+        winners.sort_by(|a, b| a.name.cmp(&b.name));
+        SkillSnapshot {
+            skills: winners,
+            complete,
+        }
+    }
+
+    /// Every valid skill of every root, highest precedence first; the first
+    /// of each name is the one [`SkillRegistry::snapshot`] picks.
+    pub fn candidates(&self, cwd: &Path) -> Vec<SkillSummary> {
+        self.discover(cwd).0
+    }
+
+    fn discover(&self, cwd: &Path) -> (Vec<SkillSummary>, bool) {
         let mut complete = true;
         let mut candidates = Vec::new();
         for root in self.roots(cwd) {
@@ -165,23 +210,7 @@ impl SkillRegistry {
         }
         // Stable sort keeps discovery order inside one rank (dsh localOrder).
         candidates.sort_by_key(|(rank, _)| *rank);
-        let mut winners: Vec<SkillSummary> = Vec::new();
-        for (_, skill) in candidates {
-            if winners.iter().any(|w| w.name == skill.name) {
-                tracing::warn!(
-                    "skill \"{}\" from {} ignored because a higher-priority skill already exists",
-                    skill.name,
-                    skill.source
-                );
-                continue;
-            }
-            winners.push(skill);
-        }
-        winners.sort_by(|a, b| a.name.cmp(&b.name));
-        SkillSnapshot {
-            skills: winners,
-            complete,
-        }
+        (candidates.into_iter().map(|(_, s)| s).collect(), complete)
     }
 
     /// Winning skills for a workspace, sorted by name.
@@ -202,7 +231,7 @@ impl SkillRegistry {
     }
 
     fn roots(&self, cwd: &Path) -> Vec<Root> {
-        let c = &self.config;
+        let c = &self.config();
         let mut roots = Vec::new();
         let mut push = |path: PathBuf, source: &'static str, rank: u32, skip_system: bool| {
             let path = absolute(&path);
@@ -249,6 +278,18 @@ impl SkillRegistry {
         }
         roots
     }
+}
+
+/// The valid skills of one folder (bundles and flat Markdown files), as a
+/// custom root would yield them; a missing folder yields none.
+pub fn discover_dir(dir: &Path) -> Vec<SkillSummary> {
+    let root = Root {
+        path: absolute(dir),
+        source: "custom",
+        rank: CUSTOM_RANK,
+        skip_system: false,
+    };
+    discover_root(&root).unwrap_or_default()
 }
 
 /// Kebab-case skill names (`^[a-z0-9]+(?:-[a-z0-9]+)*$`).
