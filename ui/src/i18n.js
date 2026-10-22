@@ -568,6 +568,9 @@ const EN = {
   marketExists: 'This marketplace is already added.',
   marketNoCatalog: 'No catalog found: the source needs .agents/plugins/marketplace.json or .claude-plugin/marketplace.json.',
   marketNotFound: 'Repository not found, or it needs a sign-in. Check the address; private repositories need Git credentials on this computer.',
+  ciMinimal: 'Minimal mode has no skills and no apps; @ still references files.',
+  placeholderMinimal: 'Message or task · / for commands · @ for files',
+  placeholderHeroMinimal: 'Describe what you want to build · / for commands · @ for files',
   marketEmpty: 'This marketplace offers no plugins yet.', noPluginsPick: 'No plugins installed yet. Install one from a marketplace below.',
 };
 
@@ -1106,6 +1109,9 @@ const DE = {
   marketExists: 'Dieser Marktplatz ist schon hinzugefügt.',
   marketNoCatalog: 'Kein Katalog gefunden: Die Quelle braucht .agents/plugins/marketplace.json oder .claude-plugin/marketplace.json.',
   marketNotFound: 'Repository nicht gefunden oder nur mit Anmeldung erreichbar. Prüf die Adresse; private Repositories brauchen Git-Zugangsdaten auf diesem Computer.',
+  ciMinimal: 'Im Modus Minimal gibt es keine Skills und Apps; @ verweist weiter auf Dateien.',
+  placeholderMinimal: 'Nachricht oder Aufgabe · / für Befehle · @ für Dateien',
+  placeholderHeroMinimal: 'Beschreibe, was entstehen soll · / für Befehle · @ für Dateien',
   marketEmpty: 'Dieser Marktplatz bietet noch keine Plugins an.', noPluginsPick: 'Noch keine Plugins installiert. Installiere eines aus einem Marktplatz unten.',
 };
 

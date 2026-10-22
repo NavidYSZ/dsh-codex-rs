@@ -13,7 +13,7 @@ import {
 import { Menu, MenuItem, ActionItem } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
 import { PlanBar } from './plan.js';
-import { ModeChip, useChatMode } from './modes.js';
+import { ModeChip, useChatMode, useStagedMode } from './modes.js';
 import { ProjectMenu } from './folders.js';
 import { ModelChip } from './models.js';
 import { IconImage } from '../icons.js';
@@ -147,8 +147,11 @@ export function Composer({ hero, tx }) {
     }
   };
 
-  const placeholder = noKey ? t.placeholderNoKey : hero ? t.placeholderHero
-    : running ? t.placeholderRunning[followup] : t.placeholder;
+  // Minimal has neither skills nor apps: the hint names only what works.
+  const stagedMode = useStagedMode();
+  const minimal = (hero ? stagedMode : chatMode) === 'minimal';
+  const placeholder = noKey ? t.placeholderNoKey : hero ? (minimal ? t.placeholderHeroMinimal : t.placeholderHero)
+    : running ? t.placeholderRunning[followup] : minimal ? t.placeholderMinimal : t.placeholder;
   const showStop = running && !canSend;
   return html`<div class=${cx('composer', drag && 'is-drag')}
       onDragOver=${(e) => { if ([...(e.dataTransfer?.types ?? [])].includes('Files')) { e.preventDefault(); setDrag(true); } }}

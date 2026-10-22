@@ -447,7 +447,7 @@ Without a composer backend every route below answers 404. Errors are `{error}` w
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/composer/suggest?kind=slash\|mention&q=&cwd=&session=&model=` | → `{kind, query, sections:[{id, items}], cacheMiss}` (below); `cwd` defaults to the session's folder, `model` (the composer's pick) decides `cacheMiss` |
+| GET | `/api/composer/suggest?kind=slash\|mention&q=&cwd=&session=&model=&preset=` | → `{kind, query, sections:[{id, items}], cacheMiss, preset}` (below); `cwd` defaults to the session's folder, `model` (the composer's pick) decides `cacheMiss`, `preset` is the mode the start page will create (a session's own mode wins); Minimal offers no skills, apps or chat-only commands |
 | GET | `/api/sessions/:id/mcp` | → `{active:[server]}`: the MCP servers the chat offers (its log, `always` servers, changes not yet recorded); Minimal → `[]` |
 | POST \| DELETE | `/api/sessions/:id/mcp/:server` | → `{active}`; switches the server on or off for the chat from its next step on; unknown server → 404, Minimal → 400 |
 | POST | `/api/sessions/:id/compact` | → `{compacted:true, items, tokens}` or `{compacted:false}` (nothing to compact yet): dsh `/compact`, also below the pressure threshold, in a bracket with `turn: null`; while a turn runs or input is queued → 400; Minimal → 400 |

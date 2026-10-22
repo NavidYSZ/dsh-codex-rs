@@ -82,12 +82,21 @@ impl dshx_server::Composer for WebComposer {
             .map(PathBuf::from)
             .or_else(|| chat.as_ref().map(|(_, c)| c.cwd.clone()));
         let goals = b.runtime.automation.features()["goals"] == true;
+        let preset = match &chat {
+            Some((_, c)) => c.preset,
+            None => query
+                .preset
+                .as_deref()
+                .and_then(Preset::parse)
+                .unwrap_or_else(|| crate::presets::default_of(&b.runtime.config())),
+        };
         b.runtime
             .suggest(SuggestContext {
                 kind: query.kind,
                 query: query.q,
                 cwd,
-                session: chat.map(|(id, c)| (id, c.preset, c.events)),
+                preset,
+                session: chat.map(|(id, c)| (id, c.events)),
                 model: query.model.filter(|m| !m.is_empty()),
                 goals,
             })

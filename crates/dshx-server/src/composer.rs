@@ -41,6 +41,9 @@ pub struct SuggestQuery {
     pub session: Option<String>,
     /// The composer's model (whether activating a server costs a cache miss).
     pub model: Option<String>,
+    /// The mode of the chat the start page will create (`standard`,
+    /// `minimal`); a session's own mode wins.
+    pub preset: Option<String>,
 }
 
 /// Everything the composer can ask for. Values are JSON as documented in

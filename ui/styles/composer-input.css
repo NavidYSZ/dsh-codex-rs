@@ -161,3 +161,5 @@
   /* The placeholder says it there. */
   .qp-hint { display: none; }
 }
+/* Minimal mode: why the menu has no skills or apps. */
+.ci-hint.ci-minimal { padding-left: 10px; border-top: .5px solid var(--line-2); margin-top: 4px; padding-top: 7px; }

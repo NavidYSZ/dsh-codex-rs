@@ -291,8 +291,10 @@ pub struct SuggestContext {
     pub kind: String,
     pub query: String,
     pub cwd: Option<PathBuf>,
-    /// Session id, its preset and events (when the composer belongs to a chat).
-    pub session: Option<(String, dshx_agent::Preset, Vec<dshx_core::SessionEvent>)>,
+    /// The chat's mode (the start page: the mode it will create).
+    pub preset: dshx_agent::Preset,
+    /// Session id and events (when the composer belongs to a chat).
+    pub session: Option<(String, Vec<dshx_core::SessionEvent>)>,
     pub model: Option<String>,
     pub goals: bool,
 }
@@ -330,14 +332,12 @@ impl Runtime {
             "query": q,
             "sections": sections,
             "cacheMiss": cache_miss,
+            "preset": ctx.preset.id(),
         }))
     }
 
     fn command_items(&self, ctx: &SuggestContext, q: &str) -> Vec<Value> {
-        let standard = ctx
-            .session
-            .as_ref()
-            .is_none_or(|(_, p, _)| *p == dshx_agent::Preset::Standard);
+        let standard = ctx.preset == dshx_agent::Preset::Standard;
         let chat = ctx.session.is_some();
         let mut items = Vec::new();
         for (name, label, description) in COMMANDS {
@@ -362,11 +362,7 @@ impl Runtime {
     }
 
     async fn skill_items(&self, ctx: &SuggestContext, q: &str) -> anyhow::Result<Vec<Value>> {
-        if ctx
-            .session
-            .as_ref()
-            .is_some_and(|(_, p, _)| *p == dshx_agent::Preset::Minimal)
-        {
+        if ctx.preset == dshx_agent::Preset::Minimal {
             return Ok(Vec::new());
         }
         let cwd = ctx.cwd.clone().unwrap_or_else(|| self.home.clone());
@@ -421,15 +417,11 @@ impl Runtime {
     }
 
     async fn app_items(&self, ctx: &SuggestContext, config: &Config, q: &str) -> Vec<Value> {
-        if ctx
-            .session
-            .as_ref()
-            .is_some_and(|(_, p, _)| *p == dshx_agent::Preset::Minimal)
-        {
+        if ctx.preset == dshx_agent::Preset::Minimal {
             return Vec::new();
         }
         let active = match &ctx.session {
-            Some((id, _, events)) => self.active_mcp(id, events),
+            Some((id, events)) => self.active_mcp(id, events),
             None => Vec::new(),
         };
         let connectors = dshx_mcp::catalog::connectors();
