@@ -4,7 +4,8 @@
 import { useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
-import { api } from '../state.js';
+import { useStore } from '../store.js';
+import { store, api, openPlugins } from '../state.js';
 import { IconRefresh, IconTrash, IconPlus } from '../icons.js';
 import { PageShell, Tabs, useLoad, Toggle, Pill } from './page.js';
 import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast } from './plugin-kit.js';
@@ -157,17 +158,18 @@ function ConnectorsTab() {
       onChanged=${conns.reload} onLogin=${(name) => login(name, list.find((c) => c.servers?.includes(name))?.id)} />` : null}`;
 }
 
-// The tab survives a reload of this browser tab.
+// `#/plugins/<tab>` names the tab; without one, the last tab of this browser tab.
 const TAB_KEY = 'dshx-plugins-tab';
 function readTab() {
   try { return t.tabsPlugins[sessionStorage.getItem(TAB_KEY)] ? sessionStorage.getItem(TAB_KEY) : 'plugins'; } catch { return 'plugins'; }
 }
 
 export function PluginsPage() {
-  const [tab, setTab] = useState(readTab);
+  const wanted = useStore(store, (s) => s.pluginsTab);
+  const tab = t.tabsPlugins[wanted] ? wanted : readTab();
   const pick = (k) => {
-    setTab(k);
     try { sessionStorage.setItem(TAB_KEY, k); } catch { /* storage blocked */ }
+    openPlugins(k, { replace: true });
   };
   return html`<${PageShell} title=${t.plugins} lead=${t.pluginsLead} wide>
     <${Tabs} value=${tab} labels=${t.tabsPlugins} onChange=${pick} />

@@ -206,12 +206,12 @@ export function ViewModeItems() {
 }
 
 /** Settings → Appearance: work details and the performance & usage bar. */
-export function AppearanceCard() {
+export function AppearanceCard({ titled = true }) {
   const ui = useStore(store, (s) => s.info?.ui);
   const mode = ui?.workDetails ?? 'standard';
   const perf = ui?.performanceUsage ?? 'detailed';
   return html`<section class="card">
-    <h2 class="card-title">${t.appearance}</h2>
+    ${titled ? html`<h2 class="card-title">${t.appearance}</h2>` : null}
     <${Field} label=${t.workDetails} hint=${t.workModeHints[mode] ?? t.workDetailsHint}>
       <${Segmented} label=${t.workDetails} value=${mode} onChange=${(v) => setUiPref({ workDetails: v })}
         options=${VIEW_MODES.map((m) => [m, t.workModes[m]])} />

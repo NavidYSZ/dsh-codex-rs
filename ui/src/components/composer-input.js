@@ -103,7 +103,7 @@ function Popup({ state, query, cursor, setCursor, onPick, onRetry, list }) {
         ${s.id === 'apps' && list.cacheMiss && s.items.some((x) => !x.active) ? html`<div class="ci-hint">${t.ciCacheHint}</div>` : null}
       </div>` : null))}
       ${empty ? html`<div class="ci-state">${list.kind === 'slash' ? t.ciNoSkills : t.ciNoMatches}
-        <button type="button" class="link-btn" onMouseDown=${(e) => e.preventDefault()} onClick=${() => openPlugins()}>
+        <button type="button" class="link-btn" onMouseDown=${(e) => e.preventDefault()} onClick=${() => openPlugins(list.kind === 'slash' ? 'skills' : 'mcp')}>
           ${list.kind === 'slash' ? t.ciManageSkills : t.ciManageApps}</button></div>` : null}
     </div>
     <div class="ci-foot" aria-hidden="true"><span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd>${t.ciNavigate}</span>

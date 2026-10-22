@@ -536,6 +536,19 @@ const EN = {
   pickerOffPeak: 'Off-peak: half price',
   pickerPeakPrices: (peak, off) => `Peak hours: ${peak}\nOff-peak: ${off}`,
   offPeakHint: 'Prices at peak hours (Monday to Friday, 01:00–04:00 and 06:00–10:00 UTC); all other hours cost half.',
+
+  settingsNav: {
+    general: 'General', appearance: 'Appearance', models: 'Models', defaults: 'New chats',
+    usage: 'Usage', archived: 'Archived chats', about: 'About',
+  },
+  settingsLeads: {
+    appearance: 'How chats show the agent’s work and what it costs.',
+    models: 'Enter your API keys to use models from the following providers.',
+    defaults: 'Mode, model and access for the chats you start from now on; open chats keep theirs.',
+    usage: 'Cost and tokens of all chats in USD, at the providers’ list prices (DeepSeek with peak and off-peak hours).',
+    archived: 'Archived chats leave the sidebar; bring them back here.',
+  },
+  noArchivedHint: 'Archive a chat from its … menu or with ⇧⌘A.',
 };
 
 const DE = {
@@ -1041,6 +1054,19 @@ const DE = {
   pickerOffPeak: 'Nebenzeit: halber Preis',
   pickerPeakPrices: (peak, off) => `Spitzenzeit: ${peak}\nNebenzeit: ${off}`,
   offPeakHint: 'Preise zur Spitzenzeit (Montag bis Freitag, 01:00–04:00 und 06:00–10:00 UTC); zu allen anderen Zeiten kostet es die Hälfte.',
+
+  settingsNav: {
+    general: 'Allgemein', appearance: 'Darstellung', models: 'Modelle', defaults: 'Neue Chats',
+    usage: 'Verbrauch', archived: 'Archivierte Chats', about: 'Über',
+  },
+  settingsLeads: {
+    appearance: 'Wie Chats die Arbeit des Agenten und ihre Kosten zeigen.',
+    models: 'Hinterlege deine API-Schlüssel, um die Modelle dieser Anbieter zu nutzen.',
+    defaults: 'Modus, Modell und Zugriff für die Chats, die du ab jetzt startest; offene Chats behalten ihre Einstellungen.',
+    usage: 'Kosten und Tokens aller Chats in USD, zu den Listenpreisen der Anbieter (DeepSeek mit Spitzen- und Nebenzeit).',
+    archived: 'Archivierte Chats verschwinden aus der Seitenleiste; hier holst du sie zurück.',
+  },
+  noArchivedHint: 'Archiviere einen Chat über sein …-Menü oder mit ⇧⌘A.',
 };
 
 export const t = de ? DE : EN;

@@ -312,8 +312,7 @@ function CostChip({ stats, detailed }) {
 
 /** Settings → Usage. */
 export function openUsage() {
-  openSettings();
-  requestAnimationFrame(() => document.getElementById('usage')?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  openSettings('usage');
 }
 
 /** Context ring, cache and cost under the composer; compact mode keeps ring and cost. */
@@ -401,7 +400,7 @@ function DayBars({ report }) {
   </div>`;
 }
 
-export function UsageCard() {
+export function UsageCard({ titled = true }) {
   const [days, setDays] = useState(7);
   const [state, setState] = useState({ loading: true, report: null, error: null });
   const [attempt, setAttempt] = useState(0);
@@ -416,11 +415,11 @@ export function UsageCard() {
   const r = state.report;
   const empty = r && !r.totals.requests;
   return html`<section class="card uv" id="usage">
-    <div class="uv-title-row">
-      <h2 class="card-title">${t.usage}</h2>
+    <div class=${cx('uv-title-row', !titled && 'is-bare')}>
+      ${titled ? html`<h2 class="card-title">${t.usage}</h2>` : null}
       <${Segmented} label=${t.usageRange} value=${days} onChange=${setDays} options=${[[7, t.usageRanges[7]], [30, t.usageRanges[30]]]} />
     </div>
-    <p class="uv-lead">${t.usageLead}</p>
+    ${titled ? html`<p class="uv-lead">${t.usageLead}</p>` : null}
     ${state.error ? html`<div class="uv-state">${t.usageFailed} <button type="button" class="link-btn" onClick=${() => setAttempt((n) => n + 1)}>${t.retry}</button></div>`
     : !r ? html`<div class="uv-state" aria-busy="true">${t.loading}</div>`
       : html`<div class=${cx('uv-body', state.loading && 'is-loading')}>

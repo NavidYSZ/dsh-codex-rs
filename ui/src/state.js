@@ -28,6 +28,9 @@ export const store = createStore({
   sessions: [],
   cwd: '',
   view: 'chat',
+  // Pane of Settings and tab of Plugins from `#/settings/<section>` and `#/plugins/<tab>` (null: the default).
+  settingsSection: null,
+  pluginsTab: null,
   activeId: null,
   header: null,
   events: [],
@@ -123,9 +126,10 @@ export async function boot() {
 
 function route() {
   const h = location.hash;
+  const page = /^#\/(settings|plugins)(?:\/([\w-]+))?$/.exec(h);
   if (h.startsWith('#/s/')) openSession(decodeURIComponent(h.slice(4)));
-  else if (h === '#/settings') store.set({ view: 'settings', sidebarOpen: false });
-  else if (h === '#/plugins') store.set({ view: 'plugins', sidebarOpen: false });
+  else if (page?.[1] === 'settings') store.set({ view: 'settings', settingsSection: page[2] ?? null, sidebarOpen: false });
+  else if (page?.[1] === 'plugins') store.set({ view: 'plugins', pluginsTab: page[2] ?? null, sidebarOpen: false });
   else if (h === '#/automations') store.set({ view: 'automations', sidebarOpen: false });
   else showNewChat();
 }
@@ -164,14 +168,21 @@ export function newChat(cwd) {
   showNewChat();
 }
 
-export function openSettings() {
-  setHash('#/settings');
-  store.set({ view: 'settings', sidebarOpen: false });
+/**
+ * Settings, at `section` (`models`, `usage`, …) or its first pane. Click
+ * handlers may pass an event. `replace` switches panes without a history entry.
+ */
+export function openSettings(section, { replace = false } = {}) {
+  const pane = typeof section === 'string' ? section : null;
+  setHash(pane ? `#/settings/${pane}` : '#/settings', replace);
+  store.set({ view: 'settings', settingsSection: pane, sidebarOpen: false });
 }
 
-export function openPlugins() {
-  setHash('#/plugins');
-  store.set({ view: 'plugins', sidebarOpen: false });
+/** Plugins, on `tab` (`skills`, `mcp`, …) or the tab used last. */
+export function openPlugins(tab, { replace = false } = {}) {
+  const pick = typeof tab === 'string' ? tab : null;
+  setHash(pick ? `#/plugins/${pick}` : '#/plugins', replace);
+  store.set({ view: 'plugins', pluginsTab: pick, sidebarOpen: false });
 }
 
 export function openAutomations() {

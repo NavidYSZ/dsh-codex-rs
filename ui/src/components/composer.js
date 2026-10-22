@@ -230,7 +230,7 @@ function Banners() {
   if (conn === 'unauthorized') list.push({ key: 'auth', tone: 'error', text: t.unauthorized });
   else if (conn === 'offline') list.push({ key: 'off', tone: 'error', text: t.offline });
   else if (conn === 'retry') list.push({ key: 'retry', tone: 'muted', text: t.reconnecting });
-  if (info && !info.apiKeyConfigured) list.push({ key: 'key', tone: 'info', text: t.noKey, action: [t.openSettings, openSettings] });
+  if (info && !info.apiKeyConfigured) list.push({ key: 'key', tone: 'info', text: t.noKey, action: [t.openSettings, () => openSettings('models')] });
   if (statusError) list.push({ key: 'status', tone: 'error', text: statusError });
   if (toast) list.push({ key: 'toast', tone: 'error', text: toast });
   if (!list.length) return null;

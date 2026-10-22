@@ -179,6 +179,14 @@
   price per 1M tokens and note that off-peak hours cost half (`/api/info`
   and `/api/providers` rows carry `cost` and `offPeakCost` from the usage
   price book). Prices use the same currency format as the usage bar.
+- **Settings in sections** like the Codex app: General, Appearance, Models,
+  New chats, Usage, Archived chats and About each have their own pane at
+  `#/settings/<section>`, behind a navigation rail on wide pages and a
+  scrolling tab row on narrow ones (the page's width decides). Links into
+  Settings ("Manage models…", a missing key, "All usage", a provider's
+  failure notice) open the right pane. The Plugins page's tabs are
+  deep-linkable the same way (`#/plugins/skills`, `#/plugins/mcp`), and
+  "Manage skills" / "Manage apps" in the composer menus open their tab.
 
 ### Fixed
 

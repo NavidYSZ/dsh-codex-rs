@@ -173,7 +173,7 @@ function PickerBody({ sel, onClose }) {
           class=${cx('seg', e === sel.effort && 'is-on')} onClick=${() => { setComposer({ effort: e }); onClose(); }}>${t.efforts[e] ?? e}</button>`)}
       </div>
     </div>` : null}
-    <button type="button" class="mp-manage" onClick=${() => { onClose(); openSettings(); }}>${t.pickerManage}</button>
+    <button type="button" class="mp-manage" onClick=${() => { onClose(); openSettings('models'); }}>${t.pickerManage}</button>
   </div>`;
 }
 
@@ -650,11 +650,11 @@ function ProviderRow({ p, onEdit, onDelete }) {
 /** Settings → Models with one provider's editor open (failure notices link here). */
 export function editProvider(id) {
   store.set({ editProvider: id || DEEPSEEK });
-  openSettings();
+  openSettings('models');
 }
 
 /** Settings → Models: the providers with their keys and models. */
-export function ModelsSection() {
+export function ModelsSection({ titled = true }) {
   const { data, loading, error, reload } = useLoad(() => api.providers());
   const [dialog, setDialog] = useState(null);
   const [status, setStatus] = useState('');
@@ -665,7 +665,6 @@ export function ModelsSection() {
   useEffect(() => {
     if (!wanted || !data) return;
     store.set({ editProvider: null });
-    document.getElementById('mo-title')?.scrollIntoView({ block: 'start' });
     const p = providers.find((x) => x.id === wanted);
     if (p) setDialog({ kind: 'edit', provider: p });
   }, [wanted, data]);
@@ -689,9 +688,9 @@ export function ModelsSection() {
     body = html`<div class="mo-list">${providers.map((p) => html`<${ProviderRow} key=${p.id} p=${p}
       onEdit=${() => setDialog({ kind: 'edit', provider: p })} onDelete=${() => setDialog({ kind: 'delete', provider: p })} />`)}</div>`;
   }
-  return html`<section class="card mo-card" aria-labelledby="mo-title">
-    <h2 class="card-title" id="mo-title">${t.models}</h2>
-    <p class="mo-intro">${t.modelsIntro}</p>
+  return html`<section class="card mo-card" aria-label=${t.models}>
+    ${titled ? html`<h2 class="card-title">${t.models}</h2>
+    <p class="mo-intro">${t.modelsIntro}</p>` : null}
     ${body}
     <div class="mo-foot">
       <button type="button" class="btn btn-small" disabled=${!data} onClick=${() => setDialog({ kind: 'add' })}><${IconPlus} size=${14} />${t.addProvider}</button>
