@@ -76,7 +76,8 @@ pub trait CallerSession: Send + Sync {
 /// (goals) read to tell direct human input from automatic continuation.
 #[derive(Clone)]
 pub struct CallerInfo {
-    /// A top-level agent: its session has no `parentSession`.
+    /// A top-level agent: its session is no delegated child (a branch,
+    /// which names its source as `parentSession`, still is one).
     pub root: bool,
     /// The open turn and the `seq` of its `turn/start`.
     pub turn: u64,

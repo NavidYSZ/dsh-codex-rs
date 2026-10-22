@@ -35,6 +35,14 @@ pub struct UiPrefs {
     pub work_details: String,
     /// `compact` (context ring and cost) or `detailed` (dsh "Performance & usage").
     pub performance_usage: String,
+    /// Sidebar view (dsh workspace view options): `projects` or `flat`.
+    pub sidebar_group: String,
+    /// `activity` (last activity first) or `created` (newest chat first).
+    pub sidebar_order: String,
+    /// Archived chats: `hide`, `show` (in their places) or `only`.
+    pub sidebar_archived: String,
+    /// Ask before switching to "Full access" (dsh permission-presets `confirm`).
+    pub confirm_full_access: bool,
 }
 
 impl Default for UiPrefs {
@@ -42,6 +50,10 @@ impl Default for UiPrefs {
         UiPrefs {
             work_details: "standard".into(),
             performance_usage: "detailed".into(),
+            sidebar_group: "projects".into(),
+            sidebar_order: "activity".into(),
+            sidebar_archived: "hide".into(),
+            confirm_full_access: true,
         }
     }
 }
@@ -150,7 +162,8 @@ impl ChatState {
         self.file.lock().unwrap().ui.clone()
     }
 
-    /// Applies `{workDetails?, performanceUsage?}`.
+    /// Applies `{workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?,
+    /// sidebarArchived?, confirmFullAccess?}`.
     pub fn update_ui(&self, patch: &Value) -> anyhow::Result<UiPrefs> {
         let pick = |key: &str, allowed: &[&str]| -> anyhow::Result<Option<String>> {
             match patch.get(key) {
@@ -166,12 +179,34 @@ impl ChatState {
             &["compact", "standard", "detailed", "verbose"],
         )?;
         let usage = pick("performanceUsage", &["compact", "detailed"])?;
+        let group = pick("sidebarGroup", &["projects", "flat"])?;
+        let order = pick("sidebarOrder", &["activity", "created"])?;
+        let archived = pick("sidebarArchived", &["hide", "show", "only"])?;
+        let confirm = match patch.get("confirmFullAccess") {
+            None => None,
+            Some(v) => Some(
+                v.as_bool()
+                    .ok_or_else(|| anyhow::anyhow!("confirmFullAccess must be true or false"))?,
+            ),
+        };
         let mut file = self.file.lock().unwrap();
         if let Some(v) = work {
             file.ui.work_details = v;
         }
         if let Some(v) = usage {
             file.ui.performance_usage = v;
+        }
+        if let Some(v) = group {
+            file.ui.sidebar_group = v;
+        }
+        if let Some(v) = order {
+            file.ui.sidebar_order = v;
+        }
+        if let Some(v) = archived {
+            file.ui.sidebar_archived = v;
+        }
+        if let Some(v) = confirm {
+            file.ui.confirm_full_access = v;
         }
         self.save(&file)?;
         Ok(file.ui.clone())
@@ -263,6 +298,44 @@ mod tests {
         let state = ChatState::load(home.path());
         assert_eq!(state.ui().work_details, "verbose");
         assert_eq!(state.ui().performance_usage, "detailed");
+    }
+
+    #[test]
+    fn sidebar_view_and_full_access_question_persist() {
+        let home = tempfile::tempdir().unwrap();
+        let state = ChatState::load(home.path());
+        assert!(state.ui().confirm_full_access);
+        state
+            .update_ui(&json!({"sidebarGroup": "flat", "sidebarOrder": "created", "sidebarArchived": "only", "confirmFullAccess": false}))
+            .unwrap();
+        assert!(state.update_ui(&json!({"sidebarGroup": "tree"})).is_err());
+        assert!(
+            state
+                .update_ui(&json!({"confirmFullAccess": "no"}))
+                .is_err()
+        );
+        let ui = ChatState::load(home.path()).ui();
+        assert_eq!(
+            (
+                ui.sidebar_group.as_str(),
+                ui.sidebar_order.as_str(),
+                ui.sidebar_archived.as_str()
+            ),
+            ("flat", "created", "only")
+        );
+        assert!(!ui.confirm_full_access);
+        // A file from before these settings reads with their defaults.
+        std::fs::write(
+            home.path().join("ui-state.json"),
+            r#"{"ui":{"workDetails":"compact"}}"#,
+        )
+        .unwrap();
+        let ui = ChatState::load(home.path()).ui();
+        assert_eq!(
+            (ui.work_details.as_str(), ui.sidebar_group.as_str()),
+            ("compact", "projects")
+        );
+        assert!(ui.confirm_full_access);
     }
 
     #[test]

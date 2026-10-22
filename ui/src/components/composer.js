@@ -18,6 +18,7 @@ import { ModelChip } from './models.js';
 import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 import { UsageBar } from './usage.js';
+import { confirmFullAccess } from './confirm.js';
 import { ComposerInput, insertAtCaret } from './composer-input.js';
 import { useAttachments, AttachmentRow } from './composer-attach.js';
 import { ComposerExtras } from './composer-extras.js';
@@ -57,7 +58,11 @@ function AccessChip({ sel, side = 'top', align = 'start', plain }) {
     <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} side=${side} align=${align} class="menu-wide">
       ${ACCESS.map((mode) => html`<${MenuItem} key=${mode} checked=${mode === sel.sandbox} hint=${t.access[mode][1]}
         tone=${mode === 'danger-full-access' ? 'warn' : null}
-        onClick=${() => { setComposer({ sandbox: mode }); setOpen(false); }}>${t.access[mode][0]}</${MenuItem}>`)}
+        onClick=${async () => {
+          setOpen(false);
+          if (mode === 'danger-full-access' && sel.sandbox !== mode && !(await confirmFullAccess())) return;
+          setComposer({ sandbox: mode });
+        }}>${t.access[mode][0]}</${MenuItem}>`)}
     </${Menu}>
   </span>`;
 }

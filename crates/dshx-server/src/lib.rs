@@ -167,6 +167,12 @@ pub trait Backend: Send + Sync + 'static {
         let _ = (id, patch);
         anyhow::bail!("not supported")
     }
+    /// Branches a chat after `{turn}` (0 = before the first turn) into a new
+    /// session in the same folder and mode, named `{title?}`; → `{id}`.
+    async fn fork_session(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        let _ = (id, body);
+        Err(NotFound("fork".into()).into())
+    }
     /// Feed of [`StreamMessage::Live`] messages, separate from [`Backend::stream`]
     /// so bulky frames cannot push session events out of the buffer.
     fn live(&self) -> Option<broadcast::Receiver<StreamMessage>> {
@@ -342,6 +348,7 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         )
         .route("/sessions/{id}/prompt", post(prompt))
         .route("/sessions/{id}/cancel", post(cancel))
+        .route("/sessions/{id}/fork", post(fork_session))
         .route("/sessions/{id}/preview", post(preview_grant))
         .route("/sessions/{id}/files", get(list_files))
         .route("/approvals/{call_id}", post(approve))
@@ -590,6 +597,14 @@ async fn prompt(
 ) -> ApiResult<StatusCode> {
     s.backend.prompt(&id, body).await?;
     Ok(StatusCode::ACCEPTED)
+}
+
+async fn fork_session(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.fork_session(&id, body).await?))
 }
 
 async fn cancel(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<StatusCode> {

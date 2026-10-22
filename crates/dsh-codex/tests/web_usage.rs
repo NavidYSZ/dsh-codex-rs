@@ -189,7 +189,11 @@ async fn web_prices_chats_and_keeps_display_preferences() {
     let info = server.get("/info").await;
     assert_eq!(
         info["ui"],
-        json!({"workDetails": "standard", "performanceUsage": "detailed"})
+        json!({
+            "workDetails": "standard", "performanceUsage": "detailed",
+            "sidebarGroup": "projects", "sidebarOrder": "activity", "sidebarArchived": "hide",
+            "confirmFullAccess": true,
+        })
     );
     let (status, info) = server
         .call(

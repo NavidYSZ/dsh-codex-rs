@@ -58,9 +58,14 @@ pub struct SessionSummary {
     pub turns: u64,
     pub event_count: u64,
     pub size_bytes: u64,
-    /// Set for subagent child sessions.
+    /// The session this one was delegated from (subagent children) or
+    /// forked from (branches).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_session: Option<String>,
+    /// Header `origin`: `subagent` for delegated children; `None` for
+    /// top-level chats, branches included.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
     /// The agent preset the session runs (see [`agent_preset`]); `None` for
     /// sessions that recorded none.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,6 +139,25 @@ impl SessionStore {
             return Err(SessionError::AlreadyExists(header.id));
         }
         FileLog::created(&self.root, header)
+    }
+
+    /// Creates a session that starts with `seed` (dense from seq 0) and keeps
+    /// the seed's times, like dsh's fork seed; it reaches disk at the first
+    /// flush. A seeded header needs its `session/end-seed {inherited: true}`
+    /// cut inside the seed.
+    pub fn create_seeded(&self, header: SessionHeader, seed: Vec<SessionEvent>) -> Result<FileLog> {
+        let cut = seed.iter().any(|e| {
+            e.kind == "session/end-seed" && e.data.get("inherited") == Some(&Value::Bool(true))
+        });
+        if header.is_seeded != cut {
+            return Err(SessionError::InvalidEvent(
+                "a seeded header needs exactly an inherited end-seed marker in its seed".into(),
+            ));
+        }
+        if self.locate(&header.id)?.is_some() {
+            return Err(SessionError::AlreadyExists(header.id));
+        }
+        FileLog::seeded(&self.root, header, seed)
     }
 
     /// Finds the unique session directory for `id` across project directories.
@@ -506,6 +530,11 @@ pub fn summarize(parsed: &ParsedLog) -> SessionSummary {
         parent_session: header
             .extra
             .get("parentSession")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        origin: header
+            .extra
+            .get("origin")
             .and_then(Value::as_str)
             .map(str::to_owned),
         preset: agent_preset(header, &parsed.events),

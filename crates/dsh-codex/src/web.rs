@@ -369,7 +369,8 @@ impl Backend for WebBackend {
             Some(c) => self.runtime.store.list_in(c)?,
             None => self.runtime.store.list()?,
         };
-        rows.retain(|r| r.parent_session.is_none());
+        // Subagent children stay out of the sidebar; branches are chats of their own.
+        rows.retain(|r| r.origin.as_deref() != Some("subagent"));
         let open = self.open.lock().await;
         let mut out = Vec::with_capacity(rows.len());
         for r in rows {
@@ -419,6 +420,55 @@ impl Backend for WebBackend {
         }
         let _ = self.chats.update(&id, &json!({ "seen": true }), now_ms());
         Ok(id)
+    }
+
+    async fn fork_session(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        let turn = body
+            .get("turn")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("turn must be a turn number (0 = before the first)"))?;
+        let open = self.open.lock().await.get(id).cloned();
+        let (header, events) = match open {
+            Some(s) => (s.log.header(), s.log.events()),
+            None => {
+                if self.runtime.store.locate(id)?.is_none() {
+                    return Err(NotFound(id.to_owned()).into());
+                }
+                let stored = self.runtime.store.read(id)?;
+                (stored.header, stored.events)
+            }
+        };
+        let seed = crate::fork::fork_seed(&events, turn)?;
+        let log = self
+            .runtime
+            .store
+            .create_seeded(crate::fork::fork_header(&header), seed)?;
+        log.checkpoint().await?;
+        let child = log.id().to_owned();
+        let title = match body.get("title").and_then(Value::as_str).map(str::trim) {
+            Some(t) if !t.is_empty() => t.chars().take(200).collect(),
+            _ => {
+                // The source's shown title: a rename wins over the log's.
+                let mut row = json!({ "id": id, "cwd": header.cwd, "title": crate::fork::log_title(&events) });
+                self.chats.decorate(&mut row);
+                let source = row["title"].as_str().unwrap_or_default().to_owned();
+                crate::fork::fork_title(&source)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
+            }
+        };
+        let log: Arc<dyn SessionLog> = Arc::new(log);
+        let s = self.start_agent(
+            &child,
+            log,
+            PathBuf::from(&header.cwd),
+            &Overrides::default(),
+        );
+        self.open.lock().await.insert(child.clone(), s);
+        self.chats
+            .update(&child, &json!({ "title": title, "seen": true }), now_ms())?;
+        Ok(json!({ "id": child }))
     }
 
     fn live(&self) -> Option<broadcast::Receiver<StreamMessage>> {

@@ -72,9 +72,12 @@ export function buildTranscript(events) {
   };
   const calls = new Map();
   const approvals = new Map();
+  const compactions = new Map();
   const shots = {};
   let turn = null;
   let lastTodoCall = null;
+  // The provider of the latest request: a failure notice links to its settings.
+  let provider = null;
 
   const openTurn = (n, time) => {
     turn = { turn: n, items: [], status: 'running', reason: null, start: time, end: null, retry: null };
@@ -140,6 +143,7 @@ export function buildTranscript(events) {
         });
         if (d.interrupted) t.items.push({ kind: 'notice', key: `i:${e.seq}`, tone: 'muted', code: 'stopped' });
         if (msg.source?.model) out.model = modelRef(msg.source.provider, msg.source.model);
+        provider = msg.source?.provider ?? provider;
         t.retry = null;
         break;
       }
@@ -194,14 +198,37 @@ export function buildTranscript(events) {
       }
 
       case 'llm/retry':
+        provider = d.provider ?? provider;
         current(d.turn, e.time).retry = { retry: d.retry, max: d.maxRetries ?? null, delayMs: d.delayMs ?? 0, failure: d.failure ?? null, time: e.time };
         break;
 
+      // dsh `compactSummary`: one marker per compaction, running until its end,
+      // with the summary and how much it replaced. A manual /compact runs
+      // between turns (`turn: null`): its marker closes the last turn.
+      case 'compaction/start': {
+        const item = { kind: 'divider', key: `k:${e.seq}`, code: 'compacted', running: true, summary: null, items: null, tokens: null, error: null };
+        compactions.set(d.compactionId, item);
+        const host = !turn && d.turn == null && out.turns.length ? out.turns[out.turns.length - 1] : current(null, e.time);
+        host.items.push(item);
+        break;
+      }
+      case 'compaction/summary': {
+        const item = compactions.get(d.compactionId);
+        if (!item) break;
+        const text = Array.isArray(d.summary) ? d.summary.map((b) => (b.type === 'text' ? b.text : '')).join('') : '';
+        item.summary = text.trim() ? text : null;
+        if (Array.isArray(d.shadowedSeqs)) item.items = d.shadowedSeqs.length;
+        if (Number.isSafeInteger(d.shadowedTokenCount)) item.tokens = d.shadowedTokenCount;
+        break;
+      }
       case 'compaction/end': {
-        if (d.error) break;
-        // A manual /compact runs between turns (`turn: null`): its line closes the last turn.
-        const t = !turn && d.turn == null ? out.turns[out.turns.length - 1] : current(null, e.time);
-        t?.items.push({ kind: 'divider', key: `k:${e.seq}`, code: 'compacted' });
+        let item = compactions.get(d.compactionId);
+        if (!item) {
+          item = { kind: 'divider', key: `k:${e.seq}`, code: 'compacted', summary: null, items: null, tokens: null };
+          current(null, e.time).items.push(item);
+        }
+        item.running = false;
+        item.error = d.error ?? null;
         break;
       }
 
@@ -212,7 +239,7 @@ export function buildTranscript(events) {
         t.reason = d.reason ?? null;
         t.end = e.time;
         t.retry = null;
-        if (kind === 'error') t.items.push({ kind: 'notice', key: `x:${e.seq}`, tone: 'error', code: 'error', failure: d.reason.error ?? null });
+        if (kind === 'error') t.items.push({ kind: 'notice', key: `x:${e.seq}`, tone: 'error', code: 'error', failure: d.reason.error ?? null, provider });
         else if (kind === 'aborted') t.items.push({ kind: 'notice', key: `x:${e.seq}`, tone: 'muted', code: 'stopped' });
         else if (kind === 'max-tokens') t.items.push({ kind: 'notice', key: `x:${e.seq}`, tone: 'warn', code: 'maxTokens' });
         else if (kind === 'interrupted') t.items.push({ kind: 'notice', key: `x:${e.seq}`, tone: 'warn', code: 'interrupted' });
@@ -238,6 +265,7 @@ export function buildTranscript(events) {
       case 'request/context':
         if (d.contextWindow) out.contextWindow = d.contextWindow;
         if (d.model) out.model = modelRef(d.provider, d.model);
+        provider = d.provider ?? provider;
         break;
       case 'sandbox/mode':
         out.sandbox = d.mode ?? out.sandbox;

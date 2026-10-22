@@ -91,6 +91,39 @@ impl FileLog {
         ))
     }
 
+    /// A new session that starts with `seed` (dense from seq 0, times kept),
+    /// written with the header at the first flush.
+    pub(crate) fn seeded(
+        root: &Path,
+        header: SessionHeader,
+        seed: Vec<SessionEvent>,
+    ) -> Result<FileLog> {
+        encode_header_line(&header)?;
+        for (index, event) in seed.iter().enumerate() {
+            if event.seq != index as u64 {
+                return Err(SessionError::InvalidEvent(format!(
+                    "seed event {index} has seq {} (seeds are dense from 0)",
+                    event.seq
+                )));
+            }
+            encode_event_line(event)?;
+        }
+        let dir = crate::format::session_dir(root, &header.cwd, &header.id)?;
+        Ok(Self::build(
+            root,
+            dir,
+            header,
+            seed,
+            Io {
+                durable: 0,
+                materialized: false,
+                lock: None,
+                torn_truncate_to: None,
+                recovered_until: None,
+            },
+        ))
+    }
+
     /// An existing session opened for writing under a held lock.
     pub(crate) fn opened(
         root: &Path,
