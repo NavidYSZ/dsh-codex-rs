@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
-import { api } from '../state.js';
+import { store, api, restoreFocus } from '../state.js';
+import { useStore } from '../store.js';
 
 /** Text with a moving highlight while work is in progress (Codex "shimmer"). */
 export const Shimmer = ({ active, children }) => html`<span class=${cx('shimmer-wrap', active && 'shimmer')}>${children}</span>`;
@@ -12,6 +13,11 @@ export const Shimmer = ({ active, children }) => html`<span class=${cx('shimmer-
  */
 export function Menu({ open, onClose, anchor, align = 'start', side = 'top', class: klass, children, fixed, at }) {
   const ref = useRef(null);
+  // Who had the focus before the menu (and its search field) took it.
+  const opener = useRef(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current) opener.current = document.activeElement;
+  wasOpen.current = open;
   useLayoutEffect(() => {
     const el = ref.current;
     if (!open || !el || !(fixed || at)) return;
@@ -38,12 +44,24 @@ export function Menu({ open, onClose, anchor, align = 'start', side = 'top', cla
     return () => {
       document.removeEventListener('pointerdown', down, true);
       document.removeEventListener('keydown', key);
+      const back = opener.current && opener.current !== document.body ? opener.current : anchor?.current;
+      restoreFocus(back);
     };
   }, [open]);
   if (!open) return null;
   const placed = fixed || at;
   return html`<div ref=${ref} class=${cx('menu', placed ? 'menu-fixed' : [`menu-${side}`, `menu-${align}`].join(' '), klass)} role="menu"
     onClick=${placed ? (e) => { if (e.target.closest('.menu-item')) onClose(); } : undefined}>${children}</div>`;
+}
+
+/** The note of `snack()` (state.js) with its action, at the bottom of the window. */
+export function Snackbar() {
+  const s = useStore(store, (x) => x.snack);
+  if (!s) return null;
+  return html`<div class="snackbar" role="status" aria-live="polite" key=${s.id}>
+    <span>${s.text}</span>
+    ${s.action ? html`<button type="button" class="snackbar-btn" onClick=${s.action[1]}>${s.action[0]}</button>` : null}
+  </div>`;
 }
 
 /** A command in a menu: icon, label, optional shortcut. */

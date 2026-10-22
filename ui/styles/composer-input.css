@@ -54,7 +54,7 @@
 .ci-initials.is-skill { background: color-mix(in srgb, var(--accent) 12%, var(--bg-module)); color: var(--accent); }
 .ci-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ci-name { font-size: 13px; font-weight: 500; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ci-name b { font-weight: 700; }
+.ci-name b { font-weight: 650; color: var(--link); }
 .ci-desc { font-size: 12px; line-height: 16px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ci-trail { flex: none; display: inline-flex; align-items: center; gap: 5px; max-width: 40%; font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
 .ci-trail.is-warn { color: var(--warn); }
@@ -161,3 +161,5 @@
   /* The placeholder says it there. */
   .qp-hint { display: none; }
 }
+/* Minimal mode: why the menu has no skills or apps. */
+.ci-hint.ci-minimal { padding-left: 10px; border-top: .5px solid var(--line-2); margin-top: 4px; padding-top: 7px; }

@@ -53,7 +53,7 @@ export function MoreMenu({ items, label }) {
     </button>
     <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} fixed side="bottom" align="end" class="menu-actions">
       ${items.filter(Boolean).map(([icon, text, fn, tone, disabled]) => html`<${ActionItem} key=${text} icon=${icon} tone=${tone}
-        disabled=${disabled} onClick=${(e) => { e.stopPropagation(); fn(); }}>${text}</${ActionItem}>`)}
+        disabled=${disabled} onClick=${(e) => { e.stopPropagation(); setOpen(false); fn(); }}>${text}</${ActionItem}>`)}
     </${Menu}>
   </span>`;
 }
@@ -68,10 +68,10 @@ export const statusPill = (status) => {
   return html`<${Pill} tone=${tone}>${t[key]}</${Pill}>`;
 };
 
-/** A dot and the status in words ("● Connected"). */
+/** A dot and the status in words ("● Connected"); a failed server that retries is a warning, not an error. */
 export function StatusDot({ status, retrying }) {
   const [tone, key] = STATUS[status] ?? ['off', 'notAdded'];
-  return html`<span class=${`mcp-status is-${tone}`}><span class="mcp-dot" aria-hidden="true" />${retrying ? t.mcpRetrying : t[key]}</span>`;
+  return html`<span class=${`mcp-status is-${retrying ? 'warn' : tone}`}><span class="mcp-dot" aria-hidden="true" />${retrying ? t.mcpRetrying : t[key]}</span>`;
 }
 
 /** Opens a sign-in page; the Mac app hands it to the default browser. */
@@ -113,17 +113,12 @@ export function useLoginWait(done) {
 const routes = new Map();
 
 /**
- * Whether the server has the write-only route `path` (cached per page
- * load); `null` while checking. Per-chat settings of skills and MCP
- * servers need routes that older servers lack.
+ * Whether the server has the write-only route `path`: the UI ships with
+ * its server, so yes, until a write answered 404/405 ([`routeMissing`]).
+ * No probe: it cost a 405 and a console error on every visit.
  */
 export function useRoute(path) {
-  const [ok, setOk] = useState(routes.get(path) ?? null);
-  useEffect(() => {
-    if (routes.has(path)) return;
-    api.hasRoute(path).then((v) => { routes.set(path, v); setOk(v); }, () => setOk(false));
-  }, [path]);
-  return ok;
+  return routes.get(path) ?? true;
 }
 
 /** Remembers that a settings route answered 404/405 after all. */
@@ -142,4 +137,25 @@ export function PageToast() {
   const text = useStore(store, (s) => s.toast);
   useEffect(() => () => store.set({ toast: null }), []);
   return text ? html`<${Portal}><div class="xe-toast" role="status" aria-live="polite">${text}</div></${Portal}>` : null;
+}
+
+/** A catalog connector's description and category in the UI's language (the catalog is English). */
+export const connectorText = (c) => t.connectorText?.[c.id] ?? c.description;
+export const connectorCategory = (c) => t.connectorCategories?.[c.category] ?? c.category;
+
+const FOCUS_LABEL = { skill: (n) => `/${n}`, server: (n) => `@${n}`, plugin: (n) => `@${n}` };
+
+/**
+ * A pill or chip asked for one skill, server or plugin (`store.pluginFocus`,
+ * set by `openDetails`): once `list` has loaded, `find(name)` opens it and
+ * returns whether it exists; a missing one gets a toast. A failed load drops
+ * the request.
+ */
+export function usePluginFocus(kind, list, find) {
+  const focus = useStore(store, (s) => s.pluginFocus);
+  useEffect(() => {
+    if (focus?.kind !== kind || list.loading) return;
+    store.set({ pluginFocus: null });
+    if (list.data && !find(focus.name)) toast(t.focusMissing(FOCUS_LABEL[kind](focus.name)));
+  }, [focus, list.loading, list.data]);
 }

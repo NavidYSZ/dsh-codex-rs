@@ -28,6 +28,9 @@ export const store = createStore({
   sessions: [],
   cwd: '',
   view: 'chat',
+  // Pane of Settings and tab of Plugins from `#/settings/<section>` and `#/plugins/<tab>` (null: the default).
+  settingsSection: null,
+  pluginsTab: null,
   activeId: null,
   header: null,
   events: [],
@@ -123,9 +126,10 @@ export async function boot() {
 
 function route() {
   const h = location.hash;
+  const page = /^#\/(settings|plugins)(?:\/([\w-]+))?$/.exec(h);
   if (h.startsWith('#/s/')) openSession(decodeURIComponent(h.slice(4)));
-  else if (h === '#/settings') store.set({ view: 'settings', sidebarOpen: false });
-  else if (h === '#/plugins') store.set({ view: 'plugins', sidebarOpen: false });
+  else if (page?.[1] === 'settings') store.set({ view: 'settings', settingsSection: page[2] ?? null, sidebarOpen: false });
+  else if (page?.[1] === 'plugins') store.set({ view: 'plugins', pluginsTab: page[2] ?? null, sidebarOpen: false });
   else if (h === '#/automations') store.set({ view: 'automations', sidebarOpen: false });
   else showNewChat();
 }
@@ -164,14 +168,21 @@ export function newChat(cwd) {
   showNewChat();
 }
 
-export function openSettings() {
-  setHash('#/settings');
-  store.set({ view: 'settings', sidebarOpen: false });
+/**
+ * Settings, at `section` (`models`, `usage`, …) or its first pane. Click
+ * handlers may pass an event. `replace` switches panes without a history entry.
+ */
+export function openSettings(section, { replace = false } = {}) {
+  const pane = typeof section === 'string' ? section : null;
+  setHash(pane ? `#/settings/${pane}` : '#/settings', replace);
+  store.set({ view: 'settings', settingsSection: pane, sidebarOpen: false });
 }
 
-export function openPlugins() {
-  setHash('#/plugins');
-  store.set({ view: 'plugins', sidebarOpen: false });
+/** Plugins, on `tab` (`skills`, `mcp`, …) or the tab used last. */
+export function openPlugins(tab, { replace = false } = {}) {
+  const pick = typeof tab === 'string' ? tab : null;
+  setHash(pick ? `#/plugins/${pick}` : '#/plugins', replace);
+  store.set({ view: 'plugins', pluginsTab: pick, sidebarOpen: false });
 }
 
 export function openAutomations() {
@@ -415,7 +426,10 @@ export function refreshSessions() {
 export async function send(text, images, opts) {
   const s = store.get();
   const body = { text, ...(images.length ? { images } : {}), ...opts, ...timeZone() };
-  store.set({ pending: { text, images, time: Date.now() }, statusError: null });
+  // Only a prompt that starts a turn now shows as pending; one sent while a
+  // turn runs is steered into it or queued (the queue list shows it).
+  const busy = !!s.activeId && (s.status === 'running' || s.status === 'waiting-approval');
+  store.set({ ...(busy ? {} : { pending: { text, images, time: Date.now() } }), statusError: null });
   try {
     let id = s.activeId;
     if (!id) {
@@ -427,7 +441,7 @@ export async function send(text, images, opts) {
     if (store.get().activeId === id && store.get().status === 'idle') store.set({ status: 'running' });
     return true;
   } catch (e) {
-    store.set({ pending: null });
+    if (!busy) store.set({ pending: null });
     fail(e);
     return false;
   }
@@ -468,8 +482,47 @@ export function markAllRead() {
   for (const x of store.get().sessions) if (x.unread) patchSession(x.id, { seen: true });
 }
 
+// ---- focus -----------------------------------------------------------------
+
+/**
+ * After a menu, bar or dialog closed: focus goes back to `el` when it is
+ * still on the page, else to the composer, unless something else took it.
+ */
+export function restoreFocus(el) {
+  setTimeout(() => {
+    const now = document.activeElement;
+    if (now && now !== document.body) return;
+    const target = el?.isConnected ? el : document.querySelector('textarea.composer-input');
+    target?.focus?.({ preventScroll: true });
+  }, 0);
+}
+
+// ---- questions -------------------------------------------------------------
+
+let answerAsked = null;
+
+/**
+ * An in-app "Are you sure?" (instead of window.confirm, which looks foreign
+ * in a browser): `{title, text?, action, danger?}`; resolves true on the
+ * action, false on Cancel or Esc. A new question cancels an open one.
+ */
+export function ask(question) {
+  answerAsked?.(false);
+  return new Promise((resolve) => {
+    answerAsked = resolve;
+    store.set({ ask: { danger: true, ...question } });
+  });
+}
+
+export function answerAsk(ok) {
+  const resolve = answerAsked;
+  answerAsked = null;
+  store.set({ ask: null });
+  resolve?.(ok);
+}
+
 export async function deleteSession(id) {
-  if (!confirm(t.confirmDelete)) return;
+  if (!(await ask({ title: t.confirmDelete, action: t.deleteChat }))) return;
   try {
     await api.deleteSession(id);
     store.set((s) => ({ sessions: s.sessions.filter((x) => x.id !== id) }));
@@ -644,6 +697,21 @@ export function fail(e) {
 }
 
 let toastTimer = 0;
+let snackTimer = 0;
+/** A short note at the bottom with one action ("Undo"); the next one replaces it. */
+export function snack(text, action) {
+  clearTimeout(snackTimer);
+  store.set((s) => ({ snack: { text, action, id: (s.snack?.id ?? 0) + 1 } }));
+  snackTimer = setTimeout(() => store.set({ snack: null }), 6000);
+}
+
+/** Archives (or restores) a chat and offers to undo it. */
+export function archiveWithUndo(row, archived = !row.archived) {
+  setArchived(row.id, archived);
+  snack(archived ? t.archivedChat(row.title || t.newChat) : t.restoredChat(row.title || t.newChat),
+    [t.undo, () => { store.set({ snack: null }); setArchived(row.id, !archived); }]);
+}
+
 export function toast(text) {
   clearTimeout(toastTimer);
   store.set({ toast: text });

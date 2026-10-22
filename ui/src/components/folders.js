@@ -59,7 +59,8 @@ export async function addProject(path) {
     pickWorkspace(ws.path);
     return ws;
   } catch (e) {
-    if (e?.status === 0 || e?.status === 401 || e?.status === 403) fail(e);
+    // A folder error (outside the roots, denied) has a code; 401/403 without one is the session.
+    if (e?.status === 0 || ((e?.status === 401 || e?.status === 403) && !CODES[e?.code])) fail(e);
     else toast(folderError(e));
     return null;
   }
@@ -228,7 +229,7 @@ function NewFolderRow({ onCreate, onCancel, error }) {
   return html`<div class="fp-new">
     <div class="fp-row fp-new-row">
       <span class="fp-icon"><${IconFolderPlus} size=${15} /></span>
-      <input class="input fp-new-input" value=${name} aria-label=${t.folderName} spellcheck="false" autocomplete="off"
+      <input class="input fp-new-input" value=${name} aria-label=${t.folderName} spellcheck=${false} autocomplete="off"
         ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); el.select(); } }}
         onInput=${(e) => setName(e.currentTarget.value)}
         onKeyDown=${(e) => {
@@ -409,7 +410,7 @@ function Browser({ start }) {
         <button type="button" class="icon-btn" aria-label=${t.parentFolder} title=${`${t.parentFolder} (⌘↑)`}
           disabled=${!listing?.parent || editing} onClick=${() => go(listing.parent)}><${IconChevronLeft} size=${16} /></button>
         ${editing ? html`<form class="fp-path" onSubmit=${(e) => { e.preventDefault(); submitPath(false); }}>
-            <input class="input" value=${typed} placeholder=${t.addWorkspaceHint} aria-label=${t.editPath} spellcheck="false" autocomplete="off"
+            <input class="input" value=${typed} placeholder=${t.addWorkspaceHint} aria-label=${t.editPath} spellcheck=${false} autocomplete="off"
               ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); el.select(); } }}
               onInput=${(e) => setTyped(e.currentTarget.value)} />
           </form>`

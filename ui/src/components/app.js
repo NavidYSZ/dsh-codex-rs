@@ -19,7 +19,8 @@ import { PluginsPage } from './plugins.js';
 import { AutomationsPage } from './automations.js';
 import { ModeLabel, ModeGuide } from './modes.js';
 import { ShortcutsDialog } from './shortcuts.js';
-import { FullAccessConfirm } from './confirm.js';
+import { FullAccessConfirm, AskDialog } from './confirm.js';
+import { Snackbar } from './common.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
@@ -41,7 +42,7 @@ function EditableTitle({ row, title }) {
     setEditing(false);
     if (save && value.trim() && value.trim() !== row.title) renameSession(row.id, value);
   };
-  return html`<input class="tb-rename" value=${value} aria-label=${t.rename} spellcheck="false"
+  return html`<input class="tb-rename" value=${value} aria-label=${t.rename} spellcheck=${false}
     ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); el.select(); } }}
     onInput=${(e) => setValue(e.currentTarget.value)} onBlur=${() => done(true)}
     onKeyDown=${(e) => { if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); }} />`;
@@ -138,5 +139,7 @@ export function App() {
     <${ModeGuide} />
     <${ShortcutsDialog} />
     <${FullAccessConfirm} />
+    <${AskDialog} />
+    <${Snackbar} />
   </div>`;
 }

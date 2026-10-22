@@ -6,11 +6,13 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, quote } from '../i18n.js';
-import { api, fail, toast } from '../state.js';
+import { api, fail, toast, ask } from '../state.js';
 import { copyText } from '../markdown.js';
 import { IconPlus, IconRefresh, IconTrash, IconSearch, IconCopy, IconChevronRight, IconAlert, IconKey, IconFile, IconPlug } from '../icons.js';
 import { useLoad, Toggle, Pill } from './page.js';
-import { Logo, MoreMenu, StatusDot, useAction, useLoginWait, useRoute, routeMissing, isMissingRoute } from './plugin-kit.js';
+import {
+  Logo, MoreMenu, StatusDot, useAction, useLoginWait, useRoute, routeMissing, isMissingRoute, usePluginFocus, connectorText, connectorCategory,
+} from './plugin-kit.js';
 import { Drawer, Dialog, Field } from './drawer.js';
 import { ServerForm, ProbeResult, emptyForm, formOf, fromImport, validate, bodyOf, useProbe } from './mcp-form.js';
 import { parseServers } from '../mcp-import.js';
@@ -63,7 +65,7 @@ function ServerCard({ s, connectors, busy, run, settings, onOpen, onLogin }) {
     s.status === 'needs-login' ? [html`<${IconKey} size=${14} />`, t.mcpSignIn, () => run(s.name, () => onLogin(s.name))] : null,
     s.auth?.login ? [null, t.disconnect, () => run(s.name, () => api.mcpAction(s.name, 'logout'))] : null,
     [html`<${IconFile} size=${14} />`, t.mcpShowLog, () => onOpen(s.name, 'log')],
-    plugin ? null : [html`<${IconTrash} size=${14} />`, t.remove, () => { if (confirm(t.confirmRemoveServer(s.name))) run(s.name, () => api.removeMcpServer(s.name)); }, 'danger'],
+    plugin ? null : [html`<${IconTrash} size=${14} />`, t.remove, async () => { if (await ask({ title: t.confirmRemoveServer(s.name), action: t.remove })) run(s.name, () => api.removeMcpServer(s.name)); }, 'danger'],
   ];
   return html`<div class=${cx('plug-card mcp-card', !s.enabled && 'is-off')}>
     <button type="button" class="mcp-card-main" onClick=${() => onOpen(s.name)} aria-label=${`${s.name}: ${t.mcpDetails}`}>
@@ -318,8 +320,8 @@ export function ServerDrawer({ name, tab: first, connectors, onClose, onChanged,
     <${MoreMenu} items=${[
     s.auth?.login ? [null, t.disconnect, () => run(s.name, () => api.mcpAction(s.name, 'logout'))] : null,
     [html`<${IconCopy} size=${14} />`, t.mcpCopyName, () => copyText(s.name).then(() => toast(t.copied))],
-    s.origin === 'plugin' ? null : [html`<${IconTrash} size=${14} />`, t.remove, () => {
-      if (confirm(t.confirmRemoveServer(s.name))) run(s.name, async () => { await api.removeMcpServer(s.name); onClose(); });
+    s.origin === 'plugin' ? null : [html`<${IconTrash} size=${14} />`, t.remove, async () => {
+      if (await ask({ title: t.confirmRemoveServer(s.name), action: t.remove })) run(s.name, async () => { await api.removeMcpServer(s.name); onClose(); });
     }, 'danger'],
   ]} />`;
   return html`<${Drawer} label=${s.name} head=${head} actions=${actions} tabs=${tabs} tab=${tabs[tab] ? tab : 'tools'} onTab=${setTab} onClose=${onClose}>
@@ -352,7 +354,7 @@ function Catalog({ connectors, onAdded, onLogin }) {
   const [asking, setAsking] = useState(null);
   const [token, setToken] = useState('');
   const q = query.trim().toLowerCase();
-  const list = (connectors ?? []).filter((c) => !q || [c.name, c.description, c.category].some((v) => v?.toLowerCase().includes(q)));
+  const list = (connectors ?? []).filter((c) => !q || [c.name, connectorText(c), connectorCategory(c)].some((v) => v?.toLowerCase().includes(q)));
   const add = async (c) => {
     setBusy(c.id);
     try {
@@ -375,8 +377,8 @@ function Catalog({ connectors, onAdded, onLogin }) {
     <ul class="mcp-catalog-list">${list.map((c) => html`<li key=${c.id} class="mcp-catalog-row">
       <${Logo} color=${c.brandColor} name=${c.name} size=${32} />
       <span class="mcp-catalog-text">
-        <span class="mcp-catalog-name">${c.name}${c.category ? html`<span class="plug-meta">${c.category}</span>` : null}</span>
-        <span class="plug-desc">${c.description}</span>
+        <span class="mcp-catalog-name">${c.name}${c.category ? html`<span class="plug-meta">${connectorCategory(c)}</span>` : null}</span>
+        <span class="plug-desc">${connectorText(c)}</span>
         ${asking?.c.id === c.id ? html`<form class="md-inline mcp-catalog-token" onSubmit=${saveToken}>
           <input class="input mono" type="password" autocomplete="off" value=${token} placeholder=${t.tokenLabel} aria-label=${t.tokenLabel}
             ref=${(el) => el && !el.dataset.f && (el.dataset.f = '1', el.focus())} onInput=${(e) => setToken(e.currentTarget.value)} />
@@ -403,7 +405,7 @@ function PasteJson({ existing, onEdit, onAddMany }) {
   const chosen = servers.filter((_, i) => isOn(i));
   return html`<div class="mcp-json-step">
     <${Field} label=${t.mcpJsonLabel} hint=${t.mcpJsonHint} wide>
-      <textarea class="input mono mcp-json-input" rows="9" value=${text} spellcheck="false" placeholder=${t.mcpJsonPlaceholder}
+      <textarea class="input mono mcp-json-input" rows="9" value=${text} spellcheck=${false} placeholder=${t.mcpJsonPlaceholder}
         onInput=${(e) => { setText(e.currentTarget.value); setPicked({}); }} />
     </${Field}>
     ${text.trim() && parsed.error ? html`<p class="md-error" role="alert">${t.mcpJsonUnreadable}</p>` : null}
@@ -468,6 +470,12 @@ export function AddServerDialog({ existing, connectors, onClose, onAdded, onLogi
     if (done.length) { toast(t.mcpAddedMany(done.length)); onAdded(done[0]); }
   };
   const titles = { choose: t.addServer, catalog: t.mcpFromCatalog, custom: t.mcpCustom, json: t.mcpPasteJson };
+  // A filled-in form is not thrown away by a stray Esc or click beside it.
+  const filled = step === 'custom' && JSON.stringify(form) !== JSON.stringify(emptyForm());
+  const close = async () => {
+    if (filled && !(await ask({ title: t.mcpDiscardTitle, text: t.mcpDiscardText, action: t.mcpDiscard }))) return;
+    onClose();
+  };
   const warn = untested && !probe.okFor(body);
   const back = step === 'choose' ? null : () => { setStep('choose'); setUntested(false); };
   const footer = step === 'custom' ? html`
@@ -476,7 +484,7 @@ export function AddServerDialog({ existing, connectors, onClose, onAdded, onLogi
     <button type="button" class="btn btn-small btn-primary" disabled=${saving} onClick=${save}>
       ${saving ? html`<span class="spinner" />` : null}${warn ? t.mcpAddAnyway : t.add}</button>` : null;
   return html`<${Dialog} title=${titles[step]} description=${step === 'choose' ? t.mcpAddLead : null} wide=${step !== 'choose'}
-    onClose=${onClose} back=${back} footer=${footer} step=${step}>
+    onClose=${close} back=${back} footer=${footer} step=${step}>
     ${step === 'choose' ? html`<${Choose} onPick=${(k) => { if (k === 'custom') { setForm(emptyForm()); probe.reset(); } setStep(k); }} />`
     : step === 'catalog' ? html`<${Catalog} connectors=${connectors} onAdded=${onAdded} onLogin=${onLogin} />`
       : step === 'json' ? html`<${PasteJson} existing=${existing} onEdit=${edit} onAddMany=${addMany} />`
@@ -507,6 +515,12 @@ export function McpTab() {
   }, [servers.data]);
   const open = (name, tab) => setOpened({ name, tab });
   const onLogin = (name) => login(name);
+  // An @server pill or an active-server chip; names compare like the composer's.
+  usePluginFocus('server', servers, (name) => {
+    const hit = list.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    if (hit) open(hit.name);
+    return !!hit;
+  });
 
   let body;
   if (servers.loading && !servers.data) body = html`<${CardSkeleton} />`;

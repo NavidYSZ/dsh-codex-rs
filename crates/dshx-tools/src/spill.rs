@@ -234,25 +234,67 @@ mod tests {
         assert_eq!(encode_segment("a b"), "a~0020b");
     }
 
-    #[test]
-    fn bounds_large_results_like_dsh_spill_policy() {
-        let tmp = tempfile::tempdir().unwrap();
-        // The notice's path length is part of the budget: use a root as long
-        // as the snapshot's `/tmp/dsh-acp-snap-ee77dff02`.
-        let pad = 27 - tmp.path().to_string_lossy().len() - 1;
-        let store = SpillStore::at(tmp.path().join("x".repeat(pad)));
-        assert_eq!(bound_inline_text(&store, "s", "bash", "small", 100), None);
-        let text = format!("SPILL_START-{}-SPILL_END", "x".repeat(2000));
-        let bounded = bound_inline_text(&store, "s", "bash", &text, 200).unwrap();
+    /// A temp dir with a short path: `/tmp` where it exists (macOS's
+    /// `$TMPDIR` under `/var/folders/…` alone is longer than dsh's root).
+    fn short_tempdir() -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .tempdir_in("/tmp")
+            .or_else(|_| tempfile::tempdir())
+            .unwrap()
+    }
+
+    /// Bounds `text` at 200 tokens and returns (head, tail, notice).
+    fn bound_200(store: &SpillStore, text: &str) -> (String, String, String) {
+        let bounded = bound_inline_text(store, "s", "bash", text, 200).unwrap();
         let (kept, notice) = bounded.rsplit_once("\n\n(").unwrap();
         let (head, tail) = kept.split_once("\n\n[...]\n\n").unwrap();
         assert!(head.starts_with("SPILL_START-x"));
         assert!(tail.ends_with("x-SPILL_END"));
-        // dsh snapshot bash-spill: 2022 bytes at 200 tokens keep 528, omit 1494.
-        assert_eq!(head.len() + tail.len(), text.len() - 1494, "{notice}");
-        assert!(notice.starts_with("Omitted 1494 bytes. Full formatted result stored at: "));
         assert!(notice.ends_with(
             "-bash.txt. Use read with offset/limit, or grep this path to search within it.)"
         ));
+        (head.into(), tail.into(), notice.into())
+    }
+
+    #[test]
+    fn bounds_large_results_like_dsh_spill_policy() {
+        let tmp = short_tempdir();
+        let text = format!("SPILL_START-{}-SPILL_END", "x".repeat(2000));
+        // The notice's path length is part of the budget: use a root as long
+        // as the snapshot's `/tmp/dsh-acp-snap-ee77dff02`.
+        const SNAPSHOT_ROOT: usize = "/tmp/dsh-acp-snap-ee77dff02".len();
+        let Some(pad) = SNAPSHOT_ROOT.checked_sub(tmp.path().to_string_lossy().len() + 1) else {
+            eprintln!("skipping the dsh byte counts: no temp dir shorter than {SNAPSHOT_ROOT}");
+            return;
+        };
+        let store = SpillStore::at(tmp.path().join("x".repeat(pad)));
+        assert_eq!(bound_inline_text(&store, "s", "bash", "small", 100), None);
+        let (head, tail, notice) = bound_200(&store, &text);
+        // dsh snapshot bash-spill: 2022 bytes at 200 tokens keep 528, omit 1494.
+        assert_eq!(head.len() + tail.len(), text.len() - 1494, "{notice}");
+        assert!(notice.starts_with("Omitted 1494 bytes. Full formatted result stored at: "));
+    }
+
+    #[test]
+    fn long_roots_shrink_the_kept_text_without_overflow() {
+        // Real roots are long on macOS (`/var/folders/…/T/dsh-spill-…`).
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SpillStore::at(tmp.path().join("y".repeat(120)));
+        let text = format!("SPILL_START-{}-SPILL_END", "x".repeat(2000));
+        let (head, tail, notice) = bound_200(&store, &text);
+        let omitted = text.len() - head.len() - tail.len();
+        assert!(notice.starts_with(&format!("Omitted {omitted} bytes.")));
+        assert!(
+            omitted > 1494,
+            "a longer notice leaves less room: {omitted}"
+        );
+        // A notice that alone exceeds the budget keeps the inline content.
+        let deep: PathBuf = std::iter::repeat_n("z".repeat(200), 4).collect();
+        let deep = SpillStore::at(tmp.path().join(deep));
+        assert_eq!(bound_inline_text(&deep, "s", "bash", &text, 200), None);
+        assert!(
+            std::fs::read_dir(tmp.path().join("z".repeat(200))).is_ok(),
+            "it was saved, then kept inline"
+        );
     }
 }

@@ -8,7 +8,7 @@ import { useStore } from '../store.js';
 import {
   store, newChat, openSettings, deleteSession, toggleSidebar, setSidebarMode, setActivityFilter, toggleFolded,
   openPalette, setPinned, setArchived, setUnread, startRename, stopRename, renameSession, markAllRead,
-  toast, openPlugins, openAutomations,
+  toast, openPlugins, openAutomations, restoreFocus, archiveWithUndo,
 } from '../state.js';
 import {
   IconCompose, IconGear, IconSidebar, IconTrash, IconFolder, IconSearch, IconBell, IconPin, IconArchive, IconMore,
@@ -49,14 +49,15 @@ function RenameInput({ s }) {
     if (done.current) return;
     done.current = true;
     stopRename();
+    restoreFocus(null);
     if (value.trim() !== (s.title || '')) renameSession(s.id, value);
   };
-  return html`<input class="sb-rename" value=${value} aria-label=${t.rename} spellcheck="false"
+  return html`<input class="sb-rename" value=${value} aria-label=${t.rename} spellcheck=${false}
     ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); el.select(); } }}
     onInput=${(e) => setValue(e.currentTarget.value)} onBlur=${commit}
     onKeyDown=${(e) => {
       if (e.key === 'Enter') { e.preventDefault(); commit(); }
-      if (e.key === 'Escape') { done.current = true; stopRename(); }
+      if (e.key === 'Escape') { done.current = true; stopRename(); restoreFocus(null); }
     }} />`;
 }
 
@@ -76,7 +77,7 @@ export function ChatMenu({ s, open, onClose, anchor, at, side = 'bottom', view }
       <${ActionItem} icon=${html`<${IconPencil} size=${14} />`} onClick=${() => window.dshxDesktop?.openInEditor?.(s.cwd)}>${t.openInEditor}</${ActionItem}>` : null}
     ${view ? html`<${ViewModeItems} />` : null}
     <div class="menu-sep" />
-    <${ActionItem} icon=${html`<${IconArchive} size=${14} />`} onClick=${() => setArchived(s.id, !s.archived)}>${s.archived ? t.unarchive : t.archive}</${ActionItem}>
+    <${ActionItem} icon=${html`<${IconArchive} size=${14} />`} onClick=${() => archiveWithUndo(s)}>${s.archived ? t.unarchive : t.archive}</${ActionItem}>
     <${ActionItem} icon=${html`<${IconTrash} size=${14} />`} tone="danger" onClick=${() => deleteSession(s.id)}>${t.deleteChat}</${ActionItem}>
   </${Menu}>`;
 }

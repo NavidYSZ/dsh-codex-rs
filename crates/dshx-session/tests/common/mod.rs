@@ -191,7 +191,9 @@ impl Drop for Mock {
 }
 
 /// Runs the official dsh headless with an isolated `DSH_HOME` (never `~/.dsh`)
-/// and the fake key `sk-mock` against the mock.
+/// and the fake key `sk-mock` against the mock. `DSH_AGENTS_HOME` points
+/// inside it too, so the user's personal skills (`~/.agents/skills`) stay out
+/// of the session; `HOME` is left alone.
 pub fn run_dsh(dsh_home: &Path, cwd: &Path, port: u16, args: &[&str]) -> Output {
     let child = Command::new("dsh")
         .arg("--profile")
@@ -199,6 +201,8 @@ pub fn run_dsh(dsh_home: &Path, cwd: &Path, port: u16, args: &[&str]) -> Output 
         .args(args)
         .current_dir(cwd)
         .env("DSH_HOME", dsh_home)
+        .env("DSH_AGENTS_HOME", dsh_home.join("agents-home"))
+        .env_remove("DSH_BUNDLED_SKILL_DIR")
         .env("DEEPSEEK_API_KEY", "sk-mock")
         .env(
             "DEEPSEEK_BASE_URL",

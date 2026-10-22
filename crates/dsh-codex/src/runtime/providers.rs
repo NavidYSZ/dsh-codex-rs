@@ -182,6 +182,7 @@ impl Runtime {
             row["providerName"] = "DeepSeek".into();
             row["model"] = info.id.clone().into();
             row["maxTokens"] = resolved.default_max_tokens.into();
+            add_deepseek_prices(&mut row, &info.id);
             row["available"] = ready.into();
             models.push(row);
         }
@@ -238,12 +239,14 @@ impl Runtime {
             .into_iter()
             .map(|info| {
                 let resolved = deepseek.resolve_model(&info.id);
-                json!({
+                let mut row = json!({
                     "id": info.id, "ref": info.id, "name": info.name,
                     "contextWindow": info.context_window, "maxTokens": resolved.default_max_tokens,
                     "input": info.input_modalities, "reasoningEfforts": info.reasoning_efforts,
                     "defaultReasoningEffort": info.default_reasoning_effort,
-                })
+                });
+                add_deepseek_prices(&mut row, &info.id);
+                row
             })
             .collect();
         json!({
@@ -294,10 +297,23 @@ fn key_json(env: bool, stored: bool, var: Option<&str>, required: bool) -> Value
 }
 
 /// `{input, output, cacheRead, cacheWrite}` in USD per million tokens.
+/// DeepSeek's list prices from the usage price book: `cost` at peak hours
+/// and `offPeakCost` (half) for the rest of the day.
+fn add_deepseek_prices(row: &mut Value, model: &str) {
+    let Some(price) = crate::usage::PriceBook::deepseek().lookup(PROVIDER, model) else {
+        return;
+    };
+    row["cost"] = json!(price.price);
+    if let Some(off_peak) = price.off_peak {
+        row["offPeakCost"] = json!(off_peak);
+    }
+}
+
 pub fn cost_json(cost: &ModelCost) -> Value {
     json!({
         "input": cost.input, "output": cost.output,
         "cacheRead": cost.cache_read, "cacheWrite": cost.cache_write,
+        "cacheReadPrice": cost.cache_read_price(), "cacheWritePrice": cost.cache_write_price(),
     })
 }
 

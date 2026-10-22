@@ -3,15 +3,22 @@ import { useMemo, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, age } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, closePalette, newChat, openSettings, setTheme, setSidebarMode, openSession } from '../state.js';
-import { IconCompose, IconGear, IconSun, IconBell, IconChat, IconFolder, IconSearch } from '../icons.js';
+import {
+  store, closePalette, newChat, openSettings, setTheme, setSidebarMode, openSession, openPlugins, openAutomations, setComposer,
+} from '../state.js';
+import { IconCompose, IconGear, IconSun, IconBell, IconChat, IconFolder, IconSearch, IconPlug, IconChart, IconJob, IconList } from '../icons.js';
 import { workspaceName } from './composer.js';
+import { setUiPref } from './worklog.js';
+import { VIEW_MODES } from '../worklog.js';
+
+const SETTINGS_PANES = ['general', 'appearance', 'models', 'defaults', 'usage', 'archived', 'about'];
 
 const matches = (hay, terms) => terms.every((w) => hay.includes(w));
 
 function useItems(q) {
   const sessions = useStore(store, (s) => s.sessions);
   const workspaces = useStore(store, (s) => s.workspaces);
+  const info = useStore(store, (s) => s.info);
   return useMemo(() => {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const dark = document.documentElement.dataset.theme === 'dark';
@@ -19,8 +26,28 @@ function useItems(q) {
       { key: 'new', icon: IconCompose, label: t.newChat, kbd: '⇧⌘O', run: () => newChat() },
       { key: 'new-none', icon: IconChat, label: t.newChatNoProject, run: () => newChat('') },
       ...workspaces.map((w) => ({ key: `new:${w.path}`, icon: IconFolder, label: t.newChatIn(w.name || workspaceName(w.path)), hint: w.path, run: () => newChat(w.path), quiet: true })),
+      // A new chat in another mode (searched for: "Minimal").
+      ...(info?.presets ?? []).map((p) => ({
+        key: `mode:${p.id}`, icon: IconCompose, label: t.modeNewChat(t.modes[p.id]?.name ?? p.name), quiet: true,
+        run: () => { newChat(); setComposer({ preset: p.id }); },
+      })),
       { key: 'activity', icon: IconBell, label: t.activity, run: () => setSidebarMode('activity') },
-      { key: 'settings', icon: IconGear, label: t.settings, run: openSettings },
+      ...(info?.extensions ? [
+        { key: 'plugins', icon: IconPlug, label: t.plugins, run: () => openPlugins('plugins') },
+        { key: 'skills', icon: IconPlug, label: t.tabsPlugins.skills, run: () => openPlugins('skills') },
+        { key: 'mcp', icon: IconPlug, label: t.tabsPlugins.mcp, run: () => openPlugins('mcp') },
+        { key: 'apps', icon: IconPlug, label: t.tabsPlugins.connectors, run: () => openPlugins('connectors'), quiet: true },
+      ] : []),
+      ...(info?.automation?.schedules ? [{ key: 'automations', icon: IconJob, label: t.automations, run: openAutomations }] : []),
+      { key: 'usage', icon: IconChart, label: t.usage, run: () => openSettings('usage') },
+      { key: 'settings', icon: IconGear, label: t.settings, run: () => openSettings() },
+      ...SETTINGS_PANES.map((k) => ({
+        key: `settings:${k}`, icon: IconGear, label: `${t.settings} · ${t.settingsNav[k]}`, quiet: true, run: () => openSettings(k),
+      })),
+      // The work-details view of every chat (searched for: "Ansicht", "Kompakt").
+      ...VIEW_MODES.map((m) => ({
+        key: `view:${m}`, icon: IconList, label: `${t.workDetails}: ${t.workModes[m]}`, quiet: true, run: () => setUiPref({ workDetails: m }),
+      })),
       { key: 'theme', icon: IconSun, label: t.toggleTheme, run: () => setTheme(dark ? 'light' : 'dark') },
     ].filter((a) => (terms.length ? matches(a.label.toLowerCase(), terms) : !a.quiet));
     const chats = [...sessions]
@@ -35,7 +62,7 @@ function useItems(q) {
         meta: age(s.updatedAt ?? s.createdAt ?? Date.now()), run: () => openSession(s.id), archived: s.archived,
       }));
     return { actions, chats };
-  }, [q, sessions, workspaces]);
+  }, [q, sessions, workspaces, info]);
 }
 
 function Body() {
@@ -57,7 +84,7 @@ function Body() {
     <div class="palette" role="dialog" aria-label=${t.search}>
       <div class="palette-input">
         <${IconSearch} size=${16} />
-        <input value=${q} placeholder=${t.paletteHint} aria-label=${t.paletteHint} spellcheck="false" autocomplete="off"
+        <input value=${q} placeholder=${t.paletteHint} aria-label=${t.paletteHint} spellcheck=${false} autocomplete="off"
           ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); } }}
           onInput=${(e) => { setQ(e.currentTarget.value); setSel(0); }} onKeyDown=${onKey} />
         <kbd class="kbd">esc</kbd>

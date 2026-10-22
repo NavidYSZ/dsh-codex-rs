@@ -6,7 +6,7 @@ import { html } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
 import {
-  store, openSession, setArchived, setPinned, startRename, markAllRead,
+  store, openSession, archiveWithUndo, setPinned, startRename, markAllRead,
 } from '../state.js';
 import { Dialog } from './models.js';
 import { openFind } from './find.js';
@@ -75,7 +75,7 @@ export const COMMANDS = {
   'next-chat': () => step(1),
   'next-attention': nextAttention,
   'mark-all-read': markAllRead,
-  'archive-chat': () => { const row = openChat(); if (row) setArchived(row.id, !row.archived); },
+  'archive-chat': () => { const row = openChat(); if (row) archiveWithUndo(row); },
   'pin-chat': () => { const row = openChat(); if (row) setPinned(row.id, !row.pinned); },
   'rename-chat': () => { const row = openChat(); if (row) rename(row); },
 };
@@ -136,26 +136,34 @@ const GROUPS = () => [
     ['palette', ['mod', 'K']], ['newChat', ['mod', 'shift', 'O']], ['openProject', ['mod', 'O']],
     ['sidebar', ['mod', 'B']], ['shortcuts', ['mod', '/']],
   ]],
+  // Browsers keep ⌘1–9, ⇧⌘[ ] and ⌃Tab for their own tabs: those work in the Mac app.
   ['chats', [
-    ['nthChat', ['mod', '1…9']], ['prevChat', ['mod', 'shift', '['], ['ctrl', 'shift', 'Tab']], ['nextChat', ['mod', 'shift', ']'], ['ctrl', 'Tab']],
+    ['nthChat', 'app', ['mod', '1…9']], ['prevChat', 'app', ['mod', 'shift', '['], ['ctrl', 'shift', 'Tab']],
+    ['nextChat', 'app', ['mod', 'shift', ']'], ['ctrl', 'Tab']],
     ['attention', ['mod', 'alt', 'A']], ['allRead', ['shift', 'Esc']], ['archive', ['mod', 'shift', 'A']],
     ['pin', ['mod', 'alt', 'P']], ['rename', ['mod', 'alt', 'R']],
   ]],
   ['chat', [
-    ['find', ['mod', 'F']], ['send', ['↩']], ['newline', ['shift', '↩']], ['other', ['mod', '↩']], ['close', ['Esc']],
+    ['find', ['mod', 'F']], ['model', ['ctrl', 'shift', 'M']], ['send', ['↩']], ['newline', ['shift', '↩']], ['other', ['mod', '↩']],
+    ['close', ['Esc']],
   ]],
 ];
 
 function Overview() {
   const close = () => store.set({ shortcuts: false });
+  const desktop = useStore(store, (s) => !!s.desktop);
   return html`<${Dialog} title=${t.shortcuts} class="sc-dialog" onClose=${close}>
     <div class="sc-grid">
       ${GROUPS().map(([group, rows]) => html`<section class="sc-group" key=${group} aria-label=${t.shortcutGroups[group]}>
         <h3 class="sc-head">${t.shortcutGroups[group]}</h3>
-        ${rows.map(([name, ...combos]) => html`<div class="sc-row" key=${name}>
-          <span class="sc-label">${t.sc[name]}</span>
+        ${rows.map(([name, ...rest]) => {
+    const app = rest[0] === 'app';
+    const combos = app ? rest.slice(1) : rest;
+    return html`<div class="sc-row" key=${name}>
+          <span class="sc-label">${t.sc[name]}${app && !desktop ? html`<span class="sc-note">${t.scMacOnly}</span>` : null}</span>
           <span class="sc-keys">${combos.map((keys) => html`<kbd class="kbd" key=${keys.join()}>${keyLabel(keys)}</kbd>`)}</span>
-        </div>`)}
+        </div>`;
+  })}
       </section>`)}
     </div>
   </${Dialog}>`;

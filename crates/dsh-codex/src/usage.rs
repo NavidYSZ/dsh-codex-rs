@@ -82,6 +82,28 @@ pub struct PriceBook {
     overrides: BTreeMap<(String, String), ModelPrice>,
     /// Built-in prices by model id, for DeepSeek's own routes.
     builtin: BTreeMap<String, ModelPrice>,
+    /// Flat prices of configured models over time ([`price_book_at`]): a
+    /// request keeps the price of its time, also after its provider changed
+    /// or was removed.
+    history: BTreeMap<(String, String), Vec<PricePoint>>,
+}
+
+/// A flat price from `since` (ms) on.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PricePoint {
+    pub since: u64,
+    pub price: Price,
+}
+
+/// The point that applied at `time`; before the first one, the first (the
+/// price was set before dsh-codex started recording).
+fn price_at(points: &[PricePoint], time: u64) -> Option<Price> {
+    points
+        .iter()
+        .rev()
+        .find(|p| p.since <= time)
+        .or(points.first())
+        .map(|p| p.price)
 }
 
 /// The price of one request and the clock it was read from.
@@ -112,6 +134,7 @@ impl PriceBook {
         PriceBook {
             overrides: BTreeMap::new(),
             builtin,
+            history: BTreeMap::new(),
         }
     }
 
@@ -129,8 +152,15 @@ impl PriceBook {
     }
 
     pub fn lookup(&self, provider: &str, model: &str) -> Option<ModelPrice> {
-        if let Some(p) = self.overrides.get(&(provider.to_owned(), model.to_owned())) {
+        let key = (provider.to_owned(), model.to_owned());
+        if let Some(p) = self.overrides.get(&key) {
             return Some(*p);
+        }
+        if let Some(last) = self.history.get(&key).and_then(|points| points.last()) {
+            return Some(ModelPrice {
+                price: last.price,
+                off_peak: None,
+            });
         }
         // Old or foreign logs may lack the provider; DeepSeek's routes are `deepseek-*`.
         (provider.is_empty() || provider.starts_with("deepseek"))
@@ -140,6 +170,17 @@ impl PriceBook {
 
     /// The price of a request to `model` made at `time` (ms since the epoch).
     pub fn quote(&self, provider: &str, model: &str, time: u64) -> Option<Quote> {
+        if let Some(price) = self
+            .history
+            .get(&(provider.to_owned(), model.to_owned()))
+            .and_then(|points| price_at(points, time))
+        {
+            return Some(Quote {
+                price,
+                off_peak: false,
+                approximate: false,
+            });
+        }
         let p = self.lookup(provider, model)?;
         let Some(off_peak) = p.off_peak else {
             return Some(Quote {
@@ -159,8 +200,63 @@ impl PriceBook {
     /// Changes whenever a price does (cached costs are recomputed then).
     pub fn fingerprint(&self) -> String {
         let overrides: Vec<_> = self.overrides.iter().collect();
-        serde_json::json!({ "builtin": self.builtin, "overrides": overrides }).to_string()
+        let history: Vec<_> = self.history.iter().collect();
+        serde_json::json!({ "builtin": self.builtin, "overrides": overrides, "history": history })
+            .to_string()
     }
+}
+
+/// `$DSHX_HOME/prices.json`: every flat price a configured model had, with
+/// the time it was first seen, keyed `provider/model`.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PriceHistoryFile {
+    #[serde(default)]
+    models: BTreeMap<String, Vec<PricePoint>>,
+}
+
+/// The prices for the current settings plus the recorded history: a price
+/// seen for the first time is recorded from `now` on, so costs already
+/// shown keep their price when a provider's prices change or the provider
+/// is removed.
+pub fn price_book_at(home: &Path, config: &dshx_core::config::Config, now: u64) -> PriceBook {
+    let mut book = price_book(config);
+    let path = home.join("prices.json");
+    let mut file: PriceHistoryFile = std::fs::read(&path)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let mut changed = false;
+    for ((provider, model), current) in &book.overrides {
+        let points = file
+            .models
+            .entry(format!("{provider}/{model}"))
+            .or_default();
+        if points.last().map(|p| p.price) != Some(current.price) {
+            points.push(PricePoint {
+                since: now,
+                price: current.price,
+            });
+            changed = true;
+        }
+    }
+    if changed {
+        let tmp = path.with_extension("json.tmp");
+        let written = serde_json::to_vec_pretty(&file)
+            .map_err(std::io::Error::other)
+            .and_then(|bytes| std::fs::write(&tmp, bytes))
+            .and_then(|()| std::fs::rename(&tmp, &path));
+        if let Err(e) = written {
+            tracing::warn!("{}: {e}", path.display());
+        }
+    }
+    for (key, points) in file.models {
+        // Provider ids have no `/`; model ids may.
+        if let Some((provider, model)) = key.split_once('/') {
+            book.history
+                .insert((provider.to_owned(), model.to_owned()), points);
+        }
+    }
+    book
 }
 
 /// The prices for the current settings: DeepSeek's built-in ones plus the
@@ -181,8 +277,8 @@ pub fn price_book(config: &dshx_core::config::Config) -> PriceBook {
                     Price {
                         input: cost.input,
                         output: cost.output,
-                        cache_read: cost.cache_read,
-                        cache_write: cost.cache_write,
+                        cache_read: cost.cache_read_price(),
+                        cache_write: cost.cache_write_price(),
                     },
                 );
             }
@@ -398,10 +494,14 @@ impl Timings {
     fn finish(&mut self) {
         self.avg_ttft_ms =
             (self.ttft_steps > 0).then(|| self.ttft_ms as f64 / self.ttft_steps as f64);
-        self.tokens_per_second = (self.decode_ms > 0)
+        // A stream that arrived at once (a cache, a mock) has no meaningful speed.
+        self.tokens_per_second = (self.decode_ms >= MIN_DECODE_MS)
             .then(|| self.decode_tokens as f64 / (self.decode_ms as f64 / 1000.0));
     }
 }
+
+/// Decode time below which tokens per second are not shown.
+const MIN_DECODE_MS: u64 = 200;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1376,8 +1476,8 @@ mod tests {
             cost: Some(dshx_core::config::ModelCost {
                 input: 1.0,
                 output: 2.0,
-                cache_read: 0.5,
-                cache_write: 1.0,
+                cache_read: Some(0.5),
+                cache_write: None,
             }),
             ..Default::default()
         });
@@ -1387,10 +1487,50 @@ mod tests {
         assert!(book.quote("anthropic", "claude-sonnet-5-5", when).is_some());
         let lab = book.quote("lab", "local-model", when).unwrap();
         assert_eq!((lab.price.input, lab.price.output), (1.0, 2.0));
+        // An unknown cache price counts like uncached input, never as free.
+        assert_eq!((lab.price.cache_read, lab.price.cache_write), (0.5, 1.0));
         assert!(
             book.quote("deepseek-official", "deepseek-flash", when)
                 .is_some()
         );
+    }
+
+    #[test]
+    fn costs_keep_the_price_of_their_time() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = dshx_core::config::Config::default();
+        let model = |input: f64| dshx_core::config::ProviderModelConfig {
+            id: "m".into(),
+            cost: Some(dshx_core::config::ModelCost {
+                input,
+                output: 2.0,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut lab = dshx_core::config::ProviderConfig {
+            api: Some("openai-completions".into()),
+            base_url: Some("http://127.0.0.1:9/v1".into()),
+            ..Default::default()
+        };
+        lab.models.push(model(1.0));
+        config.providers.insert("lab".into(), lab.clone());
+        let early = 1_000_000;
+        let _ = price_book_at(home.path(), &config, early);
+        // The price changes later: earlier requests keep theirs.
+        lab.models[0] = model(4.0);
+        config.providers.insert("lab".into(), lab);
+        let book = price_book_at(home.path(), &config, early + 10_000);
+        assert_eq!(book.quote("lab", "m", early + 5).unwrap().price.input, 1.0);
+        assert_eq!(
+            book.quote("lab", "m", early + 20_000).unwrap().price.input,
+            4.0
+        );
+        // Removing the provider keeps the history (and the costs) priced.
+        config.providers.clear();
+        let gone = price_book_at(home.path(), &config, early + 30_000);
+        assert_eq!(gone.quote("lab", "m", early + 5).unwrap().price.input, 1.0);
+        assert!(gone.lookup("lab", "m").is_some());
     }
 
     #[test]

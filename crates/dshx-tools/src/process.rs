@@ -52,6 +52,10 @@ struct Inner {
     stdout: Mutex<OutputCollector>,
     stderr: Mutex<OutputCollector>,
     kill_requested: AtomicBool,
+    /// The leader exited (set before its pipes drain); its pid may be reused.
+    exited: AtomicBool,
+    /// `kill` stopped the leader, a shell, with SIGKILL instead of SIGTERM.
+    shell_stopped: AtomicBool,
     settled: watch::Sender<Option<Outcome>>,
     grace: Duration,
 }
@@ -116,6 +120,33 @@ pub(crate) fn spawn_error_text(program: &str, error: &std::io::Error) -> String 
         Some(code) => format!("spawn {program} {code}"),
         None => format!("spawn {program}: {error}"),
     }
+}
+
+/// Whether `pid` still runs a shell, not a command the shell exec'd into
+/// (`bash -c 'npm test'` becomes npm; that one keeps the full grace).
+fn leader_is_shell(pid: i32) -> bool {
+    executable(pid)
+        .and_then(|path| path.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .is_some_and(|name| matches!(name.as_str(), "bash" | "sh" | "zsh" | "dash"))
+}
+
+#[cfg(target_os = "macos")]
+fn executable(pid: i32) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStrExt;
+    let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    // SAFETY: the buffer is as large as the size passed.
+    let n = unsafe { libc::proc_pidpath(pid, buf.as_mut_ptr().cast(), buf.len() as u32) };
+    (n > 0).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&buf[..n as usize])))
+}
+
+#[cfg(target_os = "linux")]
+fn executable(pid: i32) -> Option<PathBuf> {
+    std::fs::read_link(format!("/proc/{pid}/exe")).ok()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn executable(_pid: i32) -> Option<PathBuf> {
+    None
 }
 
 pub(crate) fn signal_group(pid: i32, signal: i32) -> bool {
@@ -221,6 +252,8 @@ impl Process {
                 spec.max_spill,
             )),
             kill_requested: AtomicBool::new(false),
+            exited: AtomicBool::new(false),
+            shell_stopped: AtomicBool::new(false),
             settled,
             grace: spec.grace,
         });
@@ -249,6 +282,7 @@ impl Process {
             .map(|s| tokio::spawn(pump(s, inner.clone(), Channel::Stderr, hook)));
         tokio::spawn(async move {
             let status = child.wait().await;
+            inner.exited.store(true, Ordering::SeqCst);
             // Inherited pipes (a backgrounded grandchild) may stay open: give
             // them the grace period, then stop reading.
             let readers: Vec<_> = stdout.into_iter().chain(stderr).collect();
@@ -268,6 +302,13 @@ impl Process {
                     (status.code(), status.signal().map(signal_name))
                 }
                 Err(_) => (None, None),
+            };
+            // The group was sent SIGTERM; the shell's hard stop is ours.
+            let signal = match signal {
+                Some(s) if s == "SIGKILL" && inner.shell_stopped.load(Ordering::SeqCst) => {
+                    Some("SIGTERM".to_owned())
+                }
+                other => other,
             };
             let killed = inner.kill_requested.load(Ordering::SeqCst) || signal.is_some();
             inner.settled.send_replace(Some(Outcome {
@@ -293,8 +334,12 @@ impl Process {
     }
 
     /// Terminates the process group: SIGTERM now, SIGKILL after the grace
-    /// period if anything in the group survived. False when the process had
-    /// already settled or a kill was already requested.
+    /// period if anything in the group survived. A leader that is still a
+    /// shell (not the command it exec'd into) gets SIGKILL at once: bash
+    /// survives a SIGTERM that lands while it forks and then runs the rest
+    /// of its script (`sleep 1; rm …` would still `rm`); the commands it
+    /// started keep the grace. False when the process had already settled
+    /// or a kill was already requested.
     pub fn kill(&self) -> bool {
         if self.is_settled() || self.inner.kill_requested.swap(true, Ordering::SeqCst) {
             return false;
@@ -302,6 +347,11 @@ impl Process {
         let Some(pid) = self.inner.pid else {
             return true;
         };
+        if !self.inner.exited.load(Ordering::SeqCst) && leader_is_shell(pid) {
+            self.inner.shell_stopped.store(true, Ordering::SeqCst);
+            // SAFETY: kill(2) on our own child, which has not been reaped.
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
         signal_group(pid, libc::SIGTERM);
         let grace = self.inner.grace;
         let escalate = move || {
@@ -407,6 +457,52 @@ mod tests {
             .unwrap();
         assert!(outcome.killed);
         assert_eq!(outcome.signal.as_deref(), Some("SIGTERM"));
+    }
+
+    #[tokio::test]
+    async fn a_killed_shell_runs_no_further_command() {
+        // The shell shrugs off SIGTERM like bash in its fork window; its next
+        // command must not run although the grace is long.
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("ran");
+        let mut s = spec(&format!(
+            "trap '' TERM; sleep 1; touch {}",
+            marker.display()
+        ));
+        s.grace = Duration::from_secs(5);
+        let p = Process::spawn(s, None);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(p.kill());
+        let outcome = tokio::time::timeout(Duration::from_secs(3), p.wait())
+            .await
+            .unwrap();
+        assert!(outcome.killed);
+        assert_eq!(
+            outcome.signal.as_deref(),
+            Some("SIGTERM"),
+            "reported as the signal sent"
+        );
+        tokio::time::sleep(Duration::from_millis(1_200)).await;
+        assert!(!marker.exists(), "the script went on after the kill");
+    }
+
+    #[test]
+    fn knows_a_shell_from_the_command_it_execs() {
+        let shell = std::process::Command::new("bash")
+            .args(["-c", "sleep 5; true"])
+            .spawn()
+            .unwrap();
+        let execed = std::process::Command::new("bash")
+            .args(["-c", "exec sleep 5"])
+            .spawn()
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(leader_is_shell(shell.id() as i32));
+        assert!(!leader_is_shell(execed.id() as i32));
+        for mut child in [shell, execed] {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
     }
 
     #[tokio::test]

@@ -112,20 +112,6 @@ pub fn rank(query: &str, text: &str) -> Option<u32> {
     Some(3_000u32.saturating_sub(gaps * 20).max(100))
 }
 
-/// "visual-brand-foundation" → "Visual Brand Foundation".
-fn title_of(name: &str) -> String {
-    name.split(['-', '_'])
-        .filter(|w| !w.is_empty())
-        .map(|w| {
-            let mut c = w.chars();
-            c.next()
-                .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
-                .unwrap_or_default()
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn sorted(mut items: Vec<(u32, Value)>, max: usize) -> Vec<Value> {
     items.sort_by(|a, b| {
         b.0.cmp(&a.0).then_with(|| {
@@ -291,8 +277,10 @@ pub struct SuggestContext {
     pub kind: String,
     pub query: String,
     pub cwd: Option<PathBuf>,
-    /// Session id, its preset and events (when the composer belongs to a chat).
-    pub session: Option<(String, dshx_agent::Preset, Vec<dshx_core::SessionEvent>)>,
+    /// The chat's mode (the start page: the mode it will create).
+    pub preset: dshx_agent::Preset,
+    /// Session id and events (when the composer belongs to a chat).
+    pub session: Option<(String, Vec<dshx_core::SessionEvent>)>,
     pub model: Option<String>,
     pub goals: bool,
 }
@@ -330,14 +318,12 @@ impl Runtime {
             "query": q,
             "sections": sections,
             "cacheMiss": cache_miss,
+            "preset": ctx.preset.id(),
         }))
     }
 
     fn command_items(&self, ctx: &SuggestContext, q: &str) -> Vec<Value> {
-        let standard = ctx
-            .session
-            .as_ref()
-            .is_none_or(|(_, p, _)| *p == dshx_agent::Preset::Standard);
+        let standard = ctx.preset == dshx_agent::Preset::Standard;
         let chat = ctx.session.is_some();
         let mut items = Vec::new();
         for (name, label, description) in COMMANDS {
@@ -362,11 +348,7 @@ impl Runtime {
     }
 
     async fn skill_items(&self, ctx: &SuggestContext, q: &str) -> anyhow::Result<Vec<Value>> {
-        if ctx
-            .session
-            .as_ref()
-            .is_some_and(|(_, p, _)| *p == dshx_agent::Preset::Minimal)
-        {
+        if ctx.preset == dshx_agent::Preset::Minimal {
             return Ok(Vec::new());
         }
         let cwd = ctx.cwd.clone().unwrap_or_else(|| self.home.clone());
@@ -375,13 +357,7 @@ impl Runtime {
         let owners = self.skill_owners().await;
         let mut items = Vec::new();
         for s in snapshot.skills.into_iter().filter(|s| s.user_invocable) {
-            let title = s
-                .metadata
-                .as_ref()
-                .and_then(|m| m.get("title"))
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .unwrap_or_else(|| title_of(&s.name));
+            let title = super::extensions::skill_title(&s);
             let Some(score) = rank(q, &s.name).max(rank(q, &title)) else {
                 continue;
             };
@@ -421,15 +397,11 @@ impl Runtime {
     }
 
     async fn app_items(&self, ctx: &SuggestContext, config: &Config, q: &str) -> Vec<Value> {
-        if ctx
-            .session
-            .as_ref()
-            .is_some_and(|(_, p, _)| *p == dshx_agent::Preset::Minimal)
-        {
+        if ctx.preset == dshx_agent::Preset::Minimal {
             return Vec::new();
         }
         let active = match &ctx.session {
-            Some((id, _, events)) => self.active_mcp(id, events),
+            Some((id, events)) => self.active_mcp(id, events),
             None => Vec::new(),
         };
         let connectors = dshx_mcp::catalog::connectors();

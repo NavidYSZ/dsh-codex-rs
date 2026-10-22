@@ -188,9 +188,12 @@ impl Runtime {
 
     /// Connects the MCP servers of the config and of enabled plugins
     /// (concurrently, each bounded by its handshake timeout, like dsh before
-    /// its first turn). Without an enabled server this does nothing.
-    pub async fn start_mcp(&self) -> anyhow::Result<()> {
-        if let Err(e) = self.reload_extensions(None).await {
+    /// its first turn). `wait` bounds the wait: servers that take longer keep
+    /// connecting in the background (the web UI shows them as connecting),
+    /// and only failures within it count. Without an enabled server this
+    /// does nothing.
+    pub async fn start_mcp(&self, wait: Option<std::time::Duration>) -> anyhow::Result<()> {
+        if let Err(e) = self.reload_extensions(wait).await {
             self.mcp.shutdown().await;
             return Err(e);
         }
@@ -257,14 +260,22 @@ impl Runtime {
         self.config.read().unwrap().clone()
     }
 
-    /// Applies a change, writes `config.toml` and returns the new config.
-    /// Open agents pick up skill and MCP settings before their next turn.
+    /// Applies a change, writes it into `config.toml` (only the keys it
+    /// touched; comments and everything else stay) and returns the new
+    /// config. Open agents pick up skill and MCP settings before their next
+    /// turn.
     pub fn update_config(&self, f: impl FnOnce(&mut Config)) -> anyhow::Result<Config> {
         let mut config = self.config.write().unwrap();
+        let before = config.clone();
         f(&mut config);
         std::fs::create_dir_all(&self.home)?;
-        let text = toml::to_string_pretty(&*config)?;
         let path = self.home.join("config.toml");
+        let old = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => return Err(e.into()),
+        };
+        let text = crate::config_file::render(&old, &before, &config)?;
         let tmp = path.with_extension("toml.tmp");
         std::fs::write(&tmp, text)?;
         std::fs::rename(&tmp, &path)?;

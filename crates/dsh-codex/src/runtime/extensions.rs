@@ -30,6 +30,12 @@ use super::Runtime;
 mod mcp_form;
 mod skill_files;
 
+/// The title the Skills page and the `/` menu show: frontmatter `title`,
+/// else the name in words.
+pub(crate) fn skill_title(s: &dshx_tools::skill::SkillSummary) -> String {
+    skill_files::frontmatter_title(&s.path).unwrap_or_else(|| skill_files::title(None, &s.name))
+}
+
 use mcp_form::{ServerForm, ServerSecrets};
 
 /// How long "Test connection" waits by default, and at most.
@@ -570,7 +576,19 @@ impl Extensions for RuntimeExtensions {
         .await?;
         let statuses = self.rt.mcp.status();
         let count = |status: &str| statuses.iter().filter(|s| s.status == status).count();
+        // Where personal skills live ($DSH_AGENTS_HOME or ~/.agents), as the UI shows it.
+        let personal = self.rt.skills.config().agents_home.map(|h| {
+            let dir = h.join("skills");
+            match std::env::var_os("HOME").map(PathBuf::from) {
+                Some(home) => match dir.strip_prefix(&home) {
+                    Ok(rest) => format!("~/{}", rest.display()),
+                    Err(_) => dir.display().to_string(),
+                },
+                None => dir.display().to_string(),
+            }
+        });
         Ok(json!({
+            "personalSkills": personal,
             "plugins": plugins.len(),
             "pluginsEnabled": enabled(&config, &plugins).count(),
             "marketplaces": market_count,
@@ -744,10 +762,7 @@ impl Extensions for RuntimeExtensions {
                     })
                 })
                 .collect();
-            let title = |s: &dshx_tools::skill::SkillSummary| {
-                skill_files::frontmatter_title(&s.path)
-                    .unwrap_or_else(|| skill_files::title(None, &s.name))
-            };
+            let title = skill_title;
             let mut seen = HashSet::new();
             let mut out = Vec::new();
             for s in skills.candidates(&cwd) {
@@ -1113,7 +1128,8 @@ impl Extensions for RuntimeExtensions {
                 .unwrap_or_default()
                 .to_owned()
         };
-        let (name, description, cwd) = (text("name"), text("description"), text("cwd"));
+        let (name, description, cwd, lang) =
+            (text("name"), text("description"), text("cwd"), text("lang"));
         let cwd = (!cwd.is_empty()).then_some(cwd);
         let dir = match body
             .get("scope")
@@ -1149,7 +1165,7 @@ impl Extensions for RuntimeExtensions {
         }
         let (folder, skill) = (dir, name.clone());
         let file = blocking(move || {
-            let file = skill_files::create(&folder, &skill, &description)?;
+            let file = skill_files::create(&folder, &skill, &description, &lang)?;
             Ok(file.canonicalize().unwrap_or(file))
         })
         .await?;

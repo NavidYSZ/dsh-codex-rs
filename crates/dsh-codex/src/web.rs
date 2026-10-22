@@ -755,7 +755,7 @@ impl Backend for WebBackend {
         let index = self.usage.clone();
         let id = id.to_owned();
         tokio::task::spawn_blocking(move || {
-            let prices = usage::price_book(&runtime.config());
+            let prices = usage::price_book_at(&runtime.home, &runtime.config(), now_ms());
             let agent = runtime.agent_config(&cwd, &Overrides::default());
             let route = runtime.route(&agent.model);
             let rule = usage::CompactionRule {
@@ -796,7 +796,7 @@ impl Backend for WebBackend {
         let runtime = self.runtime.clone();
         let index = self.usage.clone();
         let mut report = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
-            let prices = usage::price_book(&runtime.config());
+            let prices = usage::price_book_at(&runtime.home, &runtime.config(), now_ms());
             index.refresh(&runtime.store, &runtime.store.list()?, &prices, true)?;
             let now = now_ms();
             let query = usage::UsageQuery {

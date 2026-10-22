@@ -480,3 +480,28 @@ Priorität P1 = mit dem ersten Paket, P2 = danach, P3 = bei Gelegenheit.
 1. Meintest du mit „Mode“ die Darstellung (Kapitel 4) oder die Agent-Ausstattung (Kapitel 5)? Der Plan deckt beides ab.
 2. Kosten in USD (so rechnet DeepSeek ab) oder zusätzlich EUR mit festem Kurs?
 3. Welche Anbieter zuerst? Vorschlag: Anthropic, OpenRouter, Z.ai, Kimi und Ollama, weil sie zu deiner DSH-Konfiguration passen.
+
+---
+
+## Stand nach der Umsetzung (22.10.2026, Branch `codex-app` mit Paket H)
+
+**Umgesetzt** (Einzelheiten im CHANGELOG unter „Unreleased“):
+
+- **A:** Arbeitsschritte-Ansicht mit Statuszeile (Kompakt, Standard, Detailliert, Ausführlich), eingeklappte Turns mit Dauer, Tool-Aufrufen und Kosten, Leiste mit Kontext, Cache und Kosten, Verbrauchsseite mit DeepSeek-Spitzen- und Nebenzeit.
+- **B:** Ordnerauswahl (Mac-Sheet, macOS-Dialog des Servers, Ordner-Browser), Instanzwechsel ohne grauen Bildschirm, ⌃1–⌃9.
+- **C:** `/` und `@` im Composer mit Pillen, Skills und MCP-Server nur auf Abruf (cachefreundlich per `tool-addition`), Warteschlange, Anhänge, `/compact`, `/export`.
+- **D:** Anbieter DeepSeek, Anthropic und eigene API (Anthropic Messages, OpenAI Chat Completions), Einstellungsseite „Modelle“, Modell-Wähler.
+- **E:** Modi Standard und Minimal (ohne Plan-Modus).
+- **F:** Nachrichtenaktionen, Fehltexte je Code, lesbare Komprimierung, lange Chats mit Sprungmarken, Suche im Chat, Tastenkürzel, Bestätigung für „Voller Zugriff“, Ansichtsoptionen der Seitenleiste.
+- **G:** Skills- und MCP-Seiten mit Schublade, Dialog „Server hinzufügen“ mit Verbindungstest und JSON-Import, Protokoll und Anmeldung.
+- **H (Feinschliff):** DeepSeek-Modelle mit Anzeigenamen und Listenpreisen (Spitzenzeit, Hinweis auf Nebenzeit); Einstellungen in Bereichen mit Navigation (`#/settings/<bereich>`, Plugins-Reiter unter `#/plugins/<reiter>`); Plan-Leiste über dem Composer wie die DSH-To-dos; Dialog „Marktplatz hinzufügen“; Pillen öffnen Skill, Server oder Plugin; einheitliche Begriffe („Tools“, „Ziel“, „Denkstufe“, „Chat“); Rückfragen im App-Dialog statt `confirm()`; `config.toml` wird nur an den geänderten Schlüsseln bearbeitet; Kosten behalten den Preis ihrer Zeit; Entwurf je Chat; Fokus kehrt nach Menüs und Dialogen zurück; `web` wartet höchstens 3 s auf MCP-Server; ein gestoppter Bash-Befehl führt keinen weiteren Befehl mehr aus; alle QA-Befunde zu `3caa9e3` (Q1–Q19) bearbeitet; Tests auf dem Mac grün.
+
+**Offen:**
+
+- Plan-Modus (`/plan`, `exit_plan_mode`), Rückfragen (`ask_user`) und „Dateien übergeben“ (`present`), Kapitel 5 und 9.
+- Anbieter OpenAI Responses, Gemini und die übrigen Katalog-Anbieter; „Aus DeepSeek Harness übernehmen“.
+- `web_search` über die DeepSeek Search API.
+- Echter Cache-Test mit DeepSeek nach `@`-Aktivierung (Kapitel 1, nur nach OK, Kosten im Cent-Bereich); dabei auch die Reihenfolge aufgeschobener Tools im `tools`-Feld prüfen.
+- Vergleichs-Screenshots neben DSH und Codex in `ui/screenshots/compare/` (Kapitel 10).
+- P2/P3 der Paritätsliste: Dateibaum, Dateisuche und Terminal im Seitenpanel, „Öffnen in“ mit erkannten Apps, Volltextsuche über Chats, Rückmeldung gut/schlecht, Chats als `@`-Referenz.
+- Server-Fehlermeldungen (MCP, Git) kommen weiterhin englisch; bekannte Fälle übersetzt die Oberfläche.

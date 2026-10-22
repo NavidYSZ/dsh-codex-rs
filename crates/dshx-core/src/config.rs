@@ -258,18 +258,31 @@ pub struct ProviderModelConfig {
     pub cost: Option<ModelCost>,
 }
 
-/// Prices in USD per one million tokens.
+/// Prices in USD per one million tokens. A cache price left out is not
+/// known: such tokens are priced like uncached input.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct ModelCost {
     /// Uncached input.
     pub input: f64,
     pub output: f64,
-    #[serde(alias = "cacheRead")]
-    pub cache_read: f64,
+    #[serde(alias = "cacheRead", skip_serializing_if = "Option::is_none")]
+    pub cache_read: Option<f64>,
     /// Cache writes (5-minute entries).
-    #[serde(alias = "cacheWrite")]
-    pub cache_write: f64,
+    #[serde(alias = "cacheWrite", skip_serializing_if = "Option::is_none")]
+    pub cache_write: Option<f64>,
+}
+
+impl ModelCost {
+    /// Cache reads, at the input price when unknown.
+    pub fn cache_read_price(&self) -> f64 {
+        self.cache_read.unwrap_or(self.input)
+    }
+
+    /// Cache writes, at the input price when unknown.
+    pub fn cache_write_price(&self) -> f64 {
+        self.cache_write.unwrap_or(self.input)
+    }
 }
 
 /// One `[mcp_servers.<name>]` table (dsh `mcp-client` config). `command`
@@ -870,7 +883,12 @@ mod tests {
         let cost = model.cost.unwrap();
         assert_eq!(
             (cost.input, cost.cache_read, cost.cache_write),
-            (0.6, 0.15, 0.0)
+            (0.6, Some(0.15), None)
+        );
+        assert_eq!(
+            cost.cache_write_price(),
+            0.6,
+            "unknown: like uncached input"
         );
 
         // An added catalog provider is written as a bare table.

@@ -2,11 +2,11 @@
 // a short result line, prompts queued behind the running turn (dsh
 // `queue.*`, ⌘↩ steers them all) and the MCP servers this chat activated
 // ("Active: [Linear ✕]").
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { createStore, useStore } from '../store.js';
-import { store, api, fail, openPlugins } from '../state.js';
+import { store, api, fail, openPlugins, restoreFocus, setDraft } from '../state.js';
 import { IconPencil, IconX, IconArrowUp } from '../icons.js';
 import { openGoalForm } from './goal.js';
 import { setUiPref } from './worklog.js';
@@ -139,24 +139,40 @@ export async function steerQueued() {
 
 function QueueItem({ item }) {
   const [edit, setEdit] = useState(null);
+  // The prompt may start while it is being edited: the change goes into
+  // the composer with a word, not nowhere.
+  const editing = useRef(null);
+  editing.current = edit;
+  useEffect(() => {
+    const chat = store.get().activeId;
+    return () => {
+      const text = editing.current;
+      if (text == null || store.get().activeId !== chat) return;
+      if (!text.trim() || text.trim() === textOf(item).trim()) return;
+      setDraft(text);
+      notify(t.ciQueueStartedWhileEditing);
+    };
+  }, []);
   const text = textOf(item);
   const textOnly = (item.content ?? []).every((b) => b.type === 'text');
   const save = async () => {
     const next = edit.trim();
     if (!next) return;
-    if (await queueAction(item.id, { action: 'edit', text: next }, t.ciQueueEditFailed)) setEdit(null);
+    if (await queueAction(item.id, { action: 'edit', text: next }, t.ciQueueEditFailed)) close();
   };
+  // Back to the composer when the edit ends.
+  const close = () => { setEdit(null); restoreFocus(null); };
   if (edit !== null) {
     return html`<li class="qp-item is-editing">
       <textarea class="qp-edit" rows="2" value=${edit} aria-label=${t.ciQueueEdit}
         ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); } }}
         onInput=${(e) => setEdit(e.currentTarget.value)}
         onKeyDown=${(e) => {
-    if (e.key === 'Escape') { e.preventDefault(); setEdit(null); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
     else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); save(); }
   }} />
       <div class="qp-actions">
-        <button type="button" class="btn btn-small" onClick=${() => setEdit(null)}>${t.ciQueueCancel}</button>
+        <button type="button" class="btn btn-small" onClick=${close}>${t.ciQueueCancel}</button>
         <button type="button" class="btn btn-small btn-primary" disabled=${!edit.trim()} onClick=${save}>${t.ciQueueSave}</button>
       </div>
     </li>`;
@@ -229,10 +245,10 @@ async function deactivate(server) {
   }
 }
 
-/** Opens a server's (or skill's) details on the Plugins page. */
+/** Opens a skill's, server's or plugin's details on its tab of the Plugins page. */
 export function openDetails(kind, name) {
   store.set({ pluginFocus: { kind, name } });
-  openPlugins();
+  openPlugins({ skill: 'skills', server: 'mcp' }[kind] ?? 'plugins');
 }
 
 function ActiveServers() {

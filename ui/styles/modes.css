@@ -88,3 +88,4 @@
   .mode-guide-foot { flex-wrap: wrap; padding: 10px 16px 12px; }
   .mode-guide-foot .btn { margin-left: auto; }
 }
+.mode-guide:focus { outline: none; }

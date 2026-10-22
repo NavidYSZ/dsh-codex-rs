@@ -1,23 +1,29 @@
 // Plugins page, like the Codex app's: installed plugins and marketplaces,
 // apps (connectors with sign-in), skills and MCP servers. Changes apply at
 // once; open chats see new tools and skills with their next prompt.
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
-import { api } from '../state.js';
+import { useStore } from '../store.js';
+import { store, api, openPlugins, toast, ask } from '../state.js';
 import { IconRefresh, IconTrash, IconPlus } from '../icons.js';
 import { PageShell, Tabs, useLoad, Toggle, Pill } from './page.js';
-import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast } from './plugin-kit.js';
+import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast, usePluginFocus, connectorText, connectorCategory } from './plugin-kit.js';
 import { SkillsTab } from './skills.js';
 import { McpTab, ServerDrawer } from './mcp.js';
+import { Dialog, Field } from './drawer.js';
+
+/** A list that failed to load: what happened and "Try again", like the Skills and MCP tabs. */
+const LoadFailed = ({ text, onRetry }) => html`<div class="page-empty xe-empty"><p>${text}</p>
+  <button type="button" class="btn btn-small" onClick=${onRetry}><${IconRefresh} size=${14} />${t.retry}</button></div>`;
 
 // ---- plugins and marketplaces -------------------------------------------------
 
-function PluginCard({ p, busy, run }) {
+function PluginCard({ p, busy, run, focused }) {
   const ui = p.interface ?? {};
   const name = ui.displayName || p.name;
   const problems = [p.error, ...(p.warnings ?? [])].filter(Boolean);
-  return html`<div class=${cx('plug-card', !p.enabled && 'is-off')}>
+  return html`<div class=${cx('plug-card', !p.enabled && 'is-off', focused && 'is-focus')} data-plugin=${p.id}>
     <${Logo} url=${p.logoUrl} color=${ui.brandColor} name=${name} />
     <div class="plug-text">
       <div class="plug-name">${name}<span class="plug-meta">${p.marketplace}${p.version ? ` · ${p.version}` : ''}</span></div>
@@ -33,7 +39,7 @@ function PluginCard({ p, busy, run }) {
         onChange=${(on) => run(p.id, () => api.pluginAction(p.id, on ? 'enable' : 'disable'))} />
       <${MoreMenu} items=${[
         [html`<${IconRefresh} size=${14} />`, t.update, () => run(p.id, () => api.pluginAction(p.id, 'update'))],
-        [html`<${IconTrash} size=${14} />`, t.remove, () => { if (confirm(t.confirmRemovePlugin(name))) run(p.id, () => api.removePlugin(p.id)); }, 'danger'],
+        [html`<${IconTrash} size=${14} />`, t.remove, async () => { if (await ask({ title: t.confirmRemovePlugin(name), action: t.remove })) run(p.id, () => api.removePlugin(p.id)); }, 'danger'],
       ]} />
     </div>
   </div>`;
@@ -58,41 +64,135 @@ function MarketPlugin({ m, e, busy, run }) {
   </div>`;
 }
 
+// ---- adding a marketplace -------------------------------------------------------
+
+const LOCAL = /^(\/|~\/|\.\.?\/)/;
+const GIT = /^(https?:\/\/|git@|ssh:\/\/|git:\/\/|file:\/\/)|\.git(#.*)?$/;
+const GITHUB = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
+
+/** What the server makes of `source` (marketplace.rs `parse_origin`): kind, where from, ref. */
+export function marketSource(source, ref = '') {
+  const raw = source.trim();
+  if (!raw) return null;
+  if (LOCAL.test(raw)) return { kind: 'local', where: raw };
+  const [base, inline = ''] = raw.split('#');
+  const pick = ref.trim() || inline.trim();
+  if (GIT.test(raw)) return { kind: 'git', where: base, ref: pick };
+  const repo = base.replace(/\.git$/, '');
+  if (GITHUB.test(repo)) return { kind: 'github', where: `https://github.com/${repo}.git`, ref: pick };
+  return { kind: 'invalid' };
+}
+
+/** A server error in the user's words where we know it. */
+function marketError(message) {
+  if (/already added/.test(message)) return t.marketExists;
+  if (/no \.agents\/plugins\/marketplace\.json/.test(message)) return t.marketNoCatalog;
+  if (/unknown marketplace source|source is empty/.test(message)) return t.marketInvalid;
+  if (/not found|could not read Username|Authentication failed|terminal prompts disabled/i.test(message)) return t.marketNotFound;
+  return message;
+}
+
+function AddMarketDialog({ onClose, onAdded }) {
+  const [source, setSource] = useState('');
+  const [ref, setRef] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const parsed = marketSource(source, ref);
+  const invalid = parsed?.kind === 'invalid';
+  const local = parsed?.kind === 'local';
+  const submit = async (e) => {
+    e?.preventDefault();
+    if (!parsed || invalid || busy) return;
+    setBusy(true);
+    setError(null);
+    const [base] = source.trim().split('#');
+    try {
+      const added = await api.addMarketplace(local ? source.trim() : base, local ? undefined : parsed.ref || undefined);
+      toast(t.marketAdded(added?.displayName || added?.name || base));
+      onAdded(added?.name);
+    } catch (err) {
+      setError(marketError(err?.message ?? String(err)));
+      setBusy(false);
+    }
+  };
+  const hint = !parsed || invalid ? t.marketSourceHint
+    : local ? t.marketLocal
+      : html`${parsed.kind === 'github' ? t.marketGithub : t.marketGit} <span class="mono">${parsed.where}</span>${parsed.ref ? html` · <span class="mono">#${parsed.ref}</span>` : null}`;
+  const footer = html`<button type="button" class="btn btn-small" disabled=${busy} onClick=${onClose}>${t.cancel}</button>
+    <button type="submit" form="mk-add" class="btn btn-small btn-primary" disabled=${!parsed || invalid || busy}>
+      ${busy ? html`<span class="spinner" />` : null}${busy ? t.marketAdding : t.add}</button>`;
+  return html`<${Dialog} title=${t.addMarketplace} description=${t.marketLead} onClose=${() => { if (!busy) onClose(); }} footer=${footer}>
+    <form id="mk-add" class="md-form" onSubmit=${submit}>
+      <${Field} label=${t.marketSource} wide error=${invalid ? t.marketInvalid : null} hint=${hint}>
+        <input class="input mono" value=${source} placeholder="owner/repo" spellcheck=${false} autocomplete="off" disabled=${busy}
+          onInput=${(e) => { setSource(e.currentTarget.value); setError(null); }} />
+      </${Field}>
+      <${Field} label=${t.marketRef} wide hint=${local ? t.marketRefLocal : t.marketRefHint}>
+        <input class="input mono" value=${local ? '' : ref} placeholder="main" spellcheck=${false} autocomplete="off" disabled=${busy || local}
+          onInput=${(e) => { setRef(e.currentTarget.value); setError(null); }} />
+      </${Field}>
+      <div class="md-field is-wide">
+        <span class="md-label">${t.marketExamples}</span>
+        <ul class="mk-examples">
+          ${[['owner/repo', t.marketExGithub], ['https://example.com/team/plugins.git', t.marketExGit], ['~/Plugins/katalog', t.marketExLocal]]
+    .map(([ex, text]) => html`<li key=${ex}><code class="mono">${ex}</code><span>${text}</span></li>`)}
+        </ul>
+      </div>
+      ${busy && !local ? html`<p class="md-hint is-wide mk-progress" role="status"><span class="spinner" />${t.marketCloning}</p>` : null}
+      ${error ? html`<p class="md-error is-wide" role="alert">${error}</p>` : null}
+    </form>
+  </${Dialog}>`;
+}
+
 function PluginsTab() {
   const plugins = useLoad(() => api.plugins());
   const markets = useLoad(() => api.marketplaces());
   const [busy, run] = useAction(plugins, markets);
-  const [source, setSource] = useState('');
-  const add = async (e) => {
-    e.preventDefault();
-    const raw = source.trim();
-    if (!raw) return;
-    const [src, ref] = raw.split('#');
-    if (await run('market', () => api.addMarketplace(src, ref))) setSource('');
+  const [adding, setAdding] = useState(false);
+  const added = (name) => {
+    setAdding(false);
+    markets.reload();
+    setTimeout(() => document.querySelector(`[data-market="${CSS.escape(name ?? '')}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 400);
   };
   const installed = plugins.data ?? [];
+  // An @plugin pill of a sent prompt: show that plugin's card for a moment.
+  const [focused, setFocused] = useState(null);
+  usePluginFocus('plugin', plugins, (name) => {
+    const key = name.toLowerCase();
+    const hit = installed.find((p) => [p.name, p.id, p.interface?.displayName].some((v) => v?.toLowerCase() === key));
+    if (hit) setFocused(hit.id);
+    return !!hit;
+  });
+  useEffect(() => {
+    if (!focused) return undefined;
+    document.querySelector(`[data-plugin="${CSS.escape(focused)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const id = setTimeout(() => setFocused(null), 2000);
+    return () => clearTimeout(id);
+  }, [focused]);
   return html`
+    <div class="xe-toolbar">
+      <p class="plug-meta mcp-lead">${t.marketsLead}</p>
+      <button type="button" class="btn btn-small btn-primary" onClick=${() => setAdding(true)}><${IconPlus} size=${14} />${t.addMarketplace}</button>
+    </div>
     <section class="page-section">
       <h2 class="section-title">${t.installed}</h2>
-      ${installed.length ? html`<div class="plug-grid">${installed.map((p) => html`<${PluginCard} key=${p.id} p=${p} busy=${busy} run=${run} />`)}</div>`
-    : html`<div class="page-empty">${plugins.loading ? t.loading : t.noPlugins}</div>`}
+      ${installed.length ? html`<div class="plug-grid">${installed.map((p) => html`<${PluginCard} key=${p.id} p=${p} busy=${busy} run=${run} focused=${p.id === focused} />`)}</div>`
+    : plugins.error && !plugins.data ? html`<${LoadFailed} text=${t.pluginsLoadFailed} onRetry=${plugins.reload} />`
+      : html`<div class="page-empty">${plugins.loading ? t.loading : markets.data?.length ? t.noPluginsPick : t.noPlugins}</div>`}
     </section>
-    ${(markets.data ?? []).map((m) => html`<section class="page-section" key=${m.name}>
+    ${(markets.data ?? []).map((m) => html`<section class="page-section" key=${m.name} data-market=${m.name}>
       <div class="section-head">
         <h2 class="section-title"><span class="section-name">${m.displayName || m.name}</span><span class="plug-meta" title=${m.url || m.source}>${m.url || m.source}</span></h2>
         <${MoreMenu} items=${[
           [html`<${IconRefresh} size=${14} />`, t.update, () => run('market', () => api.updateMarketplace(m.name))],
-          [html`<${IconTrash} size=${14} />`, t.remove, () => { if (confirm(t.confirmRemoveMarket(m.name))) run('market', () => api.removeMarketplace(m.name)); }, 'danger'],
+          [html`<${IconTrash} size=${14} />`, t.remove, async () => { if (await ask({ title: t.confirmRemoveMarket(m.displayName || m.name), action: t.remove })) run('market', () => api.removeMarketplace(m.name)); }, 'danger'],
         ]} />
       </div>
       ${m.error ? html`<div class="plug-warn">${m.error}</div>` : null}
-      <div class="plug-grid">${(m.plugins ?? []).map((e) => html`<${MarketPlugin} key=${e.id} m=${m} e=${e} busy=${busy} run=${run} />`)}</div>
+      ${m.plugins?.length ? html`<div class="plug-grid">${m.plugins.map((e) => html`<${MarketPlugin} key=${e.id} m=${m} e=${e} busy=${busy} run=${run} />`)}</div>`
+    : m.error ? null : html`<div class="page-empty">${t.marketEmpty}</div>`}
     </section>`)}
-    <form class="page-form" onSubmit=${add}>
-      <input class="input" value=${source} onInput=${(e) => setSource(e.currentTarget.value)} placeholder=${t.marketplaceHint}
-        aria-label=${t.addMarketplace} spellcheck="false" />
-      <button type="submit" class="btn btn-small" disabled=${!source.trim() || busy === 'market'}><${IconPlus} size=${14} />${t.addMarketplace}</button>
-    </form>`;
+    ${adding ? html`<${AddMarketDialog} onClose=${() => setAdding(false)} onAdded=${added} />` : null}`;
 }
 
 // ---- apps (connectors) ---------------------------------------------------------------
@@ -119,8 +219,8 @@ function ConnectorCard({ c, busy, run, waiting, onLogin, onOpen }) {
   };
   const text = html`<${Logo} color=${c.brandColor} name=${c.name} />
     <span class="plug-text">
-      <span class="plug-name">${c.name}${c.category ? html`<span class="plug-meta">${c.category}</span>` : null}</span>
-      <span class="plug-desc">${c.description}</span>
+      <span class="plug-name">${c.name}${c.category ? html`<span class="plug-meta">${connectorCategory(c)}</span>` : null}</span>
+      <span class="plug-desc">${connectorText(c)}</span>
     </span>`;
   return html`<div class="plug-card conn-card">
     ${server ? html`<button type="button" class="conn-main" onClick=${() => onOpen(server)} aria-label=${`${c.name}: ${t.mcpDetails}`}>${text}</button>`
@@ -152,22 +252,24 @@ function ConnectorsTab() {
   const list = conns.data ?? [];
   return html`<div class="plug-grid">${list.map((c) => html`<${ConnectorCard} key=${c.id} c=${c} busy=${busy} run=${run}
     waiting=${waiting?.key === c.id} onLogin=${login} onOpen=${setOpened} />`)}</div>
-    ${!list.length ? html`<div class="page-empty">${conns.loading ? t.loading : '–'}</div>` : null}
+    ${list.length ? null : conns.error && !conns.data ? html`<${LoadFailed} text=${t.appsLoadFailed} onRetry=${conns.reload} />`
+    : html`<div class="page-empty">${conns.loading ? t.loading : t.noApps}</div>`}
     ${opened ? html`<${ServerDrawer} key=${opened} name=${opened} connectors=${list} onClose=${() => setOpened(null)}
       onChanged=${conns.reload} onLogin=${(name) => login(name, list.find((c) => c.servers?.includes(name))?.id)} />` : null}`;
 }
 
-// The tab survives a reload of this browser tab.
+// `#/plugins/<tab>` names the tab; without one, the last tab of this browser tab.
 const TAB_KEY = 'dshx-plugins-tab';
 function readTab() {
   try { return t.tabsPlugins[sessionStorage.getItem(TAB_KEY)] ? sessionStorage.getItem(TAB_KEY) : 'plugins'; } catch { return 'plugins'; }
 }
 
 export function PluginsPage() {
-  const [tab, setTab] = useState(readTab);
+  const wanted = useStore(store, (s) => s.pluginsTab);
+  const tab = t.tabsPlugins[wanted] ? wanted : readTab();
   const pick = (k) => {
-    setTab(k);
     try { sessionStorage.setItem(TAB_KEY, k); } catch { /* storage blocked */ }
+    openPlugins(k, { replace: true });
   };
   return html`<${PageShell} title=${t.plugins} lead=${t.pluginsLead} wide>
     <${Tabs} value=${tab} labels=${t.tabsPlugins} onChange=${pick} />

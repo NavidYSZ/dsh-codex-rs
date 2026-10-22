@@ -12,9 +12,10 @@ import {
 } from '../icons.js';
 import { Menu, MenuItem, ActionItem } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
-import { ModeChip, useChatMode } from './modes.js';
+import { PlanBar } from './plan.js';
+import { ModeChip, useChatMode, useStagedMode } from './modes.js';
 import { ProjectMenu } from './folders.js';
-import { ModelChip } from './models.js';
+import { ModelChip, openModelPicker } from './models.js';
 import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 import { UsageBar } from './usage.js';
@@ -40,7 +41,9 @@ export function useSelection(tx) {
   let effort = pick.effort ?? (tx && tx.effort !== undefined ? tx.effort : undefined) ?? d.effort ?? modelInfo?.defaultReasoningEffort ?? null;
   if (modelInfo?.reasoningEfforts?.length && effort && !modelInfo.reasoningEfforts.includes(effort)) effort = modelInfo.defaultReasoningEffort ?? null;
   const sandbox = pick.sandbox ?? tx?.sandbox ?? d.sandbox ?? 'workspace-write';
-  return { model, effort, sandbox, modelInfo, models: info?.models ?? [] };
+  // A model this server no longer offers (its provider was removed, say).
+  const missing = !!model && !!info?.models?.length && !modelInfo;
+  return { model, effort: missing ? null : effort, sandbox, modelInfo, models: info?.models ?? [], missing };
 }
 
 function AccessChip({ sel, side = 'top', align = 'start', plain }) {
@@ -87,12 +90,15 @@ function HeroTray({ sel }) {
   </div>`;
 }
 
+/** Unsent text per chat ('' = the start page), while the page lives. */
+const drafts = new Map();
+
 export function Composer({ hero, tx }) {
   const status = useStore(store, (s) => s.status);
   const info = useStore(store, (s) => s.info);
   const activeId = useStore(store, (s) => s.activeId);
   const sel = useSelection(tx);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => drafts.get(store.get().activeId ?? '') ?? '');
   const [drag, setDrag] = useState(false);
   const area = useRef(null);
   const file = useRef(null);
@@ -101,8 +107,21 @@ export function Composer({ hero, tx }) {
 
   const running = status === 'running' || status === 'waiting-approval';
   const noKey = info && !info.apiKeyConfigured;
-  const canSend = !noKey && !att.uploading && (text.trim() || att.items.length);
+  const canSend = !noKey && !sel.missing && !att.uploading && (text.trim() || att.items.length);
 
+  // Each chat keeps its own unsent text.
+  const textNow = useRef(text);
+  textNow.current = text;
+  const draftKey = useRef(activeId ?? '');
+  useEffect(() => {
+    const key = activeId ?? '';
+    if (draftKey.current === key) return;
+    if (textNow.current.trim()) drafts.set(draftKey.current, textNow.current);
+    else drafts.delete(draftKey.current);
+    draftKey.current = key;
+    setText(drafts.get(key) ?? '');
+  }, [activeId]);
+  useEffect(() => () => { if (textNow.current.trim()) drafts.set(draftKey.current, textNow.current); }, []);
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, [activeId]);
   // "New automation" and similar hand over a draft once.
   const draft = useStore(store, (s) => s.draft);
@@ -146,8 +165,11 @@ export function Composer({ hero, tx }) {
     }
   };
 
-  const placeholder = noKey ? t.placeholderNoKey : hero ? t.placeholderHero
-    : running ? t.placeholderRunning[followup] : t.placeholder;
+  // Minimal has neither skills nor apps: the hint names only what works.
+  const stagedMode = useStagedMode();
+  const minimal = (hero ? stagedMode : chatMode) === 'minimal';
+  const placeholder = noKey ? t.placeholderNoKey : hero ? (minimal ? t.placeholderHeroMinimal : t.placeholderHero)
+    : running ? t.placeholderRunning[followup] : minimal ? t.placeholderMinimal : t.placeholder;
   const showStop = running && !canSend;
   return html`<div class=${cx('composer', drag && 'is-drag')}
       onDragOver=${(e) => { if ([...(e.dataTransfer?.types ?? [])].includes('Files')) { e.preventDefault(); setDrag(true); } }}
@@ -221,7 +243,10 @@ function ApprovalCard({ approval }) {
 
 // ---- banners -----------------------------------------------------------------
 
-function Banners() {
+/** Whether the chat's last turn ended with a failure card (it says what happened). */
+const failureShown = (tx) => !!tx?.turns[tx.turns.length - 1]?.items.some((x) => x.kind === 'notice' && x.code === 'error');
+
+function Banners({ tx, sel }) {
   const info = useStore(store, (s) => s.info);
   const conn = useStore(store, (s) => s.conn);
   const statusError = useStore(store, (s) => s.statusError);
@@ -230,8 +255,9 @@ function Banners() {
   if (conn === 'unauthorized') list.push({ key: 'auth', tone: 'error', text: t.unauthorized });
   else if (conn === 'offline') list.push({ key: 'off', tone: 'error', text: t.offline });
   else if (conn === 'retry') list.push({ key: 'retry', tone: 'muted', text: t.reconnecting });
-  if (info && !info.apiKeyConfigured) list.push({ key: 'key', tone: 'info', text: t.noKey, action: [t.openSettings, openSettings] });
-  if (statusError) list.push({ key: 'status', tone: 'error', text: statusError });
+  if (info && !info.apiKeyConfigured) list.push({ key: 'key', tone: 'info', text: t.noKey, action: [t.openSettings, () => openSettings('models')] });
+  if (sel?.missing) list.push({ key: 'model', tone: 'info', text: t.modelGone(sel.model), action: [t.pickModel, openModelPicker] });
+  if (statusError && !failureShown(tx)) list.push({ key: 'status', tone: 'error', text: statusError });
   if (toast) list.push({ key: 'toast', tone: 'error', text: toast });
   if (!list.length) return null;
   return html`<div class="banners">${list.map((b) => html`<div key=${b.key} class=${cx('banner', `tone-${b.tone}`)} role="status">
@@ -244,9 +270,10 @@ export function ComposerSeat({ hero, tx }) {
   const approval = useApproval(tx);
   return html`<div class=${cx('seat', hero && 'is-hero')}>
     <div class="column seat-column">
-      <${Banners} />
+      <${Banners} tx=${tx} sel=${sel} />
       ${approval ? html`<${ApprovalCard} approval=${approval} />` : null}
       ${hero ? null : html`<${GoalBar} />`}
+      ${hero ? null : html`<${PlanBar} tx=${tx} />`}
       <${ComposerExtras} />
       ${hero ? html`<${HeroTray} sel=${sel} />` : null}
       <${Composer} hero=${hero} tx=${tx} />

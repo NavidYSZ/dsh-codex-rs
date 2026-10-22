@@ -21,7 +21,9 @@ fn real_tools() -> Vec<Arc<dyn Tool>> {
 async fn real_tools_answer_dsh_reference_calls_identically() {
     let h = harness(vec![], real_tools(), |_, _| {});
     let cwd = h.agent.config().cwd;
-    let c = cwd.to_str().unwrap();
+    // `read` reports the resolved path (macOS: `/var` → `/private/var`).
+    let real = cwd.canonicalize().unwrap();
+    let c = real.to_str().unwrap();
     std::fs::write(cwd.join("a.txt"), "hello a\n").unwrap();
     let a = cwd.join("a.txt");
     h.llm.push(tool_calls(

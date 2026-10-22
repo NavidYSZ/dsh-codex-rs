@@ -7,6 +7,7 @@ import { render } from 'preact';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
+import { restoreFocus } from '../state.js';
 import { IconX } from '../icons.js';
 
 /** Renders its children in a layer on <body>. */
@@ -43,8 +44,8 @@ export function useLayer(ref, onClose, initial) {
     const key = (e) => {
       if (!top()) return;
       if (e.key === 'Escape') {
-        // A menu or the folder browser above us closes first.
-        if (document.querySelector('.menu, .fp-scrim')) return;
+        // A menu, the folder browser or a question above us closes first.
+        if (document.querySelector('.menu, .fp-scrim, .md-scrim:not(.xd-scrim)')) return;
         e.preventDefault();
         e.stopPropagation();
         close.current();
@@ -62,7 +63,7 @@ export function useLayer(ref, onClose, initial) {
     return () => {
       document.removeEventListener('keydown', key, true);
       layers.splice(layers.indexOf(id.current), 1);
-      if (opener?.isConnected) opener.focus?.({ preventScroll: true });
+      restoreFocus(opener);
     };
   }, []);
 }

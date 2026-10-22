@@ -12,6 +12,7 @@ import { IconFile, IconFolder, IconPlug, IconShield, IconList, IconArrowDown, Ic
 import { detectTrigger, highlight, known, learn, pills, rank, segments, typedCommand } from '../suggest.js';
 import { COMMANDS, openDetails, runCommand, steerQueued, useQueue } from './composer-extras.js';
 import { VIEW_MODES } from '../worklog.js';
+import { useChatMode, useStagedMode } from './modes.js';
 
 const glyph = (body) => ({ size = 14 }) => html`<svg class="icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true"
   fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -102,9 +103,11 @@ function Popup({ state, query, cursor, setCursor, onPick, onRetry, list }) {
   })}
         ${s.id === 'apps' && list.cacheMiss && s.items.some((x) => !x.active) ? html`<div class="ci-hint">${t.ciCacheHint}</div>` : null}
       </div>` : null))}
-      ${empty ? html`<div class="ci-state">${list.kind === 'slash' ? t.ciNoSkills : t.ciNoMatches}
-        <button type="button" class="link-btn" onMouseDown=${(e) => e.preventDefault()} onClick=${() => openPlugins()}>
+      ${empty && list.minimal ? html`<div class="ci-state">${t.ciNoMatches}</div>`
+    : empty ? html`<div class="ci-state">${list.kind === 'slash' ? t.ciNoSkills : t.ciNoMatches}
+        <button type="button" class="link-btn" onMouseDown=${(e) => e.preventDefault()} onClick=${() => openPlugins(list.kind === 'slash' ? 'skills' : 'mcp')}>
           ${list.kind === 'slash' ? t.ciManageSkills : t.ciManageApps}</button></div>` : null}
+      ${list.minimal && !state.error ? html`<div class="ci-hint ci-minimal">${t.ciMinimal}</div>` : null}
     </div>
     <div class="ci-foot" aria-hidden="true"><span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd>${t.ciNavigate}</span>
       <span><kbd class="kbd">↩</kbd>${t.ciPick}</span><span><kbd class="kbd">esc</kbd>${t.ciClose}</span></div>
@@ -183,7 +186,11 @@ export function ComposerInput({ areaRef, value, onValue, placeholder, onKeyDown,
   const trigger = useMemo(() => detectTrigger(value, caret), [value, caret]);
   const live = trigger && !(dismissed && dismissed.start === trigger.start && dismissed.trigger === trigger.trigger) ? trigger : null;
   const kind = live ? (live.trigger === '@' ? 'mention' : 'slash') : null;
-  const scope = activeId ? { session: activeId } : (cwd ? { cwd } : {});
+  // A chat's own mode; the start page asks for the mode it will create.
+  const chatMode = useChatMode();
+  const stagedMode = useStagedMode();
+  const mode = activeId ? chatMode : stagedMode;
+  const scope = activeId ? { session: activeId } : { ...(cwd ? { cwd } : {}), preset: mode };
 
   // Names for pills: one quiet fetch per chat or project.
   useEffect(() => {
@@ -192,10 +199,10 @@ export function ComposerInput({ areaRef, value, onValue, placeholder, onKeyDown,
       api.suggest({ kind: k, q: '', ...scope }).then((a) => { if (alive) learn(a); }).catch(() => {});
     }
     return () => { alive = false; };
-  }, [activeId, cwd]);
+  }, [activeId, cwd, mode]);
 
   // The menu's answer, debounced; late answers for older queries are dropped.
-  const queryKey = live ? `${kind}:${live.query}:${activeId ?? cwd}:${model ?? ''}:${attempt}` : '';
+  const queryKey = live ? `${kind}:${live.query}:${activeId ?? cwd}:${mode}:${model ?? ''}:${attempt}` : '';
   useEffect(() => {
     if (!live) return undefined;
     setAnswer((a) => ({ ...a, loading: true, error: null, key: queryKey }));
@@ -225,8 +232,8 @@ export function ComposerInput({ areaRef, value, onValue, placeholder, onKeyDown,
       sections = sections.map((s) => (s.id === 'files' ? { ...s, crumb: live.query.slice(0, live.query.lastIndexOf('/') + 1) } : s));
     }
     if (data && data.kind !== kind) sections = [];
-    return { kind, sections, flat: sections.flatMap((s) => s.items), cacheMiss: !!data?.cacheMiss };
-  }, [answer, options, live?.trigger, live?.query, kind]);
+    return { kind, sections, flat: sections.flatMap((s) => s.items), cacheMiss: !!data?.cacheMiss, minimal: mode === 'minimal' };
+  }, [answer, options, live?.trigger, live?.query, kind, mode]);
   const open = focused && !!live && (list.flat.length > 0 || answer.loading || !!answer.error || (!!answer.data && !answer.loading));
 
   // Keep the cursor row in view.
@@ -374,7 +381,7 @@ export function PillText({ text }) {
     const label = p.kind === 'skill' || p.kind === 'command' ? `/${p.label}` : p.kind === 'server' || p.kind === 'plugin' ? `@${p.label}` : p.label;
     if (p.kind === 'skill' || p.kind === 'server' || p.kind === 'plugin') {
       return html`<button type="button" key=${i} class=${cx('pill', `is-${p.kind}`)} title=${s.text}
-        onClick=${() => openDetails(p.kind === 'skill' ? 'skill' : 'server', p.name)}>${label}</button>`;
+        onClick=${() => openDetails(p.kind, p.name)}>${label}</button>`;
     }
     return html`<span key=${i} class=${cx('pill', `is-${p.kind}`)} title=${p.name}>${icon}${label}</span>`;
   });

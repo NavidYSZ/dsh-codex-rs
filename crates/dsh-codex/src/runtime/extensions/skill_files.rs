@@ -164,22 +164,33 @@ fn yaml_string(text: &str) -> String {
     serde_json::to_string(&line).unwrap_or_else(|_| "\"\"".into())
 }
 
-/// The `SKILL.md` of a new skill.
-pub(crate) fn skeleton(name: &str, description: &str) -> String {
-    let description = if description.trim().is_empty() {
-        "Describe what this skill does and when to use it."
+/// The `SKILL.md` of a new skill, its headings in English or (`de`) German.
+pub(crate) fn skeleton(name: &str, description: &str, lang: &str) -> String {
+    let german = lang.starts_with("de");
+    let description = match description.trim() {
+        "" if german => "Beschreibe, was dieser Skill tut und wann er passt.",
+        "" => "Describe what this skill does and when to use it.",
+        text => text,
+    };
+    let (when, steps) = if german {
+        ("Wann verwenden", "Schritte")
     } else {
-        description.trim()
+        ("When to use", "Steps")
     };
     format!(
-        "---\nname: {name}\ndescription: {}\n---\n\n# {}\n\n## When to use\n\n- \n\n## Steps\n\n1. \n",
+        "---\nname: {name}\ndescription: {}\n---\n\n# {}\n\n## {when}\n\n- \n\n## {steps}\n\n1. \n",
         yaml_string(description),
         title(None, name),
     )
 }
 
 /// Creates `<dir>/<name>/SKILL.md`; refuses an existing folder.
-pub(crate) fn create(dir: &Path, name: &str, description: &str) -> anyhow::Result<PathBuf> {
+pub(crate) fn create(
+    dir: &Path,
+    name: &str,
+    description: &str,
+    lang: &str,
+) -> anyhow::Result<PathBuf> {
     anyhow::ensure!(
         is_skill_name(name),
         "use lowercase letters, digits and single hyphens for the name, e.g. release-notes"
@@ -193,7 +204,7 @@ pub(crate) fn create(dir: &Path, name: &str, description: &str) -> anyhow::Resul
     );
     std::fs::create_dir_all(&folder)?;
     let file = folder.join("SKILL.md");
-    std::fs::write(&file, skeleton(name, description))?;
+    std::fs::write(&file, skeleton(name, description, lang))?;
     Ok(file)
 }
 
@@ -221,6 +232,7 @@ mod tests {
             &skills,
             "release-notes",
             "Write release notes: \"short\".\n",
+            "en",
         )
         .unwrap();
         assert_eq!(file, skills.join("release-notes/SKILL.md"));
@@ -234,14 +246,19 @@ mod tests {
         assert_eq!(found[0].name, "release-notes");
         assert_eq!(found[0].description, "Write release notes: \"short\".");
         assert!(found[0].user_invocable);
-        let again = create(&skills, "release-notes", "")
+        let again = create(&skills, "release-notes", "", "en")
             .unwrap_err()
             .to_string();
         assert!(again.contains("already exists"), "{again}");
-        assert!(create(&skills, "Release Notes", "").is_err());
-        assert!(create(&skills, "../escape", "").is_err());
-        let blank = std::fs::read_to_string(create(&skills, "blank", "").unwrap()).unwrap();
-        assert!(blank.contains("# Blank"));
+        assert!(create(&skills, "Release Notes", "", "en").is_err());
+        assert!(create(&skills, "../escape", "", "en").is_err());
+        let blank = std::fs::read_to_string(create(&skills, "blank", "", "en").unwrap()).unwrap();
+        assert!(blank.contains("# Blank") && blank.contains("## When to use"));
+        let german = std::fs::read_to_string(create(&skills, "leer", "", "de").unwrap()).unwrap();
+        assert!(
+            german.contains("## Wann verwenden")
+                && german.contains("Beschreibe, was dieser Skill tut")
+        );
     }
 
     #[test]

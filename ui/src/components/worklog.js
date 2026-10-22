@@ -187,6 +187,7 @@ export function TurnLine({ turn, folded, foldable, onToggle }) {
   const parts = [label];
   if (work.toolCalls) parts.push(t.toolCalls(work.toolCalls));
   if (work.messages) parts.push(t.messagesN(work.messages));
+  if (turn.todos?.length) parts.push(t.planShort(turn.todos.filter((x) => x.status === 'completed').length, turn.todos.length));
   return html`<div class=${cx('wl-turn', folded && 'is-folded')}>
     <button type="button" class="wl-turn-btn" disabled=${!foldable} aria-expanded=${foldable ? !folded : undefined} onClick=${onToggle}>
       <span class="wl-turn-label">${parts.join(' · ')}</span>
@@ -206,17 +207,17 @@ export function ViewModeItems() {
 }
 
 /** Settings → Appearance: work details and the performance & usage bar. */
-export function AppearanceCard() {
+export function AppearanceCard({ titled = true }) {
   const ui = useStore(store, (s) => s.info?.ui);
   const mode = ui?.workDetails ?? 'standard';
   const perf = ui?.performanceUsage ?? 'detailed';
   return html`<section class="card">
-    <h2 class="card-title">${t.appearance}</h2>
+    ${titled ? html`<h2 class="card-title">${t.appearance}</h2>` : null}
     <${Field} label=${t.workDetails} hint=${t.workModeHints[mode] ?? t.workDetailsHint}>
       <${Segmented} label=${t.workDetails} value=${mode} onChange=${(v) => setUiPref({ workDetails: v })}
         options=${VIEW_MODES.map((m) => [m, t.workModes[m]])} />
     </${Field}>
-    <${Field} label=${t.perfUsage} hint=${t.perfUsageHint}>
+    <${Field} label=${t.perfUsage} hint=${t.perfModeHints[perf] ?? t.perfUsageHint}>
       <${Segmented} label=${t.perfUsage} value=${perf} onChange=${(v) => setUiPref({ performanceUsage: v })}
         options=${[['compact', t.perfModes.compact], ['detailed', t.perfModes.detailed]]} />
     </${Field}>

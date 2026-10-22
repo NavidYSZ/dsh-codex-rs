@@ -118,6 +118,43 @@ export function learn(answer) {
 const lowerHas = (list, name) => list.some((x) => x.toLowerCase() === name.toLowerCase());
 
 /**
+ * Whether each character of `text` is code: a fenced block (``` or ~~~
+ * lines) or an inline span (a backtick run up to the next run of the same
+ * length). Mentions there are text, like the server reads them.
+ */
+export function codeMask(text) {
+  const mask = new Array(text.length).fill(false);
+  let fence = null;
+  let start = 0;
+  while (start < text.length) {
+    const nl = text.indexOf('\n', start);
+    const end = nl < 0 ? text.length : nl + 1;
+    const line = text.slice(start, end);
+    const m = /^ *(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      mask.fill(true, start, end);
+      if (m && m[1][0] === fence[0] && m[1].length >= fence.length) fence = null;
+    } else if (m) {
+      mask.fill(true, start, end);
+      fence = m[1];
+    } else {
+      const re = /`+/g;
+      let open = null;
+      let r;
+      while ((r = re.exec(line))) {
+        if (!open) open = r;
+        else if (r[0].length === open[0].length) {
+          mask.fill(true, start + open.index, start + r.index + r[0].length);
+          open = null;
+        }
+      }
+    }
+    start = end;
+  }
+  return mask;
+}
+
+/**
  * Pill ranges of a prompt: `/skill` (and `$skill`), `/command`, `@server`,
  * `@plugin` and `@path` (a path has `/` or `.`, or is quoted). Each is
  * `{start, end, kind, name, label}`.
@@ -125,10 +162,12 @@ const lowerHas = (list, name) => list.some((x) => x.toLowerCase() === name.toLow
 export function pills(text, names = known.get()) {
   const out = [];
   if (!text) return out;
+  const code = text.includes('`') || text.includes('~~~') ? codeMask(text) : null;
   const re = /@"([^"\n]+)"?|@([^\s@]+)|([/$])([a-z0-9][a-z0-9-]*)/giu;
   let m;
   while ((m = re.exec(text))) {
     const start = m.index;
+    if (code?.[start]) continue;
     const prev = start > 0 ? text[start - 1] : '';
     const end = start + m[0].length;
     const next = text[end] ?? '';

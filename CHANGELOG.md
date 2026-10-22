@@ -152,6 +152,12 @@
   can be edited (`PUT /api/mcp/servers/:name`) and their log read
   (`GET /api/mcp/servers/:name/log`). `[mcp_servers.x] env_vars` passes
   credential-like parent variables through on purpose.
+- **Plan above the composer** (dsh TodoPanel): while a turn works through a
+  `todo_write` list, a bar shows the item in progress and "1 of 3 done" and
+  unfolds into the checklist; like dsh it stays while items are left, and a
+  finished list goes when its turn ends. A finished turn's summary adds
+  "Plan 2/3". Turns that a finished background job starts show a "Background
+  job" line like goal rounds and reminders.
 
 ### Changed
 
@@ -174,6 +180,33 @@
   sharing the plugin's; `[codex.browser] mockKeychain` /
   `DSHX_BROWSER_MOCK_KEYCHAIN=1` start Chrome with `--use-mock-keychain`, which
   the Chrome tests now always do, so they never prompt for the login keychain.
+- DeepSeek models show their list prices like the other providers: the model
+  picker, Settings → Models and the default model in Settings give the peak
+  price per 1M tokens and note that off-peak hours cost half (`/api/info`
+  and `/api/providers` rows carry `cost` and `offPeakCost` from the usage
+  price book). Prices use the same currency format as the usage bar.
+- **Settings in sections** like the Codex app: General, Appearance, Models,
+  New chats, Usage, Archived chats and About each have their own pane at
+  `#/settings/<section>`, behind a navigation rail on wide pages and a
+  scrolling tab row on narrow ones (the page's width decides). Links into
+  Settings ("Manage models…", a missing key, "All usage", a provider's
+  failure notice) open the right pane. The Plugins page's tabs are
+  deep-linkable the same way (`#/plugins/skills`, `#/plugins/mcp`), and
+  "Manage skills" / "Manage apps" in the composer menus open their tab.
+- **"Add marketplace" is a dialog** like "Add server": the source (GitHub
+  `owner/repo`, a Git URL or a local folder) with a live note on what will
+  be cloned or read, an optional branch or tag, the accepted forms, progress
+  while the repository is cloned and errors in plain words (already added,
+  no catalog, repository not found or private). The Plugins tab gets the
+  button in its toolbar, and empty marketplaces say so.
+- One term per concept in the copy: German says "Tools" (no more
+  "Werkzeuge"), "Ziel" for goals, "Denkstufe" for the reasoning level and
+  "entfernen" for providers like plugins and servers; English says "chat",
+  never "conversation". Settings switches read "On"/"Off". Usage shows
+  model and provider names (DeepSeek-V4.1-Flash · DeepSeek) instead of ids.
+- Removing a chat, plugin, marketplace, MCP server, goal or automation asks
+  in an in-app dialog (Cancel focused, Esc cancels) instead of the browser's
+  `confirm()`; "…" menus close when an item runs.
 
 ### Fixed
 
@@ -185,6 +218,45 @@
   logs `image/offload`, sends the oldest images as text with their read-only
   path and retries without spending the retry budget. Compaction summaries
   and the tool-result pruner keep those marks; resumed chats keep them too.
+- A `/skill` or `@server` pill in a sent prompt (and an active-server chip)
+  opens that skill's or server's drawer on its Plugins tab instead of only
+  the Plugins page; an `@plugin` pill highlights the plugin's card, and a
+  skill or server that is gone says so.
+- `dsh-codex web` (and with it the Mac app's instances) no longer waits up
+  to a minute for an MCP server that hangs in its handshake: after 3 s it
+  serves the UI and slow servers keep connecting in the background, shown
+  as "Connecting…". `run` and `sdk` still wait like dsh before the first turn.
+- Stopping or timing out a bash command stops the script: the shell itself
+  is killed at once (bash survives a SIGTERM that arrives while it forks and
+  then ran its next command), while the commands it started still get
+  SIGTERM and the grace period. The bash tool's kill tests are no longer
+  flaky.
+- Changing a setting in the UI (skills, MCP switches, servers, providers,
+  defaults) edits only the affected keys of `config.toml`: comments, order
+  and formatting stay, and defaults that were left out are not written.
+- A model price left blank in Settings → Models is unknown, not free: the
+  form no longer saves blank cache prices as 0, and cache reads and writes
+  without a price are counted like uncached input (`[providers.*.models]`
+  `cost.cache_read` / `cache_write` are optional).
+- Composer and chat: a prompt sent while a turn runs is no longer also shown
+  as a pending bubble; each chat keeps its own unsent draft; Minimal mode's
+  `/` and `@` menus offer only what works there (`suggest?preset=`); a model
+  whose provider was removed is marked unavailable with "Choose model";
+  `@server` inside inline code or code fences is text; a queued message that
+  starts while being edited hands the edit back to the composer.
+- Failures: no raw provider text above the composer when the failure card
+  shows; a full context offers "Compact now" and "Send again".
+- Focus returns to the opener or the composer after menus, the find bar,
+  renames, queue edits and dialogs; the modes guide takes the focus and Esc.
+- Usage: past costs keep the price of their time when a provider's prices
+  change or the provider is removed (`$DSHX_HOME/prices.json`); tokens per
+  second are left out for instant streams; reasoning shows its unit.
+- Branches sort by when they were made and get numbered titles; the
+  Verbose view keeps finished reasoning open; the `/` menu uses the skill
+  title from the frontmatter; folder errors say how to allow more roots;
+  inputs no longer spell-check paths and keys; the Skills and MCP pages stop
+  probing their settings routes; ⌘K reaches the new pages; archiving offers
+  Undo; German copy for the skill template, catalog texts and loader errors.
 
 ## 0.2.0 – 2026-10-17
 

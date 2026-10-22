@@ -6,10 +6,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, api, fail, setComposer, openSettings } from '../state.js';
+import { store, api, fail, setComposer, openSettings, restoreFocus } from '../state.js';
 import { IconChevronDown, IconChevronRight, IconSearch, IconPlus, IconTrash, IconX } from '../icons.js';
 import { Menu } from './common.js';
 import { useLoad } from './page.js';
+import { usd } from './usage.js';
 
 const DEEPSEEK = 'deepseek-official';
 const EFFORTS = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -39,7 +40,6 @@ export function formatCapacity(n) {
 
 /** Context sizes in the picker: 1M, 262K. */
 const tokens = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
-const usd = (v) => `$${v < 1 ? v.toFixed(2) : +v.toFixed(2)}`;
 
 // ---- recently used ------------------------------------------------------------
 
@@ -64,13 +64,24 @@ export function modelGroups(info) {
 
 // ---- picker ---------------------------------------------------------------------
 
-function modelHint(m) {
+/** Input and output price per 1M tokens ("$0.30 / $1.20 per 1M"). */
+const priceText = (cost) => t.pickerPrice(usd(cost.input), usd(cost.output));
+
+/** Context, image input and the (peak) list price of a model. */
+export function modelHint(m) {
+  if (!m) return '';
   if (m.available === false) return t.pickerNoKey;
   const parts = [];
   if (m.contextWindow) parts.push(t.pickerContext(tokens(m.contextWindow)));
   if (m.inputModalities?.includes('image')) parts.push(t.pickerImage);
-  if (m.cost) parts.push(t.pickerPrice(usd(m.cost.input), usd(m.cost.output)));
+  if (m.cost) parts.push(priceText(m.cost));
   return parts.join(' · ');
+}
+
+/** DeepSeek's two clocks spelled out, for a tooltip; null for flat prices. */
+export function offPeakTitle(m) {
+  if (!m?.cost || !m.offPeakCost) return null;
+  return t.pickerPeakPrices(priceText(m.cost), priceText(m.offPeakCost));
 }
 
 function PickerBody({ sel, onClose }) {
@@ -134,19 +145,20 @@ function PickerBody({ sel, onClose }) {
   return html`<div class="mp" onKeyDown=${onKey}>
     <label class="mp-search">
       <${IconSearch} size=${14} />
-      <input value=${q} placeholder=${t.pickerSearch} aria-label=${t.pickerSearch} spellcheck="false" autocomplete="off"
+      <input value=${q} placeholder=${t.pickerSearch} aria-label=${t.pickerSearch} spellcheck=${false} autocomplete="off"
         ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); } }}
         onInput=${(e) => { setQ(e.currentTarget.value); setCursor(-1); }} />
     </label>
     <div class="mp-list" role="listbox" aria-label=${t.model} ref=${list}>
       ${sections.length ? sections.map((s) => html`<div class="mp-group" key=${s.key} role="group" aria-label=${s.title}>
-        <div class="menu-head">${s.title}</div>
+        <div class="menu-head mp-head">${s.title}${s.models.some((m) => m.offPeakCost)
+    ? html`<span class="mp-head-note">${t.pickerOffPeak}</span>` : null}</div>
         ${s.models.map((m) => {
           n += 1;
           const i = n;
           const checked = m.id === sel.model;
           return html`<button type="button" key=${`${s.key}:${m.id}`} role="option" aria-selected=${checked}
-            class=${cx('mp-row', i === cursor && 'is-cursor')} disabled=${m.available === false}
+            class=${cx('mp-row', i === cursor && 'is-cursor')} disabled=${m.available === false} title=${offPeakTitle(m)}
             onMouseMove=${() => { if (cursor !== i && m.available !== false) setCursor(i); }} onClick=${() => pick(m)}>
             <span class="mp-text"><span class="mp-name">${m.name ?? m.id}</span><span class="mp-hint">${modelHint(m)}</span></span>
             <span class="menu-check">${checked ? html`<svg width="16" height="16" viewBox="0 0 16 16"><path d="m3.5 8.25 2.9 2.9 6.1-6.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>` : null}</span>
@@ -161,14 +173,21 @@ function PickerBody({ sel, onClose }) {
           class=${cx('seg', e === sel.effort && 'is-on')} onClick=${() => { setComposer({ effort: e }); onClose(); }}>${t.efforts[e] ?? e}</button>`)}
       </div>
     </div>` : null}
-    <button type="button" class="mp-manage" onClick=${() => { onClose(); openSettings(); }}>${t.pickerManage}</button>
+    <button type="button" class="mp-manage" onClick=${() => { onClose(); openSettings('models'); }}>${t.pickerManage}</button>
   </div>`;
+}
+
+/** Opens the composer's model picker (a notice's "Choose model"). */
+export function openModelPicker() {
+  store.set((s) => ({ modelPicker: (s.modelPicker ?? 0) + 1 }));
 }
 
 /** The composer's model chip: name and effort; ⌃⇧M opens the picker. */
 export function ModelChip({ sel }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
+  const asked = useStore(store, (s) => s.modelPicker);
+  useEffect(() => { if (asked) { anchor.current?.focus(); setOpen(true); } }, [asked]);
   useEffect(() => {
     const key = (e) => {
       if (e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey && e.code === 'KeyM') { e.preventDefault(); setOpen((v) => !v); }
@@ -180,9 +199,10 @@ export function ModelChip({ sel }) {
   // A model without levels ignores the effort; do not show one.
   const effort = sel.modelInfo && !sel.modelInfo.reasoningEfforts?.length ? null : sel.effort;
   return html`<span class="chip-wrap">
-    <button type="button" ref=${anchor} class="chip chip-model" aria-haspopup="listbox" aria-expanded=${open}
-      aria-label=${t.pickerLabel(name)} title="⌃⇧M" onClick=${() => setOpen((v) => !v)}>
+    <button type="button" ref=${anchor} class=${cx('chip chip-model', sel.missing && 'is-missing')} aria-haspopup="listbox" aria-expanded=${open}
+      aria-label=${sel.missing ? t.modelGone(name) : t.pickerLabel(name)} title=${sel.missing ? t.modelGone(name) : '⌃⇧M'} onClick=${() => setOpen((v) => !v)}>
       <span class="chip-label">${name}</span>
+      ${sel.missing ? html`<span class="chip-effort chip-missing">${t.modelUnavailable}</span>` : null}
       ${effort ? html`<span class="chip-effort">${t.efforts[effort] ?? effort}</span>` : null}
       <span class="chip-chev"><${IconChevronDown} size=${12} /></span>
     </button>
@@ -225,7 +245,7 @@ export function Dialog({ title, description, onClose, footer, children, class: k
     return () => {
       document.removeEventListener('keydown', key, true);
       openDialogs.splice(openDialogs.indexOf(id.current), 1);
-      opener?.focus?.({ preventScroll: true });
+      restoreFocus(opener);
     };
   }, []);
   return html`<div class="md-scrim" onMouseDown=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -305,7 +325,9 @@ function rowBody(r) {
   if (r.defaultEffort && r.efforts.includes(r.defaultEffort)) out.defaultEffort = r.defaultEffort;
   if (r.thinking) out.thinking = r.thinking;
   if (Object.values(r.cost).some((v) => String(v).trim())) {
-    out.cost = Object.fromEntries(Object.entries(r.cost).map(([k, v]) => [k, priceOf(v)]));
+    // A blank field is an unknown price (the server prices unknown cache
+    // tokens like input), not a free one.
+    out.cost = Object.fromEntries(Object.entries(r.cost).filter(([, v]) => String(v).trim()).map(([k, v]) => [k, priceOf(v)]));
   }
   return out;
 }
@@ -315,7 +337,7 @@ function ModelRow({ row, n, open, onToggle, onChange, onRemove }) {
   const toggleList = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : EFFORTS.filter((e) => e === v || list.includes(e)));
   return html`<div class=${cx('mo-model', open && 'is-open')}>
     <div class="mo-model-row">
-      <input class="input mono" value=${row.id} placeholder=${t.modelId} aria-label=${`${t.modelId} ${n}`} spellcheck="false"
+      <input class="input mono" value=${row.id} placeholder=${t.modelId} aria-label=${`${t.modelId} ${n}`} spellcheck=${false}
         onInput=${(e) => set({ id: e.currentTarget.value })} />
       <input class="input" value=${row.name} placeholder=${t.modelNamePlaceholder} aria-label=${`${t.modelName} ${n}`}
         onInput=${(e) => set({ name: e.currentTarget.value })} />
@@ -355,6 +377,7 @@ function ModelRow({ row, n, open, onToggle, onChange, onRemove }) {
           <input class="input" inputmode="decimal" value=${row.cost[k]} placeholder="–" aria-label=${`${label} ${n}`}
             onInput=${(e) => set({ cost: { ...row.cost, [k]: e.currentTarget.value } })} />
         </label>`)}
+        <span class="md-hint mo-price-hint">${t.priceBlankHint}</span>
       </fieldset>
     </div>` : null}
   </div>`;
@@ -428,7 +451,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
     : form.baseUrl.trim() && !isHttpUrl(form.baseUrl.trim()) ? t.customBaseUrlInvalid : null;
   const keyError = keyOk(form.key) ? null : t.keyIllegal;
   const modelsError = rowsError(rows) ?? (custom && !rows.length ? t.customNeedsModels : null);
-  const protocolError = custom && !form.api ? t.protocolUnset : null;
+  const protocolError = custom && !form.api ? t.protocolRequired : null;
   const invalid = idError || urlError || keyError || modelsError || protocolError;
   const editableModels = mode !== 'catalog' && !builtin;
   const targetId = mode === 'custom' ? form.id : (provider ?? entry).id;
@@ -484,7 +507,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
   const askable = !!(form.baseUrl.trim() || (!custom && defaultUrl)) && (!custom || form.api);
   const urlField = html`<${Labeled} label=${t.baseUrl} wide error=${tried || form.baseUrl ? urlError : null}
     hint=${builtin && provider.baseUrlLocked ? t.baseUrlLocked('DEEPSEEK_BASE_URL') : null}>
-    <input class="input mono" value=${builtin && provider.baseUrlLocked ? provider.baseUrl : form.baseUrl} spellcheck="false" autocomplete="off"
+    <input class="input mono" value=${builtin && provider.baseUrlLocked ? provider.baseUrl : form.baseUrl} spellcheck=${false} autocomplete="off"
       disabled=${builtin && provider.baseUrlLocked}
       placeholder=${defaultUrl ? `${t.baseUrlDefault}: ${defaultUrl}` : form.api === 'anthropic-messages' ? 'https://gateway.example' : 'https://gateway.example/v1'}
       onInput=${(e) => set({ baseUrl: e.currentTarget.value })} />
@@ -492,7 +515,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
   const keyField = html`<${Labeled} label=${t.keyInput} wide error=${keyError}
     hint=${!keyState.locked && keyState.required === false && !keyState.configured && !form.key ? t.keyOptional : null}>
     <span class="md-inline">
-      <input class="input mono" type="password" value=${form.key} autocomplete="off" spellcheck="false"
+      <input class="input mono" type="password" value=${form.key} autocomplete="off" spellcheck=${false}
         disabled=${keyState.locked} placeholder=${keyPlaceholder} onInput=${(e) => set({ key: e.currentTarget.value })} />
       ${keyState.configured && keyState.source === 'stored' && mode === 'edit' ? html`<button type="button" class="btn btn-small"
         disabled=${!!busy} onClick=${removeKey}>${t.keyRemove}</button>` : null}
@@ -506,7 +529,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
   return html`<${Dialog} title=${title} description=${mode === 'custom' ? t.addCustomHint : null} onClose=${onClose} footer=${footer} class="md-editor">
     <form id="mo-editor" class="md-form" onSubmit=${save} novalidate>
       ${mode === 'custom' ? html`<${Labeled} label=${t.providerId} hint=${t.providerIdHint} error=${tried || form.id ? idError : null}>
-        <input class="input mono" value=${form.id} placeholder="my-relay" spellcheck="false" autocomplete="off"
+        <input class="input mono" value=${form.id} placeholder="my-relay" spellcheck=${false} autocomplete="off"
           onInput=${(e) => set({ id: e.currentTarget.value.trim() })} />
       </${Labeled}>` : null}
       ${custom ? html`<${Labeled} label=${t.displayName}>
@@ -529,7 +552,11 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
           ${editableModels ? html`<button type="button" class="link-btn" disabled=${!!busy || !askable}
             title=${askable ? null : t.fetchNeedsBaseUrl} onClick=${fetchModels}>${busy === 'fetch' ? t.fetching : t.fetchModels}</button>` : null}
         </div>
-        ${builtin ? html`<ul class="mo-fixed">${provider.models.map((m) => html`<li key=${m.id}><span>${m.name}</span><span class="mono">${m.id}</span></li>`)}</ul>`
+        ${builtin ? html`<ul class="mo-fixed">${provider.models.map((m) => html`<li key=${m.id} title=${offPeakTitle(m)}>
+          <span class="mo-fixed-name">${m.name}<span class="mono">${m.id}</span></span>
+          ${m.cost ? html`<span class="mo-fixed-price">${priceText(m.cost)}</span>` : null}
+        </li>`)}</ul>
+          ${provider.models.some((m) => m.offPeakCost) ? html`<p class="md-hint">${t.offPeakHint}</p>` : null}`
         : html`${rows.length ? null : html`<p class="md-hint">${t.modelsEmpty}</p>`}
           <div class="mo-model-list">${rows.map((r, i) => html`<${ModelRow} key=${r.key} row=${r} n=${i + 1} open=${open.has(r.key)}
             onToggle=${() => setOpen((s) => { const next = new Set(s); if (!next.delete(r.key)) next.add(r.key); return next; })}
@@ -634,11 +661,11 @@ function ProviderRow({ p, onEdit, onDelete }) {
 /** Settings → Models with one provider's editor open (failure notices link here). */
 export function editProvider(id) {
   store.set({ editProvider: id || DEEPSEEK });
-  openSettings();
+  openSettings('models');
 }
 
 /** Settings → Models: the providers with their keys and models. */
-export function ModelsSection() {
+export function ModelsSection({ titled = true }) {
   const { data, loading, error, reload } = useLoad(() => api.providers());
   const [dialog, setDialog] = useState(null);
   const [status, setStatus] = useState('');
@@ -649,7 +676,6 @@ export function ModelsSection() {
   useEffect(() => {
     if (!wanted || !data) return;
     store.set({ editProvider: null });
-    document.getElementById('mo-title')?.scrollIntoView({ block: 'start' });
     const p = providers.find((x) => x.id === wanted);
     if (p) setDialog({ kind: 'edit', provider: p });
   }, [wanted, data]);
@@ -673,9 +699,9 @@ export function ModelsSection() {
     body = html`<div class="mo-list">${providers.map((p) => html`<${ProviderRow} key=${p.id} p=${p}
       onEdit=${() => setDialog({ kind: 'edit', provider: p })} onDelete=${() => setDialog({ kind: 'delete', provider: p })} />`)}</div>`;
   }
-  return html`<section class="card mo-card" aria-labelledby="mo-title">
-    <h2 class="card-title" id="mo-title">${t.models}</h2>
-    <p class="mo-intro">${t.modelsIntro}</p>
+  return html`<section class="card mo-card" aria-label=${t.models}>
+    ${titled ? html`<h2 class="card-title">${t.models}</h2>
+    <p class="mo-intro">${t.modelsIntro}</p>` : null}
     ${body}
     <div class="mo-foot">
       <button type="button" class="btn btn-small" disabled=${!data} onClick=${() => setDialog({ kind: 'add' })}><${IconPlus} size=${14} />${t.addProvider}</button>

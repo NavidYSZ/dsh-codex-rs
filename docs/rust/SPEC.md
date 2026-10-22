@@ -301,7 +301,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}`; each model row adds `{provider, providerName, model, maxTokens, available, cost?}` and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
+| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin, personalSkills}}` (`personalSkills`: the personal skills folder, `~`-relative); each model row adds `{provider, providerName, model, maxTokens, available, cost?, offPeakCost?}` (DeepSeek rows: `cost` at peak hours and `offPeakCost`, both from the usage price book) and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
 | PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, ui?: {workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?, sidebarArchived?, confirmFullAccess?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
@@ -375,7 +375,7 @@ Without extensions every route below answers 404. Errors are `{error}` with 400,
 | DELETE | `/api/marketplaces/:name` | → 204 (installed plugins stay) |
 | GET | `/api/skills?cwd=` | → `[{name, title, description, whenToUse, source, plugin, logoUrl?, path, active, modelInvocable, userInvocable, enabled, model}]` (`modelInvocable` = the frontmatter allows it; `model` = the model may load it on its own under `[skills]`; `enabled` = `[skills.entries."name"] enabled`); skill files that are no valid skill follow as `{name (folder), title, source, plugin, path, active:false, invalid:true, error, modelInvocable:false, userInvocable:false, enabled, model:false}` |
 | GET | `/api/skills/:name?cwd=&path=` | → the listed row plus `{content (SKILL.md, max 512 KiB), contentTruncated, frontmatter, body, dir, files:[{path, size}\|{path, dir:true}], filesTruncated}` (folder bundles: up to 300 entries, 4 levels, without `.git`/`node_modules`); `path` picks one of several skills of that name; unlisted → 404 |
-| POST | `/api/skills` | `{name, scope:"personal"\|"project", cwd?, description?}` → the new skill's detail; creates `<agents home>/skills/<name>/SKILL.md` (`$DSH_AGENTS_HOME` or `~/.agents`) or `<project>/.agents/skills/<name>/SKILL.md` (project = nearest `.git` ancestor of `cwd`); a taken name or folder → 400 |
+| POST | `/api/skills` | `{name, scope:"personal"\|"project", cwd?, description?, lang?}` → the new skill's detail (`lang: "de"` writes the template's headings in German); creates `<agents home>/skills/<name>/SKILL.md` (`$DSH_AGENTS_HOME` or `~/.agents`) or `<project>/.agents/skills/<name>/SKILL.md` (project = nearest `.git` ancestor of `cwd`); a taken name or folder → 400 |
 | GET | `/api/mcp/servers` | → `[McpServer]` (config servers, then plugin servers) |
 | POST | `/api/mcp/servers` | `{name?, connector?, config?, secrets?}` (`config` = a `[mcp_servers.x]` table as JSON; `connector` fills the URL from the catalog, its id is the default name; `secrets` below) → `McpServer` |
 | GET | `/api/mcp/servers/:name` | → `McpServer` whose `tools[]` also carry `inputSchema` |
@@ -447,7 +447,7 @@ Without a composer backend every route below answers 404. Errors are `{error}` w
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/composer/suggest?kind=slash\|mention&q=&cwd=&session=&model=` | → `{kind, query, sections:[{id, items}], cacheMiss}` (below); `cwd` defaults to the session's folder, `model` (the composer's pick) decides `cacheMiss` |
+| GET | `/api/composer/suggest?kind=slash\|mention&q=&cwd=&session=&model=&preset=` | → `{kind, query, sections:[{id, items}], cacheMiss, preset}` (below); `cwd` defaults to the session's folder, `model` (the composer's pick) decides `cacheMiss`, `preset` is the mode the start page will create (a session's own mode wins); Minimal offers no skills, apps or chat-only commands |
 | GET | `/api/sessions/:id/mcp` | → `{active:[server]}`: the MCP servers the chat offers (its log, `always` servers, changes not yet recorded); Minimal → `[]` |
 | POST \| DELETE | `/api/sessions/:id/mcp/:server` | → `{active}`; switches the server on or off for the chat from its next step on; unknown server → 404, Minimal → 400 |
 | POST | `/api/sessions/:id/compact` | → `{compacted:true, items, tokens}` or `{compacted:false}` (nothing to compact yet): dsh `/compact`, also below the pressure threshold, in a bracket with `turn: null`; while a turn runs or input is queued → 400; Minimal → 400 |

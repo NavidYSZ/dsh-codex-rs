@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, setComposer, newChat, setDraft, updateSettings } from '../state.js';
+import { store, setComposer, newChat, setDraft, updateSettings, restoreFocus } from '../state.js';
 import { IconCopy, IconCheck, IconX } from '../icons.js';
 import { Menu, MenuItem, ActionItem } from './common.js';
 
@@ -165,16 +165,22 @@ export function ModeGuide() {
   const [tab, setTab] = useState(null);
   const dialog = useRef(null);
   const id = tab ?? guide?.id;
+  const close = () => {
+    const opener = guide?.opener;
+    store.set({ modeGuide: null });
+    restoreFocus(opener);
+  };
   useEffect(() => {
     setTab(null);
-    if (guide) requestAnimationFrame(() => dialog.current?.querySelector('[aria-selected="true"]')?.focus());
+    if (!guide) return undefined;
+    // The menu it was opened from closes first: take the focus after it.
+    const id = setTimeout(() => (dialog.current?.querySelector('[aria-selected="true"]') ?? dialog.current)?.focus(), 0);
+    // Esc closes it even when the focus is still elsewhere.
+    const key = (e) => { if (e.key === 'Escape' && !dialog.current?.contains(e.target)) { e.preventDefault(); close(); } };
+    document.addEventListener('keydown', key);
+    return () => { clearTimeout(id); document.removeEventListener('keydown', key); };
   }, [guide]);
   if (!guide || presets.length < 2) return null;
-  const close = () => {
-    const opener = guide.opener;
-    store.set({ modeGuide: null });
-    if (opener?.isConnected) opener.focus();
-  };
   const text = modeText(id, presets);
   const copy = t.modeGuides[id];
   const server = presets.find((p) => p.id === id)?.help;
@@ -204,7 +210,7 @@ export function ModeGuide() {
   const action = guide.from === 'new' ? t.modeUse(text.name)
     : guide.from === 'settings' ? t.modeMakeDefault(text.name) : t.modeNewChat(text.name);
   return html`<div class="mode-scrim" onMouseDown=${(e) => { if (e.target === e.currentTarget) close(); }}>
-    <div ref=${dialog} class="mode-guide" role="dialog" aria-modal="true" aria-labelledby="mode-guide-title" onKeyDown=${onKey}>
+    <div ref=${dialog} class="mode-guide" role="dialog" aria-modal="true" aria-labelledby="mode-guide-title" tabindex="-1" onKeyDown=${onKey}>
       <header class="mode-guide-head">
         <h2 id="mode-guide-title" class="mode-guide-title">${t.modeGuideTitle}</h2>
         <button type="button" class="icon-btn" aria-label=${t.close} title=${t.close} onClick=${close}><${IconX} size=${16} /></button>

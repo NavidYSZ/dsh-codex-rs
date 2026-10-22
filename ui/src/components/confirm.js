@@ -2,10 +2,10 @@
 // permission-presets `confirm.*`): the risk, "I understand the risks" and
 // "Don't ask again", which ui-state.json keeps for every browser.
 import { useState } from 'preact/hooks';
-import { html } from '../html.js';
+import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store } from '../state.js';
+import { store, answerAsk } from '../state.js';
 import { Dialog } from './models.js';
 import { setUiPref } from './worklog.js';
 import { Field, Segmented } from './settings.js';
@@ -55,7 +55,7 @@ export function FullAccessSetting() {
   const on = useStore(store, (s) => s.info?.ui?.confirmFullAccess !== false);
   return html`<${Field} label=${t.fullAccessAsk} hint=${t.fullAccessAskHint}>
     <${Segmented} label=${t.fullAccessAsk} value=${on ? 'on' : 'off'} onChange=${(v) => setUiPref({ confirmFullAccess: v === 'on' })}
-      options=${[['on', t.on], ['off', t.off]]} />
+      options=${[['on', t.enabled], ['off', t.disabledLabel]]} />
   </${Field}>`;
 }
 
@@ -63,4 +63,13 @@ export function FullAccessSetting() {
 export function FullAccessConfirm() {
   const scope = useStore(store, (s) => s.fullAccessAsk);
   return scope ? html`<${Body} scope=${scope} />` : null;
+}
+
+/** The question of `ask()` (state.js); Cancel has the focus, Esc cancels. */
+export function AskDialog() {
+  const q = useStore(store, (s) => s.ask);
+  if (!q) return null;
+  return html`<${Dialog} title=${q.title} description=${q.text} onClose=${() => answerAsk(false)} class="md-small"
+    footer=${html`<button type="button" class="btn" onClick=${() => answerAsk(false)}>${t.cancel}</button>
+      <button type="button" class=${cx('btn', q.danger ? 'btn-danger' : 'btn-primary')} onClick=${() => answerAsk(true)}>${q.action}</button>`} />`;
 }

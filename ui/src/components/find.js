@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { html } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store } from '../state.js';
+import { store, restoreFocus } from '../state.js';
 import { IconSearch, IconChevronDown, IconX } from '../icons.js';
 
 const SKIP = '.msg-actions, .find-bar, .turn-rail, .load-older, .chev, svg';
@@ -21,6 +21,7 @@ export function openFind() {
 
 export function closeFind() {
   store.set({ find: null });
+  restoreFocus(null);
 }
 
 // The bar closes when the chat changes.
@@ -151,7 +152,7 @@ export function FindBar({ scroller, pinned, onQuery }) {
   return html`<div class="find-bar" role="search">
     <span class="find-icon"><${IconSearch} size=${14} /></span>
     <input ref=${input} class="find-input" value=${query} placeholder=${t.findInChat} aria-label=${t.findInChat}
-      spellcheck="false" autocomplete="off" onInput=${(e) => store.set({ find: e.currentTarget.value })} onKeyDown=${onKey} />
+      spellcheck=${false} autocomplete="off" onInput=${(e) => store.set({ find: e.currentTarget.value })} onKeyDown=${onKey} />
     <span class="find-count" role="status" aria-live="polite">${count}</span>
     <button type="button" class="icon-btn find-step is-up" aria-label=${t.findPrev} title=${`${t.findPrev} (⇧↩)`}
       disabled=${!state.count} onClick=${() => step(-1)}><${IconChevronDown} size=${14} /></button>

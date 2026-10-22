@@ -4,14 +4,14 @@
 // only through /name unless "Let the model load it" is on (ux-plan §1, §8).
 import { useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
-import { t, quote } from '../i18n.js';
+import { t, quote, lang } from '../i18n.js';
 import { useStore } from '../store.js';
 import { store, api, fail, toast, newChat, setDraft, closeSettings } from '../state.js';
 import { renderMarkdown, onMarkdownClick, copyText } from '../markdown.js';
 import { IconSearch, IconPlus, IconFolder, IconPencil, IconCopy, IconFile, IconChat, IconAlert, IconCompose, IconRefresh } from '../icons.js';
 import { Menu, ActionItem, MenuItem } from './common.js';
 import { useLoad, Toggle, Pill } from './page.js';
-import { Logo, tint, useRoute, routeMissing, isMissingRoute } from './plugin-kit.js';
+import { Logo, tint, useRoute, routeMissing, isMissingRoute, usePluginFocus } from './plugin-kit.js';
 import { Drawer, Dialog, Field, Segmented } from './drawer.js';
 import { workspaceName } from './composer.js';
 
@@ -25,6 +25,8 @@ const KIND = {
 const KINDS = ['project', 'personal', 'plugin', 'system'];
 const kindOf = (s) => (s.plugin ? 'plugin' : KIND[s.source] ?? 'system');
 const keyOf = (s) => `${s.source}:${s.path}`;
+/** "qa-28" before "qa-112". */
+const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 /** The Mac app shows files of this instance (local instances only). */
 const localDesktop = () => !!window.dshxDesktop?.capabilities?.revealInFinder;
@@ -71,8 +73,22 @@ function SkillIcon({ s, size = 32 }) {
   return html`<${Logo} url=${s.logoUrl} name=${title} color=${tint(s.name)} size=${size} letters=${2} />`;
 }
 
+/** A loader error in the user's words where we know it (discovery.rs, frontmatter.rs). */
+function skillError(error = '') {
+  let m = /^invalid YAML frontmatter: (.*)$/s.exec(error);
+  if (m) return t.skInvalidYaml(m[1]);
+  m = /^invalid skill name "(.*)"$/.exec(error);
+  if (m) return t.skInvalidName(m[1]);
+  m = /frontmatter field "(.*)" must be a boolean/.exec(error);
+  if (m) return t.skInvalidBool(m[1]);
+  return error;
+}
+
+/** The folder of personal skills as the server knows it ($DSH_AGENTS_HOME). */
+const personalDir = () => store.get().info?.extensions?.personalSkills ?? '~/.agents/skills';
+
 function Note({ s }) {
-  if (s.invalid) return html`<div class="sk-warn"><${IconAlert} size=${13} /><span>${t.skInvalid(s.error)}</span></div>`;
+  if (s.invalid) return html`<div class="sk-warn"><${IconAlert} size=${13} /><span>${t.skInvalid(skillError(s.error))}</span></div>`;
   if (s.active === false && kindOf(s) === 'plugin') return html`<div class="sk-note">${t.skPluginOff}</div>`;
   if (s.active === false) return html`<div class="sk-note">${t.skShadowed}</div>`;
   return null;
@@ -243,14 +259,14 @@ function BlankSkillDialog({ cwd, scope: initial, onClose, onCreated }) {
   const [error, setError] = useState(null);
   const clean = name.replace(/-+$/, '');
   const invalid = clean && !SKILL_NAME.test(clean);
-  const where = scope === 'project' ? `${workspaceName(cwd)}/.agents/skills/${clean || '…'}/SKILL.md` : `~/.agents/skills/${clean || '…'}/SKILL.md`;
+  const where = scope === 'project' ? `${workspaceName(cwd)}/.agents/skills/${clean || '…'}/SKILL.md` : `${personalDir()}/${clean || '…'}/SKILL.md`;
   const submit = async (e) => {
     e?.preventDefault();
     if (!clean || invalid || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const made = await api.createSkill({ name: clean, scope, cwd: cwd || undefined, description: description.trim() });
+      const made = await api.createSkill({ name: clean, scope, cwd: cwd || undefined, description: description.trim(), lang });
       toast(t.skCreated(clean));
       onCreated(made);
     } catch (err) {
@@ -267,7 +283,7 @@ function BlankSkillDialog({ cwd, scope: initial, onClose, onCreated }) {
     <form id="sk-blank" class="md-form" onSubmit=${submit}>
       <${Field} label=${t.skName} wide error=${invalid ? t.skNameInvalid : error}
         hint=${clean ? html`${t.skNameHint} <span class="mono">/${clean}</span>` : t.skNameHint}>
-        <input class="input mono" value=${name} spellcheck="false" autocomplete="off" placeholder="release-notes" maxlength="64"
+        <input class="input mono" value=${name} spellcheck=${false} autocomplete="off" placeholder="release-notes" maxlength="64"
           onInput=${(e) => { setName(slug(e.currentTarget.value)); setError(null); }} />
       </${Field}>
       <${Field} label=${t.skDescription} wide hint=${t.skDescriptionHint}>
@@ -329,10 +345,17 @@ export function SkillsTab() {
     return rows
       .filter((r) => filter === 'all' || kindOf(r) === filter)
       .filter((r) => !q || [r.title, r.name, r.description, r.plugin].some((v) => v?.toLowerCase().includes(q)))
-      .sort((a, b) => order(a) - order(b) || rank(a) - rank(b) || (a.title || a.name).localeCompare(b.title || b.name));
+      .sort((a, b) => order(a) - order(b) || rank(a) - rank(b) || NATURAL.compare(a.title || a.name, b.title || b.name));
   }, [rows, filter, query]);
   // The open row follows reloads (switches change it).
   const current = opened && (rows.find((r) => keyOf(r) === opened) ?? null);
+  // A /skill pill of a sent prompt: the skill that answers to that name (an active one first).
+  usePluginFocus('skill', skills, (name) => {
+    const named = rows.filter((r) => r.name === name);
+    const hit = named.find((r) => r.active !== false && !r.invalid) ?? named[0];
+    if (hit) setOpened(keyOf(hit));
+    return !!hit;
+  });
   const filters = ['all', 'project', 'personal', 'plugin', ...(counts.system ? ['system'] : [])];
 
   let body;
@@ -341,13 +364,13 @@ export function SkillsTab() {
     body = html`<div class="page-empty xe-empty"><p>${t.skLoadFailed}</p>
       <button type="button" class="btn btn-small" onClick=${skills.reload}><${IconRefresh} size=${14} />${t.retry}</button></div>`;
   } else if (!rows.length) {
-    body = html`<div class="page-empty xe-empty"><p class="xe-empty-title">${t.skEmpty}</p><p>${t.skEmptyHint}</p>
+    body = html`<div class="page-empty xe-empty"><p class="xe-empty-title">${t.skEmpty}</p><p>${t.skEmptyHint(personalDir())}</p>
       <button type="button" class="btn btn-small" onClick=${() => setBlank('personal')}><${IconPlus} size=${14} />${t.skBlank}</button></div>`;
   } else if (!shown.length) {
     body = query.trim()
       ? html`<div class="page-empty xe-empty"><p>${t.skNoMatch(quote(query.trim()))}</p>
           <button type="button" class="link-btn" onClick=${() => setQuery('')}>${t.skClearSearch}</button></div>`
-      : html`<div class="page-empty xe-empty"><p>${t.skNoneOf[filter]}</p>
+      : html`<div class="page-empty xe-empty"><p>${typeof t.skNoneOf[filter] === 'function' ? t.skNoneOf[filter](personalDir()) : t.skNoneOf[filter]}</p>
           ${filter === 'project' && cwd ? html`<button type="button" class="link-btn" onClick=${() => setBlank('project')}>${t.skBlankHere}</button>` : null}</div>`;
   } else {
     const sections = filter === 'all' && !query.trim();
@@ -365,7 +388,7 @@ export function SkillsTab() {
     <div class="xe-toolbar">
       <label class="xe-search">
         <${IconSearch} size=${14} />
-        <input type="search" value=${query} placeholder=${t.skSearch} aria-label=${t.skSearch} spellcheck="false"
+        <input type="search" value=${query} placeholder=${t.skSearch} aria-label=${t.skSearch} spellcheck=${false}
           onInput=${(e) => setQuery(e.currentTarget.value)} onKeyDown=${(e) => { if (e.key === 'Escape' && query) { e.stopPropagation(); setQuery(''); } }} />
       </label>
       <${NewSkillButton} rows=${rows} onBlank=${() => setBlank('personal')} />
