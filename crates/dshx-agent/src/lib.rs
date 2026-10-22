@@ -21,6 +21,7 @@ mod instructions;
 mod jobs;
 mod journal;
 pub mod observer;
+mod offload;
 mod prompt;
 mod recovery;
 pub mod retry;

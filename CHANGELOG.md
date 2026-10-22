@@ -36,6 +36,14 @@
   `DSHX_BROWSER_MOCK_KEYCHAIN=1` start Chrome with `--use-mock-keychain`, which
   the Chrome tests now always do, so they never prompt for the login keychain.
 
+### Fixed
+
+- Image-heavy chats (many browser screenshots) no longer end with
+  `IMAGE_OFFLOAD_REQUIRED`: like dsh `compaction-image-offload`, the agent
+  logs `image/offload`, sends the oldest images as text with their read-only
+  path and retries without spending the retry budget. Compaction summaries
+  and the tool-result pruner keep those marks; resumed chats keep them too.
+
 ## 0.2.0 – 2026-10-17
 
 First public release.

@@ -83,6 +83,7 @@ pub mod kinds {
     pub const COMPACTION_SUMMARY: &str = "compaction/summary";
     pub const COMPACTION_PRUNE: &str = "compaction/prune";
     pub const COMPACTION_END: &str = "compaction/end";
+    pub const IMAGE_OFFLOAD: &str = "image/offload";
     pub const APPROVAL_ASKED: &str = "approval/asked";
     pub const APPROVAL_DECIDED: &str = "approval/decided";
     pub const MODEL_SELECTION: &str = "model/selection";

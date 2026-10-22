@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use common::*;
-use dshx_agent::testing::{FakeTool, Response, failure, text, tool_calls};
+use dshx_agent::testing::{FakeTool, Response, failure, offload_failure, text, tool_calls};
 use dshx_agent::{
     ApprovalPolicy, PromptConfig, RouteCapabilities, TurnEndReason, render_system_prompt,
 };
@@ -291,6 +291,65 @@ async fn pressure_compaction_replaces_the_oldest_span() {
                 .plain_text()
                 .starts_with("This is an automatically generated checkpoint")
         );
+    }
+    validate(&h.log);
+}
+
+#[tokio::test]
+async fn summary_offloads_region_images_and_retries() {
+    let h = harness(
+        vec![
+            tool_calls(M, &[("c1", "shot", "{}")]),
+            text_with_usage("first answer", 70_100),
+            text(M, "second"),
+        ],
+        vec![image_tool("shot", image_ref("att-1"))],
+        |c, _| small_window(c),
+    );
+    h.llm
+        .summary_script
+        .lock()
+        .unwrap()
+        .push_back(offload_failure(1));
+    h.agent
+        .run_turn(vec![ContentBlock::text("look")])
+        .await
+        .unwrap();
+    h.agent
+        .run_turn(vec![ContentBlock::text("next")])
+        .await
+        .unwrap();
+    let start = &of_kind(&h.log, "compaction/start")[0];
+    let summary = &of_kind(&h.log, "compaction/summary")[0];
+    let result = &of_kind(&h.log, "tool/result")[0];
+    let offload = of_kind(&h.log, "image/offload");
+    assert_eq!(offload.len(), 1);
+    assert_eq!(
+        offload[0].data,
+        json!({"targets": [{"seq": result.seq, "imageIndexes": [0]}]})
+    );
+    assert!(start.seq < offload[0].seq && offload[0].seq < summary.seq);
+    assert!(
+        summary.data["shadowedSeqs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(result.seq))
+    );
+    {
+        let side = h.llm.side_requests.lock().unwrap();
+        let summarize: Vec<_> = side
+            .iter()
+            .filter(|r| {
+                r.messages
+                    .last()
+                    .unwrap()
+                    .plain_text()
+                    .contains("compaction engine")
+            })
+            .collect();
+        // The rejected attempt, then the retry with the image as text.
+        assert_eq!(request_images(summarize[0]), [false]);
+        assert_eq!(request_images(summarize[1]), [true]);
     }
     validate(&h.log);
 }

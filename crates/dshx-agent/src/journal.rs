@@ -3,10 +3,12 @@
 //! Every append goes through here so the loop can read its own history without
 //! cloning the whole log per step. The surface fold mirrors dsh `surface.ts`:
 //! `surfaceOp: "append"` pushes a node, `{op: "replace", startSeq, endSeq}`
-//! swaps an inclusive node range for the new event.
+//! swaps an inclusive node range for the new event, and `image/offload`
+//! marks image occurrences of existing nodes as offloaded.
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use dshx_core::{Message, NewEvent, SessionEvent, SessionHeader, SessionLog, kinds};
+use dshx_core::{ContentBlock, Message, NewEvent, SessionEvent, SessionHeader, SessionLog, kinds};
 use serde_json::Value;
 
 /// Event types that may carry a `surfaceOp`.
@@ -45,12 +47,27 @@ pub(crate) fn event_message(event: &SessionEvent) -> Option<Message> {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Surface {
     pub nodes: Vec<u64>,
+    /// Messages rewritten by `image/offload`, keyed by their event seq.
+    pub projected: HashMap<u64, Message>,
     pub replace_generation: u64,
     pub content_generation: u64,
 }
 
 impl Surface {
-    pub(crate) fn apply(&mut self, event: &SessionEvent) {
+    /// The model-visible message of `event` with offloaded images marked.
+    pub(crate) fn message(&self, event: &SessionEvent) -> Option<Message> {
+        match self.projected.get(&event.seq) {
+            Some(message) => Some(message.clone()),
+            None => event_message(event),
+        }
+    }
+
+    /// `events` holds the log before `event`, indexed by seq.
+    pub(crate) fn apply(&mut self, event: &SessionEvent, events: &[SessionEvent]) {
+        if event.kind == kinds::IMAGE_OFFLOAD {
+            self.offload(event, events);
+            return;
+        }
         if !is_surface_type(&event.kind) {
             return;
         }
@@ -80,6 +97,42 @@ impl Surface {
             _ => {}
         }
     }
+
+    /// dsh `imageOffloadProjection`: each target names a current node and the
+    /// indexes of its image blocks (counting already offloaded ones).
+    fn offload(&mut self, event: &SessionEvent, events: &[SessionEvent]) {
+        let targets = event.data.get("targets").and_then(Value::as_array);
+        for target in targets.into_iter().flatten() {
+            let source = target
+                .get("seq")
+                .and_then(Value::as_u64)
+                .filter(|s| self.nodes.contains(s))
+                .and_then(|s| events.get(s as usize))
+                .filter(|e| e.kind == kinds::USER_MESSAGE || e.kind == kinds::TOOL_RESULT);
+            let Some((source, mut message)) = source.and_then(|e| Some((e, self.message(e)?)))
+            else {
+                tracing::warn!(
+                    seq = event.seq,
+                    "image/offload names an unknown node; ignored"
+                );
+                continue;
+            };
+            let wanted: Vec<u64> = target
+                .get("imageIndexes")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_u64).collect())
+                .unwrap_or_default();
+            let mut index = 0;
+            for block in &mut message.content {
+                if let ContentBlock::Image { offloaded, .. } = block {
+                    *offloaded |= wanted.contains(&index);
+                    index += 1;
+                }
+            }
+            self.projected.insert(source.seq, message);
+        }
+        self.content_generation += 1;
+    }
 }
 
 struct State {
@@ -91,8 +144,8 @@ struct State {
 impl State {
     fn fold(&mut self) {
         while self.folded < self.events.len() {
-            let e = &self.events[self.folded];
-            self.surface.apply(e);
+            let (before, rest) = self.events.split_at(self.folded);
+            self.surface.apply(&rest[0], before);
             self.folded += 1;
         }
     }
@@ -206,7 +259,7 @@ impl Journal {
             surface
                 .nodes
                 .iter()
-                .filter_map(|seq| events.get(*seq as usize).and_then(event_message))
+                .filter_map(|seq| events.get(*seq as usize).and_then(|e| surface.message(e)))
                 .collect()
         })
     }

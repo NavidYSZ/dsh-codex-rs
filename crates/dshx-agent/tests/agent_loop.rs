@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::*;
-use dshx_agent::testing::{Block, FakeTool, Response, chunks, failure, text, tool_calls};
+use dshx_agent::testing::{
+    Block, FakeTool, Response, chunks, failure, offload_failure, text, tool_calls,
+};
 use dshx_agent::{AgentStatus, CancelCause, TurnEndReason};
 use dshx_core::{
     ContentBlock, FinishReason, ImageAttachmentRef, StreamChunk, ToolOutput, ToolResultPart,
@@ -770,6 +772,63 @@ async fn steer_reaches_the_next_step() {
     );
     drop(requests);
     validate(&h.log);
+}
+
+#[tokio::test]
+async fn image_offload_retries_without_the_retry_budget() {
+    let h = harness(
+        vec![
+            tool_calls(M, &[("c1", "shot", "{}")]),
+            tool_calls(M, &[("c2", "shot", "{}")]),
+            offload_failure(1),
+            text(M, "ok"),
+        ],
+        vec![image_tool("shot", image_ref("att-1"))],
+        |_, _| {},
+    );
+    let outcome = h
+        .agent
+        .run_turn(vec![ContentBlock::text("go")])
+        .await
+        .unwrap();
+    assert_eq!(outcome.reason, TurnEndReason::Completed);
+    let results = of_kind(&h.log, "tool/result");
+    let offload = of_kind(&h.log, "image/offload");
+    assert_eq!(
+        offload.iter().map(|e| &e.data).collect::<Vec<_>>(),
+        [&json!({"targets": [{"seq": results[0].seq, "imageIndexes": [0]}]})]
+    );
+    assert!(of_kind(&h.log, "llm/retry").is_empty());
+    // The retry opens a new request series and sends the oldest image as text.
+    let series = of_kind(&h.log, "request/header");
+    assert!(
+        series
+            .iter()
+            .any(|e| e.seq > offload[0].seq && e.data["reason"] == "series")
+    );
+    {
+        let requests = h.llm.requests.lock().unwrap();
+        assert_eq!(request_images(&requests[2]), [false, false]);
+        assert_eq!(request_images(&requests[3]), [true, false]);
+    }
+    validate(&h.log);
+
+    // A resumed agent keeps the image offloaded.
+    let resumed = with_log(
+        dshx_agent::testing::ScriptedLlm::new(vec![text(M, "again")]),
+        vec![],
+        h.dir.clone(),
+        h.dir.path().join("work"),
+        h.log.clone(),
+        |_, _| {},
+    );
+    resumed
+        .agent
+        .run_turn(vec![ContentBlock::text("more")])
+        .await
+        .unwrap();
+    let requests = resumed.llm.requests.lock().unwrap();
+    assert_eq!(request_images(&requests[0]), [true, false]);
 }
 
 #[tokio::test]

@@ -851,6 +851,7 @@ async fn rejects_unrepresentable_images_and_requires_offload_over_budget() {
     ];
     let failure = client.build_request(&flash(two)).await.unwrap_err();
     assert_eq!(failure.code, "IMAGE_OFFLOAD_REQUIRED");
+    assert_eq!(failure.offload_images, Some(1));
     assert!(
         failure.message.contains("1 more oldest occurrence"),
         "{failure:?}"

@@ -341,20 +341,18 @@ async fn prune_session(inner: &Arc<Inner>) -> anyhow::Result<usize> {
     if !cfg.enabled {
         return Ok(0);
     }
-    let candidates: Vec<SessionEvent> = inner.journal.read(|events, surface| {
+    // Offloaded images stay offloaded in the pruned replacement.
+    let candidates: Vec<(SessionEvent, Message)> = inner.journal.read(|events, surface| {
         surface
             .nodes
             .iter()
             .filter_map(|s| events.get(*s as usize))
             .filter(|e| e.kind == kinds::TOOL_RESULT)
-            .cloned()
+            .filter_map(|e| Some((e.clone(), surface.message(e)?)))
             .collect()
     });
     let mut pruned = 0;
-    for e in candidates {
-        let Some(original) = event_message(&e) else {
-            continue;
-        };
+    for (e, original) in candidates {
         let Some(content) = prune_content(
             &original.content,
             cfg.threshold_chars,
@@ -523,6 +521,21 @@ async fn compact_region(
     }
 }
 
+/// The system prompt plus the region to summarize, offloaded images marked.
+fn summary_input(inner: &Inner, shadowed: &[u64]) -> Vec<Message> {
+    inner.journal.read(|events, surface| {
+        let head = surface
+            .nodes
+            .first()
+            .and_then(|s| events.get(*s as usize))
+            .filter(|e| e.kind == kinds::SYSTEM_MESSAGE);
+        head.into_iter()
+            .chain(shadowed.iter().filter_map(|s| events.get(*s as usize)))
+            .filter_map(|e| surface.message(e))
+            .collect()
+    })
+}
+
 async fn summarize_and_commit(
     inner: &Arc<Inner>,
     (start, end): (u64, u64),
@@ -530,7 +543,7 @@ async fn summarize_and_commit(
     id: &str,
     cancel: &CancellationToken,
 ) -> anyhow::Result<()> {
-    let (shadowed, shadowed_tokens, mut messages) = inner.journal.read(|events, surface| {
+    let (shadowed, shadowed_tokens) = inner.journal.read(|events, surface| {
         let si = surface.nodes.iter().position(|s| *s == start).unwrap_or(0);
         let ei = surface.nodes.iter().position(|s| *s == end).unwrap_or(si);
         let shadowed: Vec<u64> = surface.nodes[si..=ei].to_vec();
@@ -539,20 +552,7 @@ async fn summarize_and_commit(
             .filter_map(|s| events.get(*s as usize))
             .map(node_tokens)
             .sum();
-        let mut messages: Vec<Message> = Vec::new();
-        if let Some(head) = surface.nodes.first().and_then(|s| events.get(*s as usize))
-            && head.kind == kinds::SYSTEM_MESSAGE
-            && let Some(m) = event_message(head)
-        {
-            messages.push(m);
-        }
-        messages.extend(
-            shadowed
-                .iter()
-                .filter_map(|s| events.get(*s as usize))
-                .filter_map(event_message),
-        );
-        (shadowed, tokens, messages)
+        (shadowed, tokens)
     });
     let header = inner.journal.request_header();
     let tools: Vec<ToolSchema> = header
@@ -577,38 +577,47 @@ async fn summarize_and_commit(
         })
         .unwrap_or_else(|| inner.config.lock().unwrap().model.clone());
     let provider = inner.llm.provider().to_owned();
-    messages.push(Message::user_text(INSTRUCTION));
-    let request = GenerateRequest {
-        model: model.clone(),
-        reasoning_effort: None,
-        messages,
-        tools,
-        max_tokens: Some(max_tokens),
-        temperature: None,
-        session_id: Some(inner.journal.id()),
-    };
-    let mut stream = inner.llm.stream(request, cancel.child_token()).await;
-    let mut asm = BlockAssembler::default();
-    loop {
-        tokio::select! {
-            biased;
-            _ = cancel.cancelled() => return Err(Aborted.into()),
-            chunk = stream.next() => match chunk {
-                Some(c) => asm.push(&c),
-                None => break,
+    let (raw, usage) = loop {
+        let mut messages = summary_input(inner, &shadowed);
+        messages.push(Message::user_text(INSTRUCTION));
+        let request = GenerateRequest {
+            model: model.clone(),
+            reasoning_effort: None,
+            messages,
+            tools: tools.clone(),
+            max_tokens: Some(max_tokens),
+            temperature: None,
+            session_id: Some(inner.journal.id()),
+        };
+        let mut stream = inner.llm.stream(request, cancel.child_token()).await;
+        let mut asm = BlockAssembler::default();
+        loop {
+            tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err(Aborted.into()),
+                chunk = stream.next() => match chunk {
+                    Some(c) => asm.push(&c),
+                    None => break,
+                }
             }
         }
-    }
-    match asm.finish() {
-        FinishReason::Error { failure } | FinishReason::Aborted { failure } => {
-            return Err(LlmError(failure).into());
+        match asm.finish() {
+            FinishReason::Error { failure } | FinishReason::Aborted { failure } => {
+                // dsh `compaction/summary-error`: offload within the region, then retry.
+                if let Some(count) = crate::offload::required(&failure)
+                    && let Some(decision) = crate::offload::select(&inner.journal, &shadowed, count)
+                {
+                    inner.append(decision).await?;
+                    continue;
+                }
+                return Err(LlmError(failure).into());
+            }
+            FinishReason::MaxTokens => {
+                anyhow::bail!("summarization truncated at the token cap (incomplete checkpoint)")
+            }
+            _ => break (asm.blocks(), asm.usage().cloned()),
         }
-        FinishReason::MaxTokens => {
-            anyhow::bail!("summarization truncated at the token cap (incomplete checkpoint)")
-        }
-        _ => {}
-    }
-    let raw = asm.blocks();
+    };
     if raw.iter().any(|b| matches!(b, ContentBlock::Image { .. })) {
         return Err(LlmError(dshx_core::LlmFailure::new(
             "UNSUPPORTED_CONTENT",
@@ -660,7 +669,7 @@ async fn summarize_and_commit(
     data.insert("provider".into(), provider.into());
     data.insert("model".into(), model.into());
     data.insert("maxTokens".into(), max_tokens.into());
-    if let Some(u) = asm.usage() {
+    if let Some(u) = usage {
         data.insert("usage".into(), serde_json::to_value(u)?);
     }
     let summary_seq = inner

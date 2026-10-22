@@ -140,12 +140,15 @@ pub fn offloaded_image_prefix_count(
 /// `IMAGE_OFFLOAD_REQUIRED`: the agent must offload `count` more of the
 /// oldest images (log `image/offload`) and rebuild the request.
 pub fn image_offload_required(count: u64) -> LlmFailure {
-    LlmFailure::new(
-        "IMAGE_OFFLOAD_REQUIRED",
-        format!(
-            "DeepSeek Messages base64 request images exceed the route budget; {count} more oldest occurrence(s) must be offloaded."
-        ),
-    )
+    LlmFailure {
+        offload_images: Some(count),
+        ..LlmFailure::new(
+            "IMAGE_OFFLOAD_REQUIRED",
+            format!(
+                "DeepSeek Messages base64 request images exceed the route budget; {count} more oldest occurrence(s) must be offloaded."
+            ),
+        )
+    }
 }
 
 #[cfg(test)]

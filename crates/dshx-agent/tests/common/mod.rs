@@ -10,7 +10,8 @@ use dshx_agent::testing::{
 };
 use dshx_agent::{Agent, AgentConfig, AgentDeps};
 use dshx_core::{
-    ApprovalDecision, SessionEvent, SessionLog, Tool, ToolError, ToolOutput, ToolRegistry,
+    ApprovalDecision, ContentBlock, GenerateRequest, ImageAttachmentRef, SessionEvent, SessionLog,
+    Tool, ToolError, ToolOutput, ToolRegistry, ToolResultPart,
 };
 use dshx_session::MemoryLog;
 use serde_json::{Value, json};
@@ -171,6 +172,55 @@ pub fn timed_tool(name: &str, safe: bool, events: Arc<Mutex<Vec<String>>>) -> Ar
             })
         }),
     )
+}
+
+/// A tool answering `screen` plus `image`.
+pub fn image_tool(name: &str, image: ImageAttachmentRef) -> Arc<FakeTool> {
+    FakeTool::new(
+        name,
+        json!({"type": "object"}),
+        false,
+        Arc::new(Mutex::new(Vec::new())),
+        Arc::new(move |_, _| {
+            let image = image.clone();
+            Box::pin(async move {
+                Ok(ToolOutput {
+                    content: vec![
+                        ToolResultPart::Text {
+                            text: "screen".into(),
+                        },
+                        ToolResultPart::Image { attachment: image },
+                    ],
+                    ..Default::default()
+                })
+            })
+        }),
+    )
+}
+
+pub fn image_ref(id: &str) -> ImageAttachmentRef {
+    ImageAttachmentRef {
+        attachment_id: id.into(),
+        media_type: "image/png".into(),
+        bytes: 10,
+        width: 4,
+        height: 3,
+        name: None,
+        original_dimensions: None,
+    }
+}
+
+/// Offload marks of every image a request sends, in order.
+pub fn request_images(request: &GenerateRequest) -> Vec<bool> {
+    request
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .filter_map(|b| match b {
+            ContentBlock::Image { offloaded, .. } => Some(*offloaded),
+            _ => None,
+        })
+        .collect()
 }
 
 pub fn text_of_result(e: &SessionEvent) -> String {

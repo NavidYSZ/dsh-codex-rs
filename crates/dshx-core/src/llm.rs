@@ -64,6 +64,10 @@ pub struct LlmFailure {
     pub provider_retry_after_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+    /// `IMAGE_OFFLOAD_REQUIRED`: how many more of the oldest retained images
+    /// must be offloaded before the request fits the route.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offload_images: Option<u64>,
 }
 
 impl LlmFailure {
@@ -74,6 +78,7 @@ impl LlmFailure {
             status: None,
             provider_retry_after_ms: None,
             request_id: None,
+            offload_images: None,
         }
     }
 }

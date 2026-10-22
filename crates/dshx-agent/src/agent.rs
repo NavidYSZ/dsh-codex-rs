@@ -1490,7 +1490,8 @@ impl Inner {
         });
     }
 
-    /// dsh `agent/request-error` listeners: llm-retry, then overflow compaction.
+    /// dsh `agent/request-error` listeners: image offload, llm-retry, then
+    /// overflow compaction.
     #[allow(clippy::too_many_arguments)]
     async fn request_error(
         self: &Arc<Self>,
@@ -1503,6 +1504,13 @@ impl Inner {
         cancel: &CancellationToken,
     ) -> anyhow::Result<bool> {
         check(cancel)?;
+        if let Some(count) = crate::offload::required(failure) {
+            let nodes = self.journal.surface().nodes;
+            if let Some(decision) = crate::offload::select(&self.journal, &nodes, count) {
+                self.append(decision).await?;
+                return Ok(true);
+            }
+        }
         let policy = self.config.lock().unwrap().retry.clone();
         if let Some(delay) = policy.decide(failure, *retries) {
             *retries += 1;

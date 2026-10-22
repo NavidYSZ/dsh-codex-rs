@@ -41,6 +41,7 @@ fn text_events() -> Vec<Value> {
 }
 
 /// Runs events through the translator; `Err` carries the chunks before the failure.
+#[allow(clippy::result_large_err)]
 fn translate(events: &[Value]) -> Result<Vec<StreamChunk>, (Vec<StreamChunk>, LlmFailure)> {
     let mut translator = Translator::new(MODEL);
     let mut out = vec![];

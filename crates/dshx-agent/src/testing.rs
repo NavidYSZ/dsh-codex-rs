@@ -147,6 +147,22 @@ pub fn failure(code: &str, message: &str) -> Response {
     }])
 }
 
+/// A route rejecting the request until `count` more of the oldest images are offloaded.
+pub fn offload_failure(count: u64) -> Response {
+    Response::Chunks(vec![StreamChunk::Finish {
+        reason: FinishReason::Error {
+            failure: LlmFailure {
+                offload_images: Some(count),
+                ..LlmFailure::new(
+                    "IMAGE_OFFLOAD_REQUIRED",
+                    "request images exceed the route budget",
+                )
+            },
+        },
+        replay_state: None,
+    }])
+}
+
 /// A fake [`LlmClient`] answering from a script. Title and compaction requests
 /// are answered on the side (like `tools/dev/mock_deepseek.py`).
 pub struct ScriptedLlm {
@@ -159,6 +175,8 @@ pub struct ScriptedLlm {
     pub summary: Mutex<String>,
     /// Exact answer to compaction requests (default: `summary` as plain text).
     pub summary_response: Mutex<Option<Response>>,
+    /// One-shot compaction answers, used before `summary_response`.
+    pub summary_script: Mutex<VecDeque<Response>>,
     models: Vec<ModelInfo>,
 }
 
@@ -171,6 +189,7 @@ impl ScriptedLlm {
             title: Mutex::new("Testtitel".into()),
             summary: Mutex::new("## Primary Request and Intent\n- summary".into()),
             summary_response: Mutex::new(None),
+            summary_script: Mutex::new(VecDeque::new()),
             models: vec![
                 ModelInfo {
                     id: "deepseek-flash".into(),
@@ -246,6 +265,9 @@ impl LlmClient for ScriptedLlm {
         }
         if is_compaction(&request) {
             self.side_requests.lock().unwrap().push(request);
+            if let Some(Response::Chunks(c)) = self.summary_script.lock().unwrap().pop_front() {
+                return stream::iter(c).boxed();
+            }
             if let Some(Response::Chunks(c)) = self.summary_response.lock().unwrap().clone() {
                 return stream::iter(c).boxed();
             }
