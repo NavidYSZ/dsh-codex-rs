@@ -139,6 +139,10 @@ export function PageToast() {
   return text ? html`<${Portal}><div class="xe-toast" role="status" aria-live="polite">${text}</div></${Portal}>` : null;
 }
 
+/** A catalog connector's description and category in the UI's language (the catalog is English). */
+export const connectorText = (c) => t.connectorText?.[c.id] ?? c.description;
+export const connectorCategory = (c) => t.connectorCategories?.[c.category] ?? c.category;
+
 const FOCUS_LABEL = { skill: (n) => `/${n}`, server: (n) => `@${n}`, plugin: (n) => `@${n}` };
 
 /**

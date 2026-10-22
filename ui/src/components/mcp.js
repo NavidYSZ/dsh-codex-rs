@@ -10,7 +10,9 @@ import { api, fail, toast, ask } from '../state.js';
 import { copyText } from '../markdown.js';
 import { IconPlus, IconRefresh, IconTrash, IconSearch, IconCopy, IconChevronRight, IconAlert, IconKey, IconFile, IconPlug } from '../icons.js';
 import { useLoad, Toggle, Pill } from './page.js';
-import { Logo, MoreMenu, StatusDot, useAction, useLoginWait, useRoute, routeMissing, isMissingRoute, usePluginFocus } from './plugin-kit.js';
+import {
+  Logo, MoreMenu, StatusDot, useAction, useLoginWait, useRoute, routeMissing, isMissingRoute, usePluginFocus, connectorText, connectorCategory,
+} from './plugin-kit.js';
 import { Drawer, Dialog, Field } from './drawer.js';
 import { ServerForm, ProbeResult, emptyForm, formOf, fromImport, validate, bodyOf, useProbe } from './mcp-form.js';
 import { parseServers } from '../mcp-import.js';
@@ -352,7 +354,7 @@ function Catalog({ connectors, onAdded, onLogin }) {
   const [asking, setAsking] = useState(null);
   const [token, setToken] = useState('');
   const q = query.trim().toLowerCase();
-  const list = (connectors ?? []).filter((c) => !q || [c.name, c.description, c.category].some((v) => v?.toLowerCase().includes(q)));
+  const list = (connectors ?? []).filter((c) => !q || [c.name, connectorText(c), connectorCategory(c)].some((v) => v?.toLowerCase().includes(q)));
   const add = async (c) => {
     setBusy(c.id);
     try {
@@ -375,8 +377,8 @@ function Catalog({ connectors, onAdded, onLogin }) {
     <ul class="mcp-catalog-list">${list.map((c) => html`<li key=${c.id} class="mcp-catalog-row">
       <${Logo} color=${c.brandColor} name=${c.name} size=${32} />
       <span class="mcp-catalog-text">
-        <span class="mcp-catalog-name">${c.name}${c.category ? html`<span class="plug-meta">${c.category}</span>` : null}</span>
-        <span class="plug-desc">${c.description}</span>
+        <span class="mcp-catalog-name">${c.name}${c.category ? html`<span class="plug-meta">${connectorCategory(c)}</span>` : null}</span>
+        <span class="plug-desc">${connectorText(c)}</span>
         ${asking?.c.id === c.id ? html`<form class="md-inline mcp-catalog-token" onSubmit=${saveToken}>
           <input class="input mono" type="password" autocomplete="off" value=${token} placeholder=${t.tokenLabel} aria-label=${t.tokenLabel}
             ref=${(el) => el && !el.dataset.f && (el.dataset.f = '1', el.focus())} onInput=${(e) => setToken(e.currentTarget.value)} />

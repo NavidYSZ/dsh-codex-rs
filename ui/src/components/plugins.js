@@ -8,7 +8,7 @@ import { useStore } from '../store.js';
 import { store, api, openPlugins, toast, ask } from '../state.js';
 import { IconRefresh, IconTrash, IconPlus } from '../icons.js';
 import { PageShell, Tabs, useLoad, Toggle, Pill } from './page.js';
-import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast, usePluginFocus } from './plugin-kit.js';
+import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast, usePluginFocus, connectorText, connectorCategory } from './plugin-kit.js';
 import { SkillsTab } from './skills.js';
 import { McpTab, ServerDrawer } from './mcp.js';
 import { Dialog, Field } from './drawer.js';
@@ -219,8 +219,8 @@ function ConnectorCard({ c, busy, run, waiting, onLogin, onOpen }) {
   };
   const text = html`<${Logo} color=${c.brandColor} name=${c.name} />
     <span class="plug-text">
-      <span class="plug-name">${c.name}${c.category ? html`<span class="plug-meta">${c.category}</span>` : null}</span>
-      <span class="plug-desc">${c.description}</span>
+      <span class="plug-name">${c.name}${c.category ? html`<span class="plug-meta">${connectorCategory(c)}</span>` : null}</span>
+      <span class="plug-desc">${connectorText(c)}</span>
     </span>`;
   return html`<div class="plug-card conn-card">
     ${server ? html`<button type="button" class="conn-main" onClick=${() => onOpen(server)} aria-label=${`${c.name}: ${t.mcpDetails}`}>${text}</button>`
