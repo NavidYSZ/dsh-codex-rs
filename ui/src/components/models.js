@@ -177,10 +177,17 @@ function PickerBody({ sel, onClose }) {
   </div>`;
 }
 
+/** Opens the composer's model picker (a notice's "Choose model"). */
+export function openModelPicker() {
+  store.set((s) => ({ modelPicker: (s.modelPicker ?? 0) + 1 }));
+}
+
 /** The composer's model chip: name and effort; ⌃⇧M opens the picker. */
 export function ModelChip({ sel }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
+  const asked = useStore(store, (s) => s.modelPicker);
+  useEffect(() => { if (asked) { anchor.current?.focus(); setOpen(true); } }, [asked]);
   useEffect(() => {
     const key = (e) => {
       if (e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey && e.code === 'KeyM') { e.preventDefault(); setOpen((v) => !v); }
@@ -192,9 +199,10 @@ export function ModelChip({ sel }) {
   // A model without levels ignores the effort; do not show one.
   const effort = sel.modelInfo && !sel.modelInfo.reasoningEfforts?.length ? null : sel.effort;
   return html`<span class="chip-wrap">
-    <button type="button" ref=${anchor} class="chip chip-model" aria-haspopup="listbox" aria-expanded=${open}
-      aria-label=${t.pickerLabel(name)} title="⌃⇧M" onClick=${() => setOpen((v) => !v)}>
+    <button type="button" ref=${anchor} class=${cx('chip chip-model', sel.missing && 'is-missing')} aria-haspopup="listbox" aria-expanded=${open}
+      aria-label=${sel.missing ? t.modelGone(name) : t.pickerLabel(name)} title=${sel.missing ? t.modelGone(name) : '⌃⇧M'} onClick=${() => setOpen((v) => !v)}>
       <span class="chip-label">${name}</span>
+      ${sel.missing ? html`<span class="chip-effort chip-missing">${t.modelUnavailable}</span>` : null}
       ${effort ? html`<span class="chip-effort">${t.efforts[effort] ?? effort}</span>` : null}
       <span class="chip-chev"><${IconChevronDown} size=${12} /></span>
     </button>

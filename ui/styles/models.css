@@ -166,3 +166,5 @@
 .mo-fixed-name { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
 .mo-fixed-price { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .mo-price-hint { grid-column: 1 / -1; }
+/* A model whose provider is gone. */
+.chip-model .chip-missing { color: var(--warn); }

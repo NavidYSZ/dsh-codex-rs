@@ -15,7 +15,7 @@ import { GoalBar, openGoalForm } from './goal.js';
 import { PlanBar } from './plan.js';
 import { ModeChip, useChatMode, useStagedMode } from './modes.js';
 import { ProjectMenu } from './folders.js';
-import { ModelChip } from './models.js';
+import { ModelChip, openModelPicker } from './models.js';
 import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 import { UsageBar } from './usage.js';
@@ -41,7 +41,9 @@ export function useSelection(tx) {
   let effort = pick.effort ?? (tx && tx.effort !== undefined ? tx.effort : undefined) ?? d.effort ?? modelInfo?.defaultReasoningEffort ?? null;
   if (modelInfo?.reasoningEfforts?.length && effort && !modelInfo.reasoningEfforts.includes(effort)) effort = modelInfo.defaultReasoningEffort ?? null;
   const sandbox = pick.sandbox ?? tx?.sandbox ?? d.sandbox ?? 'workspace-write';
-  return { model, effort, sandbox, modelInfo, models: info?.models ?? [] };
+  // A model this server no longer offers (its provider was removed, say).
+  const missing = !!model && !!info?.models?.length && !modelInfo;
+  return { model, effort: missing ? null : effort, sandbox, modelInfo, models: info?.models ?? [], missing };
 }
 
 function AccessChip({ sel, side = 'top', align = 'start', plain }) {
@@ -102,7 +104,7 @@ export function Composer({ hero, tx }) {
 
   const running = status === 'running' || status === 'waiting-approval';
   const noKey = info && !info.apiKeyConfigured;
-  const canSend = !noKey && !att.uploading && (text.trim() || att.items.length);
+  const canSend = !noKey && !sel.missing && !att.uploading && (text.trim() || att.items.length);
 
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, [activeId]);
   // "New automation" and similar hand over a draft once.
@@ -228,7 +230,7 @@ function ApprovalCard({ approval }) {
 /** Whether the chat's last turn ended with a failure card (it says what happened). */
 const failureShown = (tx) => !!tx?.turns[tx.turns.length - 1]?.items.some((x) => x.kind === 'notice' && x.code === 'error');
 
-function Banners({ tx }) {
+function Banners({ tx, sel }) {
   const info = useStore(store, (s) => s.info);
   const conn = useStore(store, (s) => s.conn);
   const statusError = useStore(store, (s) => s.statusError);
@@ -238,6 +240,7 @@ function Banners({ tx }) {
   else if (conn === 'offline') list.push({ key: 'off', tone: 'error', text: t.offline });
   else if (conn === 'retry') list.push({ key: 'retry', tone: 'muted', text: t.reconnecting });
   if (info && !info.apiKeyConfigured) list.push({ key: 'key', tone: 'info', text: t.noKey, action: [t.openSettings, () => openSettings('models')] });
+  if (sel?.missing) list.push({ key: 'model', tone: 'info', text: t.modelGone(sel.model), action: [t.pickModel, openModelPicker] });
   if (statusError && !failureShown(tx)) list.push({ key: 'status', tone: 'error', text: statusError });
   if (toast) list.push({ key: 'toast', tone: 'error', text: toast });
   if (!list.length) return null;
@@ -251,7 +254,7 @@ export function ComposerSeat({ hero, tx }) {
   const approval = useApproval(tx);
   return html`<div class=${cx('seat', hero && 'is-hero')}>
     <div class="column seat-column">
-      <${Banners} tx=${tx} />
+      <${Banners} tx=${tx} sel=${sel} />
       ${approval ? html`<${ApprovalCard} approval=${approval} />` : null}
       ${hero ? null : html`<${GoalBar} />`}
       ${hero ? null : html`<${PlanBar} tx=${tx} />`}
