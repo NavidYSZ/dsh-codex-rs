@@ -166,6 +166,18 @@ const EN = {
     spawn_teammate: 'Started teammate', send_message: 'Message to', list_agents: 'Looked at the team', wait_agent: 'Waited for the team',
     interrupt_agent: 'Interrupted', team_task_create: 'Created task', team_task_update: 'Updated task', team_task_list: 'Looked at tasks', team_task_get: 'Read task',
   },
+  // ---- package B ----
+  chooseFolder: 'Choose folder…', openProject: 'Open project…', pickTitle: 'Choose a project folder', pickPrompt: 'Open project',
+  recentProjects: 'Recent', suggestedRepos: 'Repositories', folderHome: 'Home', parentFolder: 'Enclosing folder',
+  newFolder: 'New folder', untitledFolder: 'Untitled folder', folderName: 'Folder name', createFolder: 'Create', editPath: 'Edit path',
+  showHidden: 'Show hidden folders', noSubfolders: 'No folders in here', gitRepo: 'Git repository',
+  foldersTruncated: (n) => `Too many folders to list; only the first ${n} are shown.`,
+  folderGone: 'Folder not found. Choose it again.', folderDenied: 'No access to this folder.',
+  notAFolder: 'That is a file, not a folder.', folderExists: 'A folder with that name already exists.',
+  folderInvalid: 'Use a plain name without “/”.', folderOutside: 'This server only lists folders in your home folder, next to your projects and in its configured roots.',
+  browseUnavailable: 'This server cannot list folders. Enter the path instead.', dropProject: 'Drop to add as a project',
+  instanceStatus: { ready: 'Connected', starting: 'Connecting…', error: 'Not reachable', idle: 'Not connected' },
+  connectingTo: (n) => `Connecting to ${n}…`, connectedSince: (time) => `Connected since ${time}`, unreadIn: (n) => `${n} unread`,
 };
 
 const DE = {
@@ -316,6 +328,18 @@ const DE = {
     spawn_teammate: 'Teammitglied gestartet', send_message: 'Nachricht an', list_agents: 'Team angesehen', wait_agent: 'Auf das Team gewartet',
     interrupt_agent: 'Unterbrochen', team_task_create: 'Aufgabe angelegt', team_task_update: 'Aufgabe geändert', team_task_list: 'Aufgaben angesehen', team_task_get: 'Aufgabe gelesen',
   },
+  // ---- package B ----
+  chooseFolder: 'Ordner wählen …', openProject: 'Projekt öffnen …', pickTitle: 'Projektordner wählen', pickPrompt: 'Projekt öffnen',
+  recentProjects: 'Zuletzt verwendet', suggestedRepos: 'Repositorys', folderHome: 'Benutzerordner', parentFolder: 'Übergeordneter Ordner',
+  newFolder: 'Neuer Ordner', untitledFolder: 'Neuer Ordner', folderName: 'Ordnername', createFolder: 'Anlegen', editPath: 'Pfad bearbeiten',
+  showHidden: 'Versteckte Ordner zeigen', noSubfolders: 'Hier gibt es keine Ordner', gitRepo: 'Git-Repository',
+  foldersTruncated: (n) => `Zu viele Ordner – nur die ersten ${n} werden angezeigt.`,
+  folderGone: 'Ordner nicht gefunden. Bitte erneut wählen.', folderDenied: 'Kein Zugriff auf diesen Ordner.',
+  notAFolder: 'Das ist eine Datei, kein Ordner.', folderExists: 'Ein Ordner mit diesem Namen existiert schon.',
+  folderInvalid: 'Bitte einen einfachen Namen ohne „/“ verwenden.', folderOutside: 'Der Server zeigt nur Ordner im Benutzerordner, neben deinen Projekten und in den eingestellten Wurzeln.',
+  browseUnavailable: 'Dieser Server kann keine Ordner auflisten. Gib den Pfad direkt ein.', dropProject: 'Loslassen, um als Projekt hinzuzufügen',
+  instanceStatus: { ready: 'Verbunden', starting: 'Verbindet …', error: 'Nicht erreichbar', idle: 'Nicht verbunden' },
+  connectingTo: (n) => `Verbinde mit ${n} …`, connectedSince: (time) => `Verbunden seit ${time}`, unreadIn: (n) => `${n} ungelesen`,
 };
 
 export const t = de ? DE : EN;

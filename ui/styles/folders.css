@@ -1,0 +1,106 @@
+/* Project folder picker (components/folders.js): the project menu, the
+   folder browser dialog and the Mac app's drop target. */
+
+.fp-recent { max-height: min(264px, 40vh); overflow-y: auto; }
+.fp-keys .menu-item:focus-visible { outline: none; background: var(--hover); }
+
+/* ---- folder browser ------------------------------------------------------ */
+
+.fp-scrim {
+  position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-start;
+  padding: min(12vh, 110px) 16px 16px; background: #0000001f; animation: fp-fade .14s ease-out;
+}
+@keyframes fp-fade { from { opacity: 0; } }
+.fp-dialog {
+  width: min(560px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column;
+  background: var(--menu); -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
+  border-radius: 14px; box-shadow: var(--menu-shadow); overflow: hidden; animation: menu-in .16s ease-out;
+}
+.fp-head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px 0 16px; }
+.fp-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.fp-head .spinner { width: 11px; height: 11px; }
+.fp-bar { display: flex; align-items: center; gap: 4px; padding: 4px 10px 8px; border-bottom: .5px solid var(--line-3); }
+.fp-bar .icon-btn:disabled { opacity: .35; cursor: default; background: none; }
+.fp-crumbs {
+  flex: 1; min-width: 0; height: 30px; display: flex; align-items: center; gap: 1px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.fp-crumbs::-webkit-scrollbar { display: none; }
+.fp-crumbs.is-loading { padding: 0 8px; color: var(--ink-caption); font-size: 13px; }
+.fp-crumb {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; max-width: 220px; padding: 0 7px;
+  border: 0; border-radius: 6px; background: none; color: var(--ink-3); font-size: 13px; cursor: pointer;
+}
+.fp-crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-crumb:hover { background: var(--hover); color: var(--ink); }
+.fp-crumb.is-current { color: var(--ink); font-weight: 500; }
+.fp-crumb-sep { flex: none; display: inline-flex; color: var(--ink-caption); }
+.fp-path { flex: 1; min-width: 0; display: flex; }
+.fp-roots { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 0; }
+.fp-root {
+  display: inline-flex; align-items: center; gap: 5px; height: 24px; max-width: 100%; padding: 0 9px;
+  border: 0; border-radius: 999px; background: var(--hover); color: var(--ink-2); font-size: 12px; cursor: pointer;
+}
+.fp-root span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-root.is-on { background: var(--ink); color: var(--ink-fg); }
+.fp-error { margin: 8px 12px 0; padding: 7px 12px; border-radius: 10px; background: var(--error-bg); color: var(--error); font-size: 12.5px; }
+
+/* Fixed height: navigating never resizes the dialog. */
+.fp-list { height: min(380px, 52dvh); overflow-y: auto; padding: 6px; outline: none; }
+.fp-section { padding-top: 10px; }
+.fp-section:first-child { padding-top: 4px; }
+.fp-row {
+  display: flex; align-items: center; gap: 9px; min-height: 30px; padding: 3px 4px 3px 10px; border-radius: 8px;
+  color: var(--ink); font-size: 13px; cursor: default; user-select: none;
+}
+.fp-row:hover { background: var(--hover); }
+.fp-row.is-sel { background: var(--active); }
+/* Like a Finder selection: accent while the list has focus. */
+.fp-list:focus-visible .fp-row.is-sel, .fp-list:focus .fp-row.is-sel { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.fp-row.is-hidden .fp-name { color: var(--ink-3); }
+.fp-icon { width: 16px; height: 16px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-3); }
+.fp-icon.is-git { color: var(--accent); }
+.fp-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-hint { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ink-caption); }
+.fp-enter {
+  width: 24px; height: 24px; flex: none; margin-left: auto; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 6px; background: none; color: var(--ink-caption); cursor: pointer;
+}
+.fp-enter:hover { background: var(--hover); color: var(--ink); }
+.fp-new { padding-bottom: 4px; }
+.fp-new-row { gap: 8px; }
+.fp-new-row:hover { background: none; }
+.fp-new-input { height: 28px; }
+.fp-row-error { padding: 2px 10px 4px 35px; font-size: 12px; color: var(--error); }
+.fp-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 28px 12px; color: var(--ink-3); font-size: 13px; }
+.fp-note { padding: 8px 10px; font-size: 12px; color: var(--ink-3); }
+.fp-foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px;
+  border-top: .5px solid var(--line-3);
+}
+.fp-tools, .fp-actions { display: inline-flex; align-items: center; gap: 12px; }
+.fp-actions { margin-left: auto; gap: 8px; }
+.fp-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; user-select: none; }
+.fp-toggle input { margin: 0; accent-color: var(--accent); }
+
+/* ---- Mac app: a folder dragged over the window ---------------------------- */
+
+.fp-drop {
+  position: fixed; inset: 8px; z-index: 80; display: flex; align-items: center; justify-content: center; pointer-events: none;
+  border: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent); border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent); animation: fp-fade .12s ease-out;
+}
+.fp-drop-card {
+  display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 14px;
+  background: var(--menu); box-shadow: var(--menu-shadow); color: var(--ink); font-size: 14px; font-weight: 500;
+}
+.fp-drop-card .icon { color: var(--accent); }
+
+@media (max-width: 480px) {
+  .fp-scrim { padding-top: 16px; }
+  .fp-hint { display: none; }
+  .fp-actions { width: 100%; justify-content: flex-end; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-scrim, .fp-dialog, .fp-drop { animation: none; }
+}

@@ -5,13 +5,14 @@ import { html, cx } from '../html.js';
 import { t, compact } from '../i18n.js';
 import { useStore } from '../store.js';
 import {
-  store, api, send, cancel, decide, setComposer, pickWorkspace, addWorkspace, openSettings, fail,
+  store, api, send, cancel, decide, setComposer, openSettings, fail,
 } from '../state.js';
 import {
   IconPlus, IconArrowUp, IconStop, IconChevronDown, IconFolder, IconShield, IconAlert, IconTerminal, IconPencil, IconTool,
 } from '../icons.js';
 import { Menu, MenuItem, ActionItem, Thumb } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
+import { ProjectMenu } from './folders.js';
 import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 
@@ -78,29 +79,8 @@ function AccessChip({ sel, side = 'top', align = 'start', plain }) {
   </span>`;
 }
 
-export function WorkspaceMenu({ open, onClose, anchor, side = 'top', align = 'start' }) {
-  const workspaces = useStore(store, (s) => s.workspaces);
-  const cwd = useStore(store, (s) => s.cwd);
-  const [path, setPath] = useState('');
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!path.trim()) return;
-    if (await addWorkspace(path.trim())) { setPath(''); onClose(); }
-  };
-  return html`<${Menu} open=${open} onClose=${onClose} anchor=${anchor} side=${side} align=${align} class="menu-wide menu-scroll">
-    <${MenuItem} checked=${!cwd} hint=${t.noProjectHint} onClick=${() => { pickWorkspace(''); onClose(); }}>${t.noProject}</${MenuItem}>
-    <div class="menu-sep" />
-    <div class="menu-head">${t.projects}</div>
-    ${workspaces.map((w) => html`<${MenuItem} key=${w.path} checked=${w.path === cwd} hint=${w.path}
-      onClick=${() => { pickWorkspace(w.path); onClose(); }}>${w.name || workspaceName(w.path)}</${MenuItem}>`)}
-    <div class="menu-sep" />
-    <form class="menu-form" onSubmit=${submit}>
-      <input class="input" value=${path} onInput=${(e) => setPath(e.currentTarget.value)} placeholder=${t.addWorkspaceHint}
-        aria-label=${t.addWorkspace} spellcheck="false" />
-      <button type="submit" class="btn btn-small">${t.add}</button>
-    </form>
-  </${Menu}>`;
-}
+// The project menu ("Choose folder…" and recent projects) lives in folders.js.
+export const WorkspaceMenu = ProjectMenu;
 
 /** Workspace and access, tucked behind the composer's top edge on the start page. */
 function HeroTray({ sel }) {
