@@ -43,6 +43,29 @@ final class InstanceManager {
 
     func status(_ id: String) -> ConnectionStatus { connections[id]?.status ?? .idle }
 
+    /// Unread chats the page of `id` reported (`setBadge`).
+    func unread(_ id: String) -> Int { badges[id] ?? 0 }
+
+    /// Starts the connection of `id` in the background (hover in the switcher).
+    func prewarm(_ id: String) {
+        guard connections[id] == nil, instance(id) != nil else { return }
+        appLog.note("\(id): prewarm")
+        connection(id)
+    }
+
+    /// Launch: the shown instance connects first, the others marked
+    /// "Beim Start verbinden" follow after `delay` seconds.
+    func prewarmAtLaunch(after delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                for instance in self.instances where instance.connectsAtLaunch && instance.id != self.currentID {
+                    self.prewarm(instance.id)
+                }
+            }
+        }
+    }
+
     func activate(_ id: String) {
         guard instance(id) != nil else { return }
         currentID = id
@@ -103,7 +126,8 @@ final class InstanceManager {
         onInstanceGone?(id)
         retire(old) { [weak self] in
             guard let self else { return }
-            if self.currentID == id { self.connection(id) }
+            // It was running (shown or warmed up), so it runs again.
+            self.connection(id)
             self.onChange?()
         }
     }
@@ -124,8 +148,11 @@ final class InstanceManager {
     }
 
     func setBadge(_ count: Int, for id: String) {
-        badges[id] = max(0, count)
+        let count = max(0, count)
+        guard badges[id] != count else { return }
+        badges[id] = count
         updateBadge()
+        onChange?()  // the switchers show unread chats per instance
     }
 
     private func updateBadge() {
@@ -134,14 +161,19 @@ final class InstanceManager {
         NSApp.dockTile.badgeLabel = total > 0 ? String(total) : nil
     }
 
-    /// Stops every connection (local servers get SIGTERM), then calls `done`.
+    /// App quit: stops every connection (local servers get SIGTERM; SSH
+    /// masters stay for a quick restart), then calls `done`.
     func stopAll(_ done: @escaping () -> Void) {
         let all = Array(connections.values)
         connections.removeAll()
         guard !all.isEmpty else { done(); return }
         var remaining = all.count
         for connection in all {
-            retire(connection) {
+            connection.onChange = nil
+            let key = ObjectIdentifier(connection)
+            stopping[key] = connection
+            connection.leave { [weak self] in
+                self?.stopping[key] = nil
                 remaining -= 1
                 if remaining == 0 { done() }
             }

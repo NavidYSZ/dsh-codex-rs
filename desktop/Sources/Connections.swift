@@ -14,12 +14,16 @@ class Connection {
     private(set) var message = ""
     /// The page to load (`http://127.0.0.1:<port>/?token=…`) once `status == .ready`.
     private(set) var pageURL: URL?
+    /// When the connection last became ready.
+    private(set) var connectedAt: Date?
     var onChange: (() -> Void)?
 
     init(instance: Instance) { self.instance = instance }
 
     func start() {}
     func stop(_ done: @escaping () -> Void) { done() }
+    /// Stops for an app quit; may leave something reusable behind for the next launch.
+    func leave(_ done: @escaping () -> Void) { stop(done) }
 
     /// Tears the connection down and builds it again.
     func reconnect() { stop { [weak self] in self?.start() } }
@@ -28,6 +32,7 @@ class Connection {
         if status != self.status || message != self.message {
             appLog.note("\(instance.id): \(status.rawValue) \(message)")
         }
+        if status == .ready && self.status != .ready { connectedAt = Date() }
         self.status = status
         self.message = message
         if status == .ready { pageURL = url } else if status == .idle { pageURL = nil }
@@ -216,26 +221,31 @@ final class LocalConnection: Connection {
     }
 }
 
-/// `ssh -N -L 127.0.0.1:<local>:127.0.0.1:<remote>` as a supervised child with
-/// its own ControlMaster socket; the token command reuses that connection.
+/// A detached SSH master (`ControlPersist=10m`) forwards `127.0.0.1:<local>` →
+/// `127.0.0.1:<remote>`. The token command runs over it, a lost forward is
+/// asked for again, and after a quit the next launch finds the master still
+/// there instead of a new SSH handshake. The token is reused until the server
+/// rejects it.
 @MainActor
 final class SSHConnection: Connection {
-    private var tunnel: Process?
-    private var tunnelLog: LogSink?
     private var token: String?
     private var stopped = true
     private var generation = 0
     private var retries = 0
     private var health: Timer?
+    private var ticks = 0
+    /// The master's process (from `ssh -O check`); watched every few seconds.
+    private var master: pid_t?
     /// The local port is forwarded by a tunnel we did not start (for example the .command starter).
     private var external = false
-    private var stopWaiters: [() -> Void] = []
 
     private var config: String { ((instance.sshConfig ?? "") as NSString).expandingTildeInPath }
     private var host: String { instance.host ?? "" }
     private var localPort: Int { instance.localPort ?? 0 }
     private var remotePort: Int { instance.remotePort ?? 0 }
     private var origin: URL { URL(string: "http://127.0.0.1:\(localPort)/")! }
+    private var forward: String { "127.0.0.1:\(localPort):127.0.0.1:\(remotePort)" }
+    private var logName: String { "ssh-\(slug).log" }
 
     private var socketPath: String {
         Paths.sockets.appendingPathComponent("\(String(slug.prefix(24))).sock").path
@@ -248,6 +258,15 @@ final class SSHConnection: Connection {
         return args + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
     }
 
+    /// pid of the master behind `socket`, or nil when there is none.
+    nonisolated private static func masterPID(_ base: [String], socket: String, host: String) -> pid_t? {
+        guard FileManager.default.fileExists(atPath: socket) else { return nil }
+        let check = Command.run("/usr/bin/ssh", base + ["-S", socket, "-O", "check", host], timeout: 5)
+        guard check.status == 0, let range = check.stderrText.range(of: #"pid=(\d+)"#, options: .regularExpression)
+        else { return nil }
+        return pid_t(check.stderrText[range].dropFirst(4))
+    }
+
     override func start() {
         stopped = false
         generation += 1
@@ -257,30 +276,38 @@ final class SSHConnection: Connection {
             update(.error, problem)
             return
         }
-        update(.starting, "Verbindung zu \(host) wird aufgebaut …")
-        let socket = socketPath, base = baseArguments, host = self.host, port = localPort
+        progress("Verbindung zu \(host) wird aufgebaut …")
+        let socket = socketPath, base = baseArguments, host = self.host, port = localPort, forward = self.forward
         DispatchQueue.global(qos: .userInitiated).async {
             Paths.ensurePrivateDirectory(Paths.sockets)
-            // A master left behind by a crashed app would keep the port busy.
-            if FileManager.default.fileExists(atPath: socket) {
-                let check = Command.run("/usr/bin/ssh", base + ["-S", socket, "-O", "check", host], timeout: 5)
-                if check.status == 0 {
-                    _ = Command.run("/usr/bin/ssh", base + ["-S", socket, "-O", "exit", host], timeout: 5)
-                    usleep(300_000)
-                }
+            // A master of the last run (or of the last reconnect) is reused.
+            var pid = SSHConnection.masterPID(base, socket: socket, host: host)
+            if pid == nil {
                 try? FileManager.default.removeItem(atPath: socket)
+            } else if !Net.isListening(port: port) {
+                let again = Command.run("/usr/bin/ssh", base + ["-S", socket, "-O", "forward", "-L", forward, host], timeout: 10)
+                if again.status != 0 {
+                    _ = Command.run("/usr/bin/ssh", base + ["-S", socket, "-O", "exit", host], timeout: 5)
+                    pid = nil
+                }
             }
-            let busy = Net.isListening(port: port)
+            let busy = pid == nil && Net.isListening(port: port)
             let probe = busy ? Net.probe(origin: URL(string: "http://127.0.0.1:\(port)/")!, token: nil) : nil
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard gen == self.generation, !self.stopped else { return }
+                    if let pid {
+                        self.master = pid
+                        self.external = false
+                        self.connected(generation: gen)
+                        return
+                    }
                     switch probe {
                     case nil:
-                        self.openTunnel(generation: gen)
+                        self.openMaster(generation: gen)
                     case .unauthorized?, .ok?:
                         self.external = true
-                        self.fetchToken(generation: gen)
+                        self.connected(generation: gen)
                     case .foreign(let code)?:
                         self.update(.error, "Port \(port) ist belegt (HTTP \(code)), aber nicht von dsh-codex.")
                     case .unreachable(let why)?:
@@ -289,6 +316,12 @@ final class SSHConnection: Connection {
                 }
             }
         }
+    }
+
+    /// A step of building the connection. An error stays on screen while the
+    /// automatic retries run, so the window does not flicker between the two.
+    private func progress(_ message: String) {
+        if status != .error { update(.starting, message) }
     }
 
     private func validate() -> String? {
@@ -303,52 +336,61 @@ final class SSHConnection: Connection {
         return nil
     }
 
-    private func openTunnel(generation gen: Int) {
+    /// Starts the master; ssh forks into the background once it is logged in
+    /// and the forward listens (`ExitOnForwardFailure`). Its messages go to
+    /// `ssh-<id>.log`.
+    private func openMaster(generation gen: Int) {
         external = false
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-        process.arguments = baseArguments + [
+        progress("SSH-Tunnel zu \(host) wird aufgebaut …")
+        let log = LogSink.prepare(logName)
+        let args = baseArguments + [
             "-o", "ExitOnForwardFailure=yes",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
-            "-o", "ControlMaster=yes", "-o", "ControlPath=\(socketPath)", "-o", "ControlPersist=no",
-            "-N", "-L", "127.0.0.1:\(localPort):127.0.0.1:\(remotePort)", host,
+            "-o", "ControlMaster=yes", "-o", "ControlPath=\(socketPath)", "-o", "ControlPersist=10m",
+            "-E", log.path, "-N", "-L", forward, host,
         ]
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        let errors = Pipe()
-        process.standardError = errors
-        let log = LogSink(name: "ssh-\(slug).log")
-        log.attach(errors)
-        tunnelLog = log
-        process.terminationHandler = { [weak self] proc in
-            let status = proc.terminationStatus
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.tunnelExited(proc, status: status) }
-            }
-        }
-        do {
-            try process.run()
-        } catch {
-            update(.error, "ssh konnte nicht gestartet werden: \(error.localizedDescription)")
-            return
-        }
-        tunnel = process
-        update(.starting, "SSH-Tunnel zu \(host) wird aufgebaut …")
-        let port = localPort
+        let socket = socketPath, base = baseArguments, host = self.host
         DispatchQueue.global(qos: .userInitiated).async {
-            let deadline = Date().addingTimeInterval(30)
-            var up = false
-            while Date() < deadline && process.isRunning {
-                if Net.isListening(port: port) { up = true; break }
-                usleep(200_000)
-            }
+            let status = Command.status("/usr/bin/ssh", args, timeout: 45)
+            let pid = status == 0 ? SSHConnection.masterPID(base, socket: socket, host: host) : nil
+            let why = pid == nil ? LogSink.lastLine(of: log) : nil
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    guard gen == self.generation, !self.stopped, process === self.tunnel else { return }
-                    if up {
+                    guard gen == self.generation, !self.stopped else {
+                        // Stopped meanwhile: do not leave the new master behind.
+                        if pid != nil { self.exitMaster(base, socket: socket, host: host) {} }
+                        return
+                    }
+                    guard let pid else {
+                        let detail = status == nil ? "Zeitüberschreitung" : why ?? "Exit \(status ?? -1)"
+                        self.failed("SSH-Verbindung zu \(host) fehlgeschlagen: \(detail)")
+                        return
+                    }
+                    self.master = pid
+                    self.connected(generation: gen)
+                }
+            }
+        }
+    }
+
+    /// The forward is up: a cached token that still works saves the token command.
+    private func connected(generation gen: Int) {
+        guard let token else {
+            fetchToken(generation: gen)
+            return
+        }
+        progress("Verbindung zu \(host) wird geprüft …")
+        let origin = self.origin
+        DispatchQueue.global(qos: .userInitiated).async {
+            let probe = Net.probe(origin: origin, token: token)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard gen == self.generation, !self.stopped else { return }
+                    if probe == .unauthorized {
+                        self.token = nil
                         self.fetchToken(generation: gen)
-                    } else if process.isRunning {
-                        process.terminate()  // tunnelExited retries
+                    } else {
+                        self.accept(token: token, probe: probe)
                     }
                 }
             }
@@ -356,9 +398,9 @@ final class SSHConnection: Connection {
     }
 
     private func fetchToken(generation gen: Int) {
-        update(.starting, "Zugangstoken wird geholt …")
+        progress("Zugangstoken wird geholt …")
         var args = baseArguments + ["-o", "ControlMaster=no"]
-        if !external && tunnel != nil {
+        if !external && master != nil {
             args += ["-o", "ControlPath=\(socketPath)"]
         }
         args += [host, instance.tokenCommand ?? ""]
@@ -406,20 +448,13 @@ final class SSHConnection: Connection {
         return parts.url!
     }
 
-    private func tunnelExited(_ proc: Process, status: Int32) {
-        guard proc === tunnel else { return }
-        tunnel = nil
-        if stopped {
-            let waiters = stopWaiters
-            stopWaiters = []
-            waiters.forEach { $0() }
-            return
-        }
+    /// The SSH connection could not be built: show why, try again with backoff (2, 4, 8 … 30 s).
+    private func failed(_ message: String) {
         health?.invalidate()
+        master = nil
         retries += 1
         let delay = min(30.0, pow(2.0, Double(min(retries, 5))))
-        let detail = tunnelLog?.lastLines.last.map { " (\($0))" } ?? ""
-        update(.starting, "SSH-Tunnel getrennt\(detail). Neuer Versuch in \(Int(delay)) s …")
+        update(.error, "\(message) Neuer Versuch in \(Int(delay)) s.")
         let gen = generation
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             MainActor.assumeIsolated {
@@ -429,17 +464,30 @@ final class SSHConnection: Connection {
         }
     }
 
-    /// Every 15 s: is the UI still there and the token still valid?
+    /// Checks every 5 s that the master still runs; every 15 s that the UI
+    /// answers and the token is still valid.
     private func scheduleHealth() {
         health?.invalidate()
+        ticks = 0
         let gen = generation
-        health = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        health = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkHealth(generation: gen) }
         }
     }
 
     private func checkHealth(generation gen: Int) {
         guard gen == generation, !stopped else { return }
+        if let pid = master, kill(pid, 0) != 0 {
+            // Network gone or the server rebooted: build the connection again.
+            appLog.note("\(instance.id): ssh master \(pid) ended")
+            health?.invalidate()
+            master = nil
+            update(.starting, "SSH-Verbindung getrennt, wird neu aufgebaut …")
+            start()
+            return
+        }
+        ticks += 1
+        guard ticks % 3 == 0 else { return }
         let token = self.token, origin = self.origin
         DispatchQueue.global(qos: .utility).async {
             let probe = Net.probe(origin: origin, token: token)
@@ -452,12 +500,13 @@ final class SSHConnection: Connection {
                     case .unauthorized:
                         // The remote service restarted with a new token.
                         self.health?.invalidate()
+                        self.token = nil
                         self.fetchToken(generation: gen)
                     case .unreachable, .foreign:
-                        if let tunnel = self.tunnel, tunnel.isRunning {
-                            if self.status == .error { tunnel.terminate() }  // stale forward: rebuild
+                        if self.master != nil {
+                            if self.status == .error { self.rebuild() }  // stale forward
                             else { self.update(.error, "Server hinter dem Tunnel antwortet nicht.") }
-                        } else if self.tunnel == nil {
+                        } else {
                             self.health?.invalidate()
                             self.start()
                         }
@@ -467,29 +516,52 @@ final class SSHConnection: Connection {
         }
     }
 
+    /// Drops the master and connects from scratch.
+    private func rebuild() {
+        health?.invalidate()
+        generation += 1
+        master = nil
+        exitMaster(baseArguments, socket: socketPath, host: host) { [weak self] in
+            guard let self, !self.stopped else { return }
+            self.start()
+        }
+    }
+
+    private func exitMaster(_ base: [String], socket: String, host: String, _ done: @escaping @MainActor () -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            if FileManager.default.fileExists(atPath: socket) {
+                _ = Command.run("/usr/bin/ssh", base + ["-S", socket, "-O", "exit", host], timeout: 5)
+            }
+            DispatchQueue.main.async { MainActor.assumeIsolated { done() } }
+        }
+    }
+
     override func reconnect() {
         retries = 0
         super.reconnect()
     }
 
-    override func stop(_ done: @escaping () -> Void) {
+    private func halt() {
         stopped = true
         generation += 1
         health?.invalidate()
         health = nil
-        token = nil
         update(.idle)
-        guard let tunnel, tunnel.isRunning else {
-            self.tunnel = nil
-            done()
-            return
-        }
-        stopWaiters.append(done)
-        tunnel.terminate()
-        let pid = tunnel.processIdentifier
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            if tunnel.isRunning { kill(pid, SIGKILL) }
-        }
+    }
+
+    /// Closes the master too: the next start builds a fresh connection.
+    override func stop(_ done: @escaping () -> Void) {
+        halt()
+        master = nil
+        exitMaster(baseArguments, socket: socketPath, host: host) { done() }
+    }
+
+    /// App quit: the master stays (`ControlPersist`, 10 min after its last
+    /// connection), so the next launch is connected at once.
+    override func leave(_ done: @escaping () -> Void) {
+        halt()
+        master = nil
+        done()
     }
 }
 
@@ -511,7 +583,8 @@ final class URLConnection: Connection {
             return
         }
         let token = Keychain.token(for: instance.id)
-        update(.starting, "\(base.host ?? raw) wird geprüft …")
+        // While retrying after an error, the error stays on screen.
+        if status != .error { update(.starting, "\(base.host ?? raw) wird geprüft …") }
         DispatchQueue.global(qos: .userInitiated).async {
             let probe = Net.probe(origin: origin, token: token)
             DispatchQueue.main.async {

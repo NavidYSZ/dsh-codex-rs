@@ -59,13 +59,25 @@ enum BridgeScript {
         },
         setBadge: function (n) { return call('setBadge', { count: Math.max(0, Math.floor(Number(n) || 0)) }); },
         revealInFinder: function (path) { return call('revealInFinder', { path: String(path) }); },
-        openInEditor: function (path) { return call('openInEditor', { path: String(path) }); }
+        openInEditor: function (path) { return call('openInEditor', { path: String(path) }); },
+        pickFolder: function (options) {
+          var o = options || {};
+          var text = function (v) { return v == null ? '' : String(v); };
+          return call('pickFolder', { title: text(o.title), prompt: text(o.prompt), defaultPath: text(o.defaultPath) });
+        },
+        ready: function () { return call('ready'); },
+        setAppearance: function (appearance) {
+          var a = appearance || {};
+          return call('setAppearance', { background: String(a.background || ''), theme: String(a.theme || '') });
+        },
+        prewarm: function (id) { return call('prewarm', { id: String(id) }); }
       };
       Object.defineProperty(window, 'dshxDesktop', { value: Object.freeze(api), enumerable: true });
 
       var fallbacks = {
         'new-chat': ['[data-dshx-command="new-chat"]', '.sb-nav .nav-item', '.topbar-new'],
-        'settings': ['[data-dshx-command="settings"]', '.sb-foot .nav-item']
+        'settings': ['[data-dshx-command="settings"]', '.sb-foot .nav-item'],
+        'open-project': ['[data-dshx-command="open-project"]']
       };
       function command(name) {
         var event = new CustomEvent('dshx-desktop-command', { detail: { command: name }, cancelable: true });
@@ -90,6 +102,8 @@ enum BridgeScript {
           if (message.notification) {
             window.dispatchEvent(new CustomEvent('dshx-desktop-notification', { detail: clone(message.notification) }));
           }
+          if (message.drag) window.dispatchEvent(new CustomEvent('dshx-desktop-drag', { detail: clone(message.drag) }));
+          if (message.drop) window.dispatchEvent(new CustomEvent('dshx-desktop-drop', { detail: clone(message.drop) }));
         }
       });
 
@@ -157,6 +171,19 @@ final class BridgeHandler: NSObject, WKScriptMessageHandlerWithReply {
             replyHandler(controller.revealInFinder(string("path"), from: instanceID), nil)
         case "openInEditor":
             replyHandler(controller.openInEditor(string("path"), from: instanceID), nil)
+        case "pickFolder":
+            controller.pickFolder(
+                title: string("title"), prompt: string("prompt"), defaultPath: string("defaultPath"),
+                from: instanceID) { path in replyHandler(path, nil) }
+        case "ready":
+            controller.pageReady(instanceID)
+            replyHandler(nil, nil)
+        case "setAppearance":
+            controller.setAppearance(background: string("background"), theme: string("theme"), from: instanceID)
+            replyHandler(nil, nil)
+        case "prewarm":
+            controller.manager.prewarm(string("id"))
+            replyHandler(nil, nil)
         case "drag":
             controller.beginWindowDrag()
             replyHandler(nil, nil)

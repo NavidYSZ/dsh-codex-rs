@@ -69,6 +69,30 @@ enum Command {
         }
         return CommandResult(status: process.terminationStatus, stdout: outBox.value, stderr: errBox.value, timedOut: timedOut)
     }
+
+    /// Runs a command that may leave a daemon behind (`ssh` with `ControlPersist`
+    /// forks into the background), so no pipes: output goes nowhere. Returns the
+    /// exit status, or nil after `timeout`.
+    static func status(_ executable: String, _ arguments: [String], timeout: TimeInterval) -> Int32? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let done = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in done.signal() }
+        do {
+            try process.run()
+        } catch {
+            return -1
+        }
+        if done.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            return nil
+        }
+        return process.terminationStatus
+    }
 }
 
 /// The user's login-shell environment. Apps started from the Finder only get
@@ -132,9 +156,18 @@ final class LogSink: @unchecked Sendable {
     private var tail: [String] = []
 
     init(name: String) {
+        let url = LogSink.prepare(name)
+        handle = try? FileHandle(forWritingTo: url)
+        _ = try? handle?.seekToEnd()
+        handle?.write(Data("--- \(ISO8601DateFormatter().string(from: Date())) ---\n".utf8))
+    }
+
+    deinit { try? handle?.close() }
+
+    /// The log file `name` (0600), with one previous generation kept once it passes 5 MB.
+    static func prepare(_ name: String) -> URL {
         Paths.ensurePrivateDirectory(Paths.logs)
         let url = Paths.logs.appendingPathComponent(name)
-        // Keep one previous generation once the file passes 5 MB.
         if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 5_000_000 {
             let old = url.appendingPathExtension("1")
             try? FileManager.default.removeItem(at: old)
@@ -143,12 +176,19 @@ final class LogSink: @unchecked Sendable {
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
         }
-        handle = try? FileHandle(forWritingTo: url)
-        _ = try? handle?.seekToEnd()
-        handle?.write(Data("--- \(ISO8601DateFormatter().string(from: Date())) ---\n".utf8))
+        return url
     }
 
-    deinit { try? handle?.close() }
+    /// The last non-empty line of a log file, masked.
+    static func lastLine(of url: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > 4096 ? size - 4096 : 0)
+        let text = String(decoding: handle.readDataToEndOfFile(), as: UTF8.self)
+        return text.split(whereSeparator: \.isNewline).last { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { Redact.secrets(String($0)) }
+    }
 
     func attach(_ pipe: Pipe) {
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in

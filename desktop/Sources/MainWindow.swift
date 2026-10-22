@@ -4,23 +4,58 @@ import WebKit
 /// Height of the web UI's header row; the traffic lights sit centred in it.
 let titlebarHeight: CGFloat = 48
 private let trafficLightsInset: CGFloat = 18
+/// Crossfade from one page (or snapshot) to the next.
+private let fadeDuration: TimeInterval = 0.15
+/// A snapshot stands in for a page that is not live yet, slightly dimmed.
+private let snapshotAlpha: CGFloat = 0.55
+/// Where the folder dialog opens next time (the parent of the last pick).
+private let lastFolderKey = "lastProjectParent"
 
-/// One instance's page. Pages stay alive in the background so switching is instant.
+/// One instance's page. Pages stay alive in the background (also before they
+/// were ever shown) so switching is instant.
 @MainActor
 final class Page {
     let instanceID: String
-    let webView: WKWebView
+    let webView: PageWebView
     let handler: BridgeHandler
     /// The URL (with token) last handed to the web view.
     var loadedURL: URL?
     var failures = 0
     var committed = false
     var loads = 0
+    /// Main-frame navigations so far; tells a late fallback timer it is stale.
+    var navigations = 0
+    /// The web UI rendered its first full frame since the last navigation
+    /// (`dshxDesktop.ready()`, or a fallback for UIs without it).
+    var ready = false
+    /// The UI reported its appearance, so it is new enough to call `ready()`.
+    var announcesReady = false
+    /// What the page looked like when the window last left it.
+    var snapshot: NSImage?
+    /// The background it paints and whether that is the dark theme (`setAppearance`).
+    var background: NSColor?
+    var dark: Bool?
 
-    init(instanceID: String, webView: WKWebView, handler: BridgeHandler) {
+    init(instanceID: String, webView: PageWebView, handler: BridgeHandler) {
         self.instanceID = instanceID
         self.webView = webView
         self.handler = handler
+    }
+
+    var live: Bool { ready && loadedURL != nil }
+}
+
+/// What the window shows: a live page, a page's last snapshot, or only the background.
+private enum Shown: Equatable {
+    case nothing
+    case page(String)
+    case snapshot(String)
+
+    var instanceID: String? {
+        switch self {
+        case .nothing: return nil
+        case .page(let id), .snapshot(let id): return id
+        }
     }
 }
 
@@ -28,9 +63,14 @@ final class Page {
 final class MainWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
     let manager: InstanceManager
     private var pages: [String: Page] = [:]
+    private let root = RootView()
     private let container = NSView()
+    private let snapshotView = SnapshotView()
+    private let progress = ProgressLine()
     private let status = StatusView()
     private let banner = BannerView()
+    private let errorBanner = ErrorBanner()
+    private var shown: Shown = .nothing
     private var lastMouseDown: NSEvent?
     private var mouseMonitor: Any?
     private var zoom: CGFloat = CGFloat(max(0.5, min(2.0, UserDefaults.standard.double(forKey: "pageZoom").nonZero ?? 1)))
@@ -57,33 +97,46 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         super.init(window: window)
         window.delegate = self
 
-        let background = NSVisualEffectView()
-        background.material = .windowBackground
-        background.blendingMode = .behindWindow
-        background.state = .followsWindowActiveState
-        window.contentView = background
-        for view in [container, status, banner] as [NSView] {
+        // The page's own background color, never the material grey.
+        window.contentView = root
+        container.wantsLayer = true
+        for view in [container, progress, banner, errorBanner, status] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
-            background.addSubview(view)
+            root.addSubview(view)
         }
+        snapshotView.frame = container.bounds
+        snapshotView.autoresizingMask = [.width, .height]
+        snapshotView.alphaValue = 0
+        container.addSubview(snapshotView)
         NSLayoutConstraint.activate([
-            container.leadingAnchor.constraint(equalTo: background.leadingAnchor),
-            container.trailingAnchor.constraint(equalTo: background.trailingAnchor),
-            container.topAnchor.constraint(equalTo: background.topAnchor),
-            container.bottomAnchor.constraint(equalTo: background.bottomAnchor),
-            status.leadingAnchor.constraint(equalTo: background.leadingAnchor),
-            status.trailingAnchor.constraint(equalTo: background.trailingAnchor),
-            status.topAnchor.constraint(equalTo: background.topAnchor),
-            status.bottomAnchor.constraint(equalTo: background.bottomAnchor),
-            banner.centerXAnchor.constraint(equalTo: background.centerXAnchor),
-            banner.topAnchor.constraint(equalTo: background.topAnchor, constant: titlebarHeight + 8),
-            banner.widthAnchor.constraint(lessThanOrEqualTo: background.widthAnchor, constant: -40),
+            container.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            container.topAnchor.constraint(equalTo: root.topAnchor),
+            container.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            progress.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            progress.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            progress.topAnchor.constraint(equalTo: root.topAnchor, constant: titlebarHeight),
+            progress.heightAnchor.constraint(equalToConstant: 2),
+            status.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            status.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            status.topAnchor.constraint(equalTo: root.topAnchor),
+            status.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            banner.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            banner.topAnchor.constraint(equalTo: root.topAnchor, constant: titlebarHeight + 10),
+            banner.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor, constant: -40),
+            errorBanner.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            errorBanner.topAnchor.constraint(equalTo: root.topAnchor, constant: titlebarHeight + 10),
+            errorBanner.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor, constant: -40),
         ])
         status.isHidden = true
         banner.isHidden = true
+        errorBanner.isHidden = true
         status.onRetry = { [weak self] in self.map { $0.manager.reconnect($0.manager.currentID) } }
         status.onEdit = { [weak self] in self?.editInstances() }
         status.onSwitch = { [weak self] id in _ = self?.show(id) }
+        errorBanner.onRetry = { [weak self] in self.map { $0.manager.reconnect($0.manager.currentID) } }
+        errorBanner.onEdit = { [weak self] in self?.editInstances() }
+        applyBackground()
 
         manager.onChange = { [weak self] in self?.refresh() }
         manager.onInstanceGone = { [weak self] id in self?.dropPage(id) }
@@ -131,21 +184,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
     func addInstance() { onAddInstance?() }
     func editInstances() { onEditInstances?() }
 
-    /// Brings pages, overlay and the bridge state in line with the manager.
+    /// Brings pages, what is shown and the bridge state in line with the manager.
     func refresh() {
         let currentID = manager.currentID
-        if pages[currentID] == nil, manager.instance(currentID) != nil { pages[currentID] = makePage(currentID) }
+        // A page for the shown instance and for every one that connects in the background.
+        for instance in manager.instances where pages[instance.id] == nil {
+            if instance.id == currentID || manager.existingConnection(instance.id) != nil {
+                pages[instance.id] = makePage(instance.id)
+            }
+        }
         for (id, page) in pages {
-            page.webView.isHidden = id != currentID
             if let connection = manager.existingConnection(id), connection.status == .ready,
                let url = connection.pageURL, url != page.loadedURL {
                 load(page, url)
             }
         }
-        if let page = pages[currentID], window?.firstResponder == nil || window?.firstResponder === window {
-            window?.makeFirstResponder(page.webView)
-        }
-        updateOverlay()
+        updateDisplay()
         if let name = manager.current?.name { window?.title = "dsh-codex – \(name)" }
         pushState()
         onInstancesChanged?()
@@ -170,20 +224,182 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         }
     }
 
-    private func updateOverlay() {
+    // MARK: - Switching without a grey screen
+
+    /// Shows the target instance once its page has rendered. Until then its
+    /// last snapshot stands in, or the page shown so far stays.
+    private func updateDisplay() {
         let id = manager.currentID
+        let next: Shown
+        if pages[id]?.live == true {
+            next = .page(id)
+        } else if pages[id]?.snapshot != nil {
+            next = .snapshot(id)
+        } else if stillThere(shown) {
+            next = shown
+        } else {
+            next = .nothing
+        }
+        transition(to: next)
+        updateChrome()
+    }
+
+    private func stillThere(_ state: Shown) -> Bool {
+        switch state {
+        case .nothing: return false
+        case .page(let id): return pages[id] != nil
+        case .snapshot(let id): return pages[id]?.snapshot != nil
+        }
+    }
+
+    private func view(for state: Shown) -> NSView? {
+        switch state {
+        case .nothing: return nil
+        case .page(let id): return pages[id]?.webView
+        case .snapshot: return snapshotView
+        }
+    }
+
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    private func transition(to next: Shown) {
+        guard next != shown else { return }
+        let previous = shown
+        shown = next
+        // A live page the window leaves is photographed for its next visit.
+        if case .page(let id) = previous, let page = pages[id], page.live { capture(page) }
+        let incoming = view(for: next)
+        let outgoing = view(for: previous)
+        let alpha = { if case .snapshot = next { return snapshotAlpha } else { return 1 } }() as CGFloat
+        if case .snapshot(let id) = next { snapshotView.image = pages[id]?.snapshot }
+        appLog.note("window shows \(String(describing: next))")
+        if let incoming {
+            container.addSubview(incoming, positioned: .above, relativeTo: nil)
+        }
+        if let incoming, incoming !== outgoing, !reduceMotion {
+            incoming.alphaValue = 0
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = fadeDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                incoming.animator().alphaValue = alpha
+            }, completionHandler: { [weak self] in
+                MainActor.assumeIsolated { self?.settle() }
+            })
+        } else {
+            incoming?.alphaValue = alpha
+            settle()
+        }
+        focusShown()
+    }
+
+    /// After a crossfade only the shown view is visible; the other pages keep
+    /// running underneath (invisible, but rendered, so they are ready at once).
+    private func settle() {
+        let visible = view(for: shown)
+        for page in pages.values where page.webView !== visible { page.webView.alphaValue = 0 }
+        if snapshotView !== visible {
+            snapshotView.alphaValue = 0
+            snapshotView.image = nil
+        }
+    }
+
+    /// Keys go to the shown page, never to an invisible one.
+    private func focusShown() {
+        guard let window else { return }
+        let responder = window.firstResponder as? NSView
+        if case .page(let id) = shown, let webView = pages[id]?.webView {
+            if responder?.isDescendant(of: webView) != true { window.makeFirstResponder(webView) }
+        } else if responder?.isDescendant(of: container) == true {
+            window.makeFirstResponder(nil)
+        }
+    }
+
+    private func capture(_ page: Page) {
+        page.webView.takeSnapshot(with: nil) { image, _ in
+            if let image { page.snapshot = image }
+        }
+    }
+
+    /// Progress line, pill, inline error and the full-window status.
+    private func updateChrome() {
+        let id = manager.currentID
+        let instance = manager.current
+        let name = instance?.name ?? ""
         let connection = manager.existingConnection(id)
-        let loaded = pages[id]?.loadedURL != nil
         let state = connection?.status ?? .idle
-        let full = state == .error || (state != .ready && !loaded)
+        let message = connection?.message ?? ""
+        let live = pages[id]?.live == true
+        let targetShown = shown.instanceID == id
+
+        // Never connected and failed: the whole window explains why.
+        let full = state == .error && !targetShown
         status.isHidden = !full
         if full {
             status.configure(
-                name: manager.current?.name ?? "", state: state, message: connection?.message ?? "",
+                name: name, state: state, message: message,
                 instances: manager.instances.map { ($0.id, $0.name) }, current: id)
         }
-        banner.isHidden = full || state != .starting
-        if !banner.isHidden { banner.text = connection?.message ?? "" }
+        errorBanner.isHidden = full || state != .error
+        if !errorBanner.isHidden { errorBanner.configure(title: "Keine Verbindung zu \(name)", detail: message) }
+
+        progress.running = !full && state != .error && !live
+        var pill: String?
+        if state == .error || full {
+            pill = nil
+        } else if !live && (shown == .snapshot(id) || shown == .nothing) {
+            if state == .ready { pill = "\(name) wird geladen …" }
+            else if instance?.kind == .local { pill = message.isEmpty ? "\(name) wird gestartet …" : message }
+            else { pill = "Verbinde mit \(name) …" }
+        } else if live && state == .starting {
+            pill = message
+        }
+        banner.isHidden = pill == nil
+        if let pill { banner.text = pill }
+        applyBackground()
+    }
+
+    // MARK: - Background and theme
+
+    private func storedBackground(_ id: String) -> NSColor? {
+        UserDefaults.standard.string(forKey: "background.\(id)").flatMap(NSColor.init(hex:))
+    }
+
+    /// The color of the page in view (or about to be), so nothing flashes grey.
+    private func applyBackground() {
+        let id = shown.instanceID ?? manager.currentID
+        let page = pages[id]
+        let color = page?.background ?? storedBackground(id) ?? NSColor(hex: NSApp.effectiveAppearance
+            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? "#181818" : "#ffffff")!
+        root.color = color
+        window?.backgroundColor = color
+        if let dark = page?.dark {
+            window?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        } else if let stored = UserDefaults.standard.string(forKey: "theme.\(id)") {
+            window?.appearance = NSAppearance(named: stored == "dark" ? .darkAqua : .aqua)
+        }
+    }
+
+    /// `dshxDesktop.setAppearance({background, theme})`.
+    func setAppearance(background: String, theme: String, from id: String) {
+        guard let page = pages[id] else { return }
+        page.announcesReady = true
+        if let color = NSColor(hex: background) {
+            page.background = color
+            UserDefaults.standard.set(background, forKey: "background.\(id)")
+        }
+        if theme == "dark" || theme == "light" {
+            page.dark = theme == "dark"
+            UserDefaults.standard.set(theme, forKey: "theme.\(id)")
+        }
+        applyBackground()
+    }
+
+    /// `dshxDesktop.ready()`: the page has rendered sidebar and chat.
+    func pageReady(_ id: String) {
+        guard let page = pages[id], !page.ready else { return }
+        page.ready = true
+        appLog.note("\(id): page ready")
+        updateDisplay()
     }
 
     private func dropPage(_ id: String) {
@@ -191,6 +407,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         page.webView.stopLoading()
         page.webView.configuration.userContentController.removeAllScriptMessageHandlers()
         page.webView.removeFromSuperview()
+        if shown.instanceID == id { shown = .nothing }
     }
 
     private func makePage(_ id: String) -> Page {
@@ -203,7 +420,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         content.addScriptMessageHandler(handler, contentWorld: .page, name: "dshx")
         content.addUserScript(userScript(for: id))
 
-        let webView = WKWebView(frame: container.bounds, configuration: config)
+        let webView = PageWebView(frame: container.bounds, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -211,7 +428,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         webView.pageZoom = zoom
         webView.allowsBackForwardNavigationGestures = false
         webView.setValue(false, forKey: "drawsBackground")
-        container.addSubview(webView)
+        // Rendered in the background from the start, shown once it is ready.
+        webView.alphaValue = 0
+        webView.acceptsFolders = { [weak self] in self?.manager.instance(id)?.kind == .local }
+        webView.onFolderDrag = { [weak self] active in self?.sendToPage(id, ["drag": ["active": active]]) }
+        webView.onFolders = { [weak self] urls in
+            NSApp.activate(ignoringOtherApps: true)
+            self?.sendToPage(id, ["drop": ["paths": urls.map(\.path)]])
+        }
+        container.addSubview(webView, positioned: .below, relativeTo: nil)
         return Page(instanceID: id, webView: webView, handler: handler)
     }
 
@@ -227,13 +452,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
             "version": appVersion,
             "current": id,
             "instances": manager.instances.map { instance -> [String: Any] in
-                [
+                var row: [String: Any] = [
                     "id": instance.id, "name": instance.name, "kind": instance.kind.rawValue,
                     "active": instance.id == manager.currentID,
                     "status": manager.status(instance.id).rawValue,
+                    "unread": manager.unread(instance.id),
                 ]
+                if let at = manager.existingConnection(instance.id)?.connectedAt {
+                    row["connectedAt"] = Int(at.timeIntervalSince1970 * 1000)
+                }
+                return row
             },
-            "capabilities": ["revealInFinder": local, "openInEditor": local],
+            "capabilities": ["revealInFinder": local, "openInEditor": local, "pickFolder": local],
             "titlebar": [
                 "height": titlebarHeight,
                 "trafficLightsWidth": trafficLightsWidth,
@@ -268,7 +498,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
             "window.__dshxDesktopReceive && window.__dshxDesktopReceive(\(json(message)))", completionHandler: nil)
     }
 
-    /// Menu commands for the shown page (`new-chat`, `settings`).
+    private func sendToPage(_ id: String, _ message: [String: Any]) {
+        if let page = pages[id] { send(message, to: page) }
+    }
+
+    /// Menu commands for the shown page (`new-chat`, `settings`, `open-project`).
     func sendCommand(_ name: String) {
         guard let page = pages[manager.currentID] else { return }
         showWindow(nil)
@@ -314,6 +548,36 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
     func openInEditor(_ path: String, from id: String) -> Bool {
         guard manager.instance(id)?.kind == .local, let url = Editor.localFile(path) else { return false }
         return Editor.open(url, preferred: manager.file.editor)
+    }
+
+    /// `dshxDesktop.pickFolder`: the folder dialog as a sheet (local instance
+    /// only); the path, or nil when cancelled.
+    func pickFolder(title: String, prompt: String, defaultPath: String, from id: String,
+                    reply: @escaping @MainActor (String?) -> Void) {
+        guard manager.instance(id)?.kind == .local, let window, window.attachedSheet == nil else {
+            reply(nil)
+            return
+        }
+        showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = prompt.isEmpty ? "Projekt öffnen" : prompt
+        if !title.isEmpty { panel.message = title }
+        let start = Editor.localFile(defaultPath)
+            ?? UserDefaults.standard.string(forKey: lastFolderKey).flatMap(Editor.localFile)
+        panel.directoryURL = start ?? FileManager.default.homeDirectoryForCurrentUser
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else {
+                reply(nil)
+                return
+            }
+            UserDefaults.standard.set(url.deletingLastPathComponent().path, forKey: lastFolderKey)
+            reply(url.path)
+        }
     }
 
     // MARK: - Page actions (menus)
@@ -425,6 +689,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         decisionHandler(.cancel)
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        // The shown page is about to be replaced (new token, reload): keep its picture.
+        guard let page = page(of: webView), shown == .page(page.instanceID), page.live else { return }
+        capture(page)
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         loadFailed(webView, error)
     }
@@ -440,10 +710,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         webView.evaluateJavaScript(probe) { result, _ in
             appLog.note("\(page.instanceID): page loaded, bridge \(result as? String ?? "missing")")
         }
+        guard !page.ready else { return }
+        // A UI without `ready()` (an older server) is shown shortly after loading.
+        let navigation = page.navigations
+        let wait: TimeInterval = page.announcesReady ? 6 : 0.8
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, page.navigations == navigation, !page.ready, self.pages[page.instanceID] === page else { return }
+                appLog.note("\(page.instanceID): no ready() after \(wait) s, showing the page")
+                page.ready = true
+                self.updateDisplay()
+            }
+        }
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        page(of: webView)?.committed = true
+        guard let page = page(of: webView) else { return }
+        page.committed = true
+        page.navigations += 1
+        page.ready = false
+        page.announcesReady = false
+        updateDisplay()
     }
 
     private func loadFailed(_ webView: WKWebView, _ error: Error) {
@@ -454,6 +741,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
         // notices that; meanwhile retry the load a few times.
         page.loadedURL = nil
         page.failures += 1
+        updateDisplay()
         guard page.failures <= 5 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2 * Double(page.failures)) {
             MainActor.assumeIsolated { self.refresh() }
@@ -463,6 +751,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard let page = page(of: webView) else { return }
         appLog.note("\(page.instanceID): web content process ended, reloading")
+        page.ready = false
+        updateDisplay()
         if let url = page.loadedURL { load(page, url) }
     }
 
@@ -542,7 +832,188 @@ private extension Double {
     var nonZero: Double? { self == 0 ? nil : self }
 }
 
-/// Shown instead of the page while an instance connects or after it failed.
+extension NSColor {
+    /// `#rrggbb` (sRGB), or nil.
+    convenience init?(hex: String) {
+        let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        self.init(srgbRed: CGFloat((value >> 16) & 0xff) / 255, green: CGFloat((value >> 8) & 0xff) / 255,
+                  blue: CGFloat(value & 0xff) / 255, alpha: 1)
+    }
+}
+
+// MARK: - Views
+
+/// The window's content view: the page's background color behind everything.
+@MainActor
+final class RootView: NSView {
+    var color: NSColor = .white {
+        didSet { needsDisplay = true }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() { layer?.backgroundColor = color.cgColor }
+}
+
+/// An instance page. Invisible pages take no clicks, and folders dropped on
+/// the local instance's page become projects (WKWebView would hand the page
+/// file objects without their paths).
+@MainActor
+final class PageWebView: WKWebView {
+    var acceptsFolders: () -> Bool = { false }
+    var onFolderDrag: ((Bool) -> Void)?
+    var onFolders: (([URL]) -> Void)?
+    private var folderDrag = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        alphaValue < 0.01 ? nil : super.hitTest(point)
+    }
+
+    /// The dragged items when all of them are folders (not packages such as apps).
+    private func folders(_ info: NSDraggingInfo) -> [URL]? {
+        guard acceptsFolders() else { return nil }
+        let urls = info.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        let allFolders = urls.allSatisfy { url in
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+            return values?.isDirectory == true && values?.isPackage != true
+        }
+        return !urls.isEmpty && allFolders ? urls : nil
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        folderDrag = folders(sender) != nil
+        guard folderDrag else { return super.draggingEntered(sender) }
+        onFolderDrag?(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        folderDrag ? .copy : super.draggingUpdated(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        guard folderDrag else { return super.draggingExited(sender) }
+        folderDrag = false
+        onFolderDrag?(false)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        folderDrag ? true : super.prepareForDragOperation(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard folderDrag else { return super.performDragOperation(sender) }
+        onFolderDrag?(false)
+        guard let urls = folders(sender) else { return false }
+        onFolders?(urls)
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        // WebKit never saw a folder drag, so it does not hear its end either.
+        if folderDrag { folderDrag = false } else { super.concludeDragOperation(sender) }
+    }
+}
+
+/// A page's last picture while it reconnects or reloads; takes the clicks
+/// meant for it so nothing reaches the page underneath.
+@MainActor
+final class SnapshotView: NSImageView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        imageScaling = .scaleNone
+        imageAlignment = .alignTopLeft
+        isEditable = false
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        alphaValue < 0.01 || image == nil ? nil : (frame.contains(point) ? self : nil)
+    }
+
+    override func mouseDown(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
+}
+
+/// 2 pt line under the title bar while the shown instance connects or loads.
+@MainActor
+final class ProgressLine: NSView {
+    private let bar = CALayer()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        bar.cornerRadius = 1
+        layer?.addSublayer(bar)
+        isHidden = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    var running = false {
+        didSet {
+            guard running != oldValue else { return }
+            isHidden = !running
+            restart()
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        restart()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restart()
+    }
+
+    private func restart() {
+        bar.removeAllAnimations()
+        guard running, bounds.width > 0 else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            bar.backgroundColor = NSColor.controlAccentColor.cgColor
+        }
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            bar.frame = bounds
+            bar.opacity = 0.5
+            CATransaction.commit()
+            return
+        }
+        let width = max(80, bounds.width * 0.28)
+        bar.opacity = 1
+        bar.frame = CGRect(x: -width, y: 0, width: width, height: bounds.height)
+        CATransaction.commit()
+        let slide = CABasicAnimation(keyPath: "position.x")
+        slide.fromValue = -width / 2
+        slide.toValue = bounds.width + width / 2
+        slide.duration = 1.2
+        slide.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        slide.repeatCount = .infinity
+        bar.add(slide, forKey: "slide")
+    }
+}
+
+/// Shown instead of the page when an instance never connected and failed.
 @MainActor
 final class StatusView: NSVisualEffectView {
     var onRetry: (() -> Void)?
@@ -628,7 +1099,7 @@ final class StatusView: NSVisualEffectView {
     override func mouseDown(with event: NSEvent) {}
 }
 
-/// Small notice while a loaded page reconnects.
+/// Small pill: "Verbinde mit VPS 2 …" over a snapshot, or a shown page reconnecting.
 @MainActor
 final class BannerView: NSVisualEffectView {
     private let label = NSTextField(labelWithString: "")
@@ -666,4 +1137,86 @@ final class BannerView: NSVisualEffectView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    // Only a notice: clicks go to the page below.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// Connection error over a snapshot or the instance's own page: the reason,
+/// "Erneut versuchen" and "Instanzen bearbeiten …".
+@MainActor
+final class ErrorBanner: NSVisualEffectView {
+    var onRetry: (() -> Void)?
+    var onEdit: (() -> Void)?
+
+    private let title = NSTextField(labelWithString: "")
+    private let detail = NSTextField(wrappingLabelWithString: "")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        material = .popover
+        blendingMode = .withinWindow
+        state = .active
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 0.5
+        layer?.borderColor = NSColor.separatorColor.cgColor
+
+        let icon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) ?? NSImage())
+        icon.symbolConfiguration = .init(pointSize: 15, weight: .regular)
+        icon.contentTintColor = .systemOrange
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.lineBreakMode = .byTruncatingTail
+        detail.font = .systemFont(ofSize: 12)
+        detail.textColor = .secondaryLabelColor
+        detail.maximumNumberOfLines = 3
+        detail.preferredMaxLayoutWidth = 360
+        detail.isSelectable = true
+        let retry = NSButton(title: "Erneut versuchen", target: self, action: #selector(retryClicked))
+        let edit = NSButton(title: "Instanzen bearbeiten …", target: self, action: #selector(editClicked))
+        for button in [retry, edit] {
+            button.bezelStyle = .rounded
+            button.controlSize = .small
+            button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
+        let text = NSStackView(views: [title, detail])
+        text.orientation = .vertical
+        text.alignment = .leading
+        text.spacing = 2
+        let row = NSStackView(views: [icon, text, edit, retry])
+        row.alignment = .centerY
+        row.spacing = 10
+        row.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 12)
+        row.setCustomSpacing(14, after: text)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+            detail.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(title: String, detail: String) {
+        self.title.stringValue = title
+        self.detail.stringValue = detail.isEmpty ? "Unbekannter Fehler." : detail
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.borderColor = NSColor.separatorColor.cgColor
+        }
+    }
+
+    @objc private func retryClicked() { onRetry?() }
+    @objc private func editClicked() { onEdit?() }
+
+    override func mouseDown(with event: NSEvent) {}
 }
