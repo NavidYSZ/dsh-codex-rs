@@ -44,8 +44,8 @@ export function useLayer(ref, onClose, initial) {
     const key = (e) => {
       if (!top()) return;
       if (e.key === 'Escape') {
-        // A menu or the folder browser above us closes first.
-        if (document.querySelector('.menu, .fp-scrim')) return;
+        // A menu, the folder browser or a question above us closes first.
+        if (document.querySelector('.menu, .fp-scrim, .md-scrim:not(.xd-scrim)')) return;
         e.preventDefault();
         e.stopPropagation();
         close.current();

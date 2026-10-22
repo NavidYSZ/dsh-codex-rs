@@ -468,6 +468,12 @@ export function AddServerDialog({ existing, connectors, onClose, onAdded, onLogi
     if (done.length) { toast(t.mcpAddedMany(done.length)); onAdded(done[0]); }
   };
   const titles = { choose: t.addServer, catalog: t.mcpFromCatalog, custom: t.mcpCustom, json: t.mcpPasteJson };
+  // A filled-in form is not thrown away by a stray Esc or click beside it.
+  const filled = step === 'custom' && JSON.stringify(form) !== JSON.stringify(emptyForm());
+  const close = async () => {
+    if (filled && !(await ask({ title: t.mcpDiscardTitle, text: t.mcpDiscardText, action: t.mcpDiscard }))) return;
+    onClose();
+  };
   const warn = untested && !probe.okFor(body);
   const back = step === 'choose' ? null : () => { setStep('choose'); setUntested(false); };
   const footer = step === 'custom' ? html`
@@ -476,7 +482,7 @@ export function AddServerDialog({ existing, connectors, onClose, onAdded, onLogi
     <button type="button" class="btn btn-small btn-primary" disabled=${saving} onClick=${save}>
       ${saving ? html`<span class="spinner" />` : null}${warn ? t.mcpAddAnyway : t.add}</button>` : null;
   return html`<${Dialog} title=${titles[step]} description=${step === 'choose' ? t.mcpAddLead : null} wide=${step !== 'choose'}
-    onClose=${onClose} back=${back} footer=${footer} step=${step}>
+    onClose=${close} back=${back} footer=${footer} step=${step}>
     ${step === 'choose' ? html`<${Choose} onPick=${(k) => { if (k === 'custom') { setForm(emptyForm()); probe.reset(); } setStep(k); }} />`
     : step === 'catalog' ? html`<${Catalog} connectors=${connectors} onAdded=${onAdded} onLogin=${onLogin} />`
       : step === 'json' ? html`<${PasteJson} existing=${existing} onEdit=${edit} onAddMany=${addMany} />`

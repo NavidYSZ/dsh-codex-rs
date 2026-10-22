@@ -119,6 +119,15 @@ const IconEye = ({ off }) => html`<svg width="14" height="14" viewBox="0 0 16 16
   <circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" stroke-width="1.3"/>
   ${off ? html`<path d="m2.75 2.75 10.5 10.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>` : null}</svg>`;
 
+/** After a row was added to the table around `button`: focus that row's first field. */
+function focusNewRow(button, rowSelector) {
+  const table = button.closest('.mf-table');
+  setTimeout(() => {
+    const rows = table?.querySelectorAll(rowSelector);
+    rows?.[rows.length - 1]?.querySelector('input:not([disabled])')?.focus();
+  }, 0);
+}
+
 /** Key/value table with masked values; stored values show as dots until replaced. */
 function KeyValues({ rows, onChange, keyLabel, keyPlaceholder, addLabel, readOnly }) {
   const [shown, setShown] = useState({});
@@ -137,7 +146,7 @@ function KeyValues({ rows, onChange, keyLabel, keyPlaceholder, addLabel, readOnl
       ${readOnly ? null : html`<button type="button" class="icon-btn" aria-label=${t.mcpRemoveRow(r.key || keyLabel)} title=${t.remove}
         onClick=${() => onChange(rows.filter((_, j) => j !== i))}><${IconX} size=${13} /></button>`}
     </div>`)}
-    ${readOnly ? null : html`<button type="button" class="link-btn mf-add" onClick=${() => onChange([...rows, { key: '', value: '', stored: false }])}>
+    ${readOnly ? null : html`<button type="button" class="link-btn mf-add" onClick=${(e) => { focusNewRow(e.currentTarget, '.mf-kv'); onChange([...rows, { key: '', value: '', stored: false }]); }}>
       <${IconPlus} size=${13} />${addLabel}</button>`}
   </div>`;
 }
@@ -150,12 +159,17 @@ function Args({ args, onChange, readOnly }) {
       <input class="input mono" value=${a} spellcheck=${false} autocomplete="off" disabled=${readOnly} aria-label=${t.mcpArgN(i + 1)}
         onInput=${(e) => onChange(args.map((x, j) => (j === i ? e.currentTarget.value : x)))}
         onKeyDown=${(e) => {
-    if (e.key === 'Enter') { e.preventDefault(); onChange([...args.slice(0, i + 1), '', ...args.slice(i + 1)]); requestAnimationFrame(() => e.currentTarget.closest('.mf-table')?.querySelectorAll('.mf-arg input')[i + 1]?.focus()); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const table = e.currentTarget.closest('.mf-table');
+      onChange([...args.slice(0, i + 1), '', ...args.slice(i + 1)]);
+      setTimeout(() => table?.querySelectorAll('.mf-arg input')[i + 1]?.focus(), 0);
+    }
   }} />
       ${readOnly ? null : html`<button type="button" class="icon-btn" aria-label=${t.mcpRemoveRow(a || t.mcpArgN(i + 1))} title=${t.remove}
         onClick=${() => onChange(args.filter((_, j) => j !== i))}><${IconX} size=${13} /></button>`}
     </div>`)}
-    ${readOnly ? null : html`<button type="button" class="link-btn mf-add" onClick=${() => onChange([...args, ''])}><${IconPlus} size=${13} />${t.mcpAddArg}</button>`}
+    ${readOnly ? null : html`<button type="button" class="link-btn mf-add" onClick=${(e) => { focusNewRow(e.currentTarget, '.mf-arg'); onChange([...args, '']); }}><${IconPlus} size=${13} />${t.mcpAddArg}</button>`}
   </div>`;
 }
 
