@@ -90,12 +90,15 @@ function HeroTray({ sel }) {
   </div>`;
 }
 
+/** Unsent text per chat ('' = the start page), while the page lives. */
+const drafts = new Map();
+
 export function Composer({ hero, tx }) {
   const status = useStore(store, (s) => s.status);
   const info = useStore(store, (s) => s.info);
   const activeId = useStore(store, (s) => s.activeId);
   const sel = useSelection(tx);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => drafts.get(store.get().activeId ?? '') ?? '');
   const [drag, setDrag] = useState(false);
   const area = useRef(null);
   const file = useRef(null);
@@ -106,6 +109,19 @@ export function Composer({ hero, tx }) {
   const noKey = info && !info.apiKeyConfigured;
   const canSend = !noKey && !sel.missing && !att.uploading && (text.trim() || att.items.length);
 
+  // Each chat keeps its own unsent text.
+  const textNow = useRef(text);
+  textNow.current = text;
+  const draftKey = useRef(activeId ?? '');
+  useEffect(() => {
+    const key = activeId ?? '';
+    if (draftKey.current === key) return;
+    if (textNow.current.trim()) drafts.set(draftKey.current, textNow.current);
+    else drafts.delete(draftKey.current);
+    draftKey.current = key;
+    setText(drafts.get(key) ?? '');
+  }, [activeId]);
+  useEffect(() => () => { if (textNow.current.trim()) drafts.set(draftKey.current, textNow.current); }, []);
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, [activeId]);
   // "New automation" and similar hand over a draft once.
   const draft = useStore(store, (s) => s.draft);
