@@ -267,6 +267,10 @@ const EN = {
   },
   perfUsage: 'Performance & usage', perfUsageHint: 'How much performance and usage information the chat shows',
   perfModes: { compact: 'Compact', detailed: 'Detailed' },
+  perfModeHints: {
+    compact: 'Context and cost under the composer',
+    detailed: 'Context, cache and cost under the composer, with speed and timings in the cost details',
+  },
   // usage bar (dsh context.*, stats.dialog.*, message.turnUsage.*)
   ctxAria: (p) => `${p} of context used`, ctxUsed: (p, w) => `${p} of ${w} tokens used`,
   ctxSystem: 'System prompt', ctxTools: 'Tool definitions', ctxMessages: 'Messages',
@@ -827,6 +831,10 @@ const DE = {
   },
   perfUsage: 'Leistung & Verbrauch', perfUsageHint: 'Wie viele Angaben zu Kontext, Cache, Kosten und Tempo der Chat zeigt',
   perfModes: { compact: 'Kompakt', detailed: 'Detailliert' },
+  perfModeHints: {
+    compact: 'Kontext und Kosten unter dem Composer',
+    detailed: 'Kontext, Cache und Kosten unter dem Composer, mit Tempo und Zeiten in den Kostendetails',
+  },
   ctxAria: (p) => `${p} des Kontexts belegt`, ctxUsed: (p, w) => `${p} von ${w} Tokens belegt`,
   ctxSystem: 'System-Prompt', ctxTools: 'Tool-Definitionen', ctxMessages: 'Nachrichten',
   ctxEstimate: 'Aufteilung geschätzt aus der letzten Anfrage, etwa vier Zeichen je Token.',

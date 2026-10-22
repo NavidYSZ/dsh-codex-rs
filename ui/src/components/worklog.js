@@ -217,7 +217,7 @@ export function AppearanceCard({ titled = true }) {
       <${Segmented} label=${t.workDetails} value=${mode} onChange=${(v) => setUiPref({ workDetails: v })}
         options=${VIEW_MODES.map((m) => [m, t.workModes[m]])} />
     </${Field}>
-    <${Field} label=${t.perfUsage} hint=${t.perfUsageHint}>
+    <${Field} label=${t.perfUsage} hint=${t.perfModeHints[perf] ?? t.perfUsageHint}>
       <${Segmented} label=${t.perfUsage} value=${perf} onChange=${(v) => setUiPref({ performanceUsage: v })}
         options=${[['compact', t.perfModes.compact], ['detailed', t.perfModes.detailed]]} />
     </${Field}>
