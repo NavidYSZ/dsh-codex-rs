@@ -373,10 +373,16 @@ Without extensions every route below answers 404. Errors are `{error}` with 400,
 | POST | `/api/marketplaces` | `{source, ref?}` (git URL, `owner/repo`, local path; `#ref` suffix allowed) → `Marketplace` |
 | POST | `/api/marketplaces/:name/update` | → `Marketplace` |
 | DELETE | `/api/marketplaces/:name` | → 204 (installed plugins stay) |
-| GET | `/api/skills?cwd=` | → `[{name, description, whenToUse, source, plugin, path, active, modelInvocable, userInvocable}]` |
+| GET | `/api/skills?cwd=` | → `[{name, title, description, whenToUse, source, plugin, logoUrl?, path, active, modelInvocable, userInvocable}]`; skill files that are no valid skill follow as `{name (folder), title, source, plugin, path, active:false, invalid:true, error, modelInvocable:false, userInvocable:false}` |
+| GET | `/api/skills/:name?cwd=&path=` | → the listed row plus `{content (SKILL.md, max 512 KiB), contentTruncated, frontmatter, body, dir, files:[{path, size}\|{path, dir:true}], filesTruncated}` (folder bundles: up to 300 entries, 4 levels, without `.git`/`node_modules`); `path` picks one of several skills of that name; unlisted → 404 |
+| POST | `/api/skills` | `{name, scope:"personal"\|"project", cwd?, description?}` → the new skill's detail; creates `<agents home>/skills/<name>/SKILL.md` (`$DSH_AGENTS_HOME` or `~/.agents`) or `<project>/.agents/skills/<name>/SKILL.md` (project = nearest `.git` ancestor of `cwd`); a taken name or folder → 400 |
 | GET | `/api/mcp/servers` | → `[McpServer]` (config servers, then plugin servers) |
-| POST | `/api/mcp/servers` | `{name?, connector?, config?}` (`config` = a `[mcp_servers.x]` table as JSON; `connector` fills the URL from the catalog, its id is the default name) → `McpServer` |
-| DELETE | `/api/mcp/servers/:name` | → 204 (config servers only; its tokens are revoked and deleted) |
+| POST | `/api/mcp/servers` | `{name?, connector?, config?, secrets?}` (`config` = a `[mcp_servers.x]` table as JSON; `connector` fills the URL from the catalog, its id is the default name; `secrets` below) → `McpServer` |
+| GET | `/api/mcp/servers/:name` | → `McpServer` whose `tools[]` also carry `inputSchema` |
+| PUT | `/api/mcp/servers/:name` | `{config, secrets?}` → `McpServer` (config servers only). Replaces the form's keys (`transport, command, args, cwd, env_vars, url, bearer_token_env_var`, `oauth.enabled` merged into `oauth`); timeouts, reconnect, an OAuth client and any other keys stay |
+| GET | `/api/mcp/servers/:name/log` | → `{name, lines:[{time, kind:"stderr"\|"error"\|"info", text}]}`: the last 200 lines (stdio stderr, failed HTTP requests, connection events), kept across restarts |
+| POST | `/api/mcp/test` | `{name?, config, secrets?, timeoutMs?}` → `{ok, tools:[{name, description}], error?, needsLogin, stderr:[lines], elapsedMs}`: handshake and `tools/list` in a throwaway client without retries (default 30 s, max 120 s); stdio servers are stopped with their process group afterwards. Masked (`null`) values of the server `name` come from its stored secrets |
+| DELETE | `/api/mcp/servers/:name` | → 204 (config servers only; its tokens are revoked and deleted, its secrets removed) |
 | POST | `/api/mcp/servers/:name/enable` \| `/disable` \| `/restart` | → `McpServer` |
 | POST | `/api/mcp/servers/:name/login` | → `{server, authorizationUrl, redirectUri}`; open the URL in a browser |
 | POST | `/api/mcp/servers/:name/logout` | → `McpServer` |
@@ -394,9 +400,19 @@ Without extensions every route below answers 404. Errors are `{error}` with 400,
   displayName, description, owner, format:"codex"|"claude", plugins:[{id, name, source:{kind:"path"|"git"|"unsupported", …},
   description, version, category, author, homepage, keywords, interface, policy?, installed, enabled}], error?}`.
 - `McpServer`: `{name, origin:"config"|"plugin", plugin, originalName, connector, enabled, transport, url, command,
-  args, headers:[names], auth:{oauth, login:{kind:"oauth"|"token", issuer?, scope?, expiresAt?, refreshable}|null},
+  args, cwd, envVars, bearerTokenEnvVar, env:[names], headers:[names], secrets:{env:[names], headers:[names], bearerToken:bool},
+  oauthEnabled, always, disabledTools (as far as the config knows them, else null),
+  auth:{oauth, login:{kind:"oauth"|"token", issuer?, scope?, expiresAt?, refreshable}|null},
   status:"connecting"|"connected"|"needs-login"|"error"|"disabled"|"stopped", error, retrying, challenge?:{status,
   resourceMetadata?, scope?, error?, errorDescription?}, warnings, tools:[{name, rawName, description}]}`.
+- `secrets` (add, update, test): `{env?: {NAME: value|null}, headers?: {Name: value|null}, bearerToken?: string|null}`.
+  Values go to `credentials.toml` (`[mcp_servers.<name>]` `env`, `headers`, `bearer_token`; mode 0600), never to
+  `config.toml`; a server runs with its table plus them (a bearer token becomes `Authorization: Bearer …`). `env` and
+  `headers` list every name the server keeps: a string sets a value (a plain one in `config.toml` moves to the secrets),
+  `null` keeps the stored one, names not listed are removed; a missing table keeps all. `bearerToken`: a string sets,
+  `""` removes, `null` keeps. Values in `config.env`/`config.headers` (pasted JSON) count as new secrets. Switching
+  to Streamable HTTP drops the stdio values and the reverse. `[mcp_servers.x] env_vars = ["NAME"]` passes parent
+  variables through to a stdio server even when their names look like credentials (Codex `env_vars`).
 - Login flow: `POST …/login` derives the redirect URI from the request's Host port
   (`http://127.0.0.1:<port>/api/oauth/callback`, so it also works through an SSH tunnel to the same port),
   the UI opens `authorizationUrl`, the authorization server sends the browser to the callback, the server

@@ -97,6 +97,8 @@ html.dshx-desktop .dr-panel { padding-top: env(safe-area-inset-top); }
 
 /* Below the folder browser (70), above the drawer (60). */
 .md-scrim.xd-scrim { z-index: 65; }
+/* Switches a server cannot offer yet are off for good, not busy. */
+:where(.mcp-switch, .sk-switch, .dr-setting, .mcp-tool-line) .toggle:disabled { cursor: not-allowed; }
 .xd-back { flex: none; margin-top: 2px; margin-left: -8px; }
 .xd-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: 9px; background: var(--selector); align-self: flex-start; max-width: 100%; }
 .xd-seg-item {

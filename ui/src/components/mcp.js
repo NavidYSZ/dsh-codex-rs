@@ -143,10 +143,8 @@ function ToolsTab({ s, settings }) {
   const shown = q ? tools.filter((x) => [x.rawName, x.description].some((v) => v?.toLowerCase().includes(q))) : tools;
   const set = (names) => settings.change(s, { disabledTools: [...names].sort() });
   if (!tools.length) {
-    return html`<div class="dr-empty">
-      <p>${s.status === 'connected' ? t.mcpNoTools : t.mcpToolsWhenConnected}</p>
-      ${s.error ? html`<p class="plug-warn">${s.error}</p>` : null}
-    </div>`;
+    // The drawer shows the error above the tabs.
+    return html`<div class="dr-empty"><p>${s.status === 'connected' ? t.mcpNoTools : t.mcpToolsWhenConnected}</p></div>`;
   }
   return html`<div class="mcp-tools-tab">
     <div class="mcp-tools-bar">
