@@ -238,6 +238,25 @@
   form no longer saves blank cache prices as 0, and cache reads and writes
   without a price are counted like uncached input (`[providers.*.models]`
   `cost.cache_read` / `cache_write` are optional).
+- Composer and chat: a prompt sent while a turn runs is no longer also shown
+  as a pending bubble; each chat keeps its own unsent draft; Minimal mode's
+  `/` and `@` menus offer only what works there (`suggest?preset=`); a model
+  whose provider was removed is marked unavailable with "Choose model";
+  `@server` inside inline code or code fences is text; a queued message that
+  starts while being edited hands the edit back to the composer.
+- Failures: no raw provider text above the composer when the failure card
+  shows; a full context offers "Compact now" and "Send again".
+- Focus returns to the opener or the composer after menus, the find bar,
+  renames, queue edits and dialogs; the modes guide takes the focus and Esc.
+- Usage: past costs keep the price of their time when a provider's prices
+  change or the provider is removed (`$DSHX_HOME/prices.json`); tokens per
+  second are left out for instant streams; reasoning shows its unit.
+- Branches sort by when they were made and get numbered titles; the
+  Verbose view keeps finished reasoning open; the `/` menu uses the skill
+  title from the frontmatter; folder errors say how to allow more roots;
+  inputs no longer spell-check paths and keys; the Skills and MCP pages stop
+  probing their settings routes; ⌘K reaches the new pages; archiving offers
+  Undo; German copy for the skill template, catalog texts and loader errors.
 
 ## 0.2.0 – 2026-10-17
 
