@@ -1,0 +1,333 @@
+{
+ "description": "Composer: /skill, @server and @file pills in sent prompts, an MCP activation line, the active-server chips and two prompts queued behind a running turn. Type / or @ to open the menus.",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-3f1c0a9e-6d2b-4c7e-8a15-b7c2e9d40f61",
+   "createdAt": 1792487640000,
+   "cwd": "/Users/alex/code/tally",
+   "isSeeded": false,
+   "delegationDepth": 0
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792487640005,
+    "data": {
+     "preset": "workspace-write"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792487640010,
+    "data": {
+     "mode": "workspace-write"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792487640015,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 3,
+    "time": 1792487640020,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 4,
+    "time": 1792487640025,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 5,
+    "time": 1792487640030,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "/release-notes for the new --top flag, then file them in @linear. Start from @src/tally/cli.py and @\"docs/design notes/top-flag.md\""
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "u-1"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 6,
+    "time": 1792487640035,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "<system-reminder>\nThe user turned on the MCP server \"linear\" (@linear) for this chat. Its tools are available from here on: mcp__linear__create_issue, mcp__linear__list_issues.\n</system-reminder>"
+      }
+     ],
+     "source": {
+      "kind": "mcp-activation",
+      "server": "linear"
+     },
+     "role": "user",
+     "id": "n-1"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/header",
+    "seq": 7,
+    "time": 1792487640040,
+    "data": {
+     "header": {
+      "config": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "maxTokens": 256000,
+       "reasoningEffort": "high"
+      }
+     },
+     "reason": "initial"
+    }
+   },
+   {
+    "type": "request/context",
+    "seq": 8,
+    "time": 1792487640045,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000,
+     "systemPromptUpdate": "in-history"
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 9,
+    "time": 1792487640050,
+    "data": {
+     "title": "Release notes for --top",
+     "messageSeqs": [
+      5
+     ],
+     "source": {
+      "kind": "fallback"
+     }
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 10,
+    "time": 1792487649250,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "role": "assistant",
+      "id": "a-1",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Read cli.py and the design note, then write short notes and file them."
+       },
+       {
+        "type": "text",
+        "text": "Here are the release notes for **--top**:\n\n- `tally.py --top N` prints only the N most common words.\n- Ties keep their first-seen order; `N` must be positive.\n\nI filed them as LIN-412 “Release notes: --top flag” in Linear."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     },
+     "usage": {
+      "inputTokens": 1800,
+      "outputTokens": 240,
+      "cacheReadTokens": 14200,
+      "totalTokens": 16240
+     },
+     "stream": []
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 11,
+    "time": 1792487649255,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 12,
+    "time": 1792487649260,
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 13,
+    "time": 1792487679260,
+    "data": {
+     "turn": 2
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 14,
+    "time": 1792487679265,
+    "data": {
+     "turn": 2,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 15,
+    "time": 1792487679270,
+    "data": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Now update @docs/usage.md with an example for --top"
+      }
+     ],
+     "source": {
+      "kind": "user"
+     },
+     "role": "user",
+     "id": "u-2"
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "assistant/message",
+    "seq": 16,
+    "time": 1792487681670,
+    "data": {
+     "turn": 2,
+     "step": 1,
+     "message": {
+      "role": "assistant",
+      "id": "a-2",
+      "content": [
+       {
+        "type": "reasoning",
+        "text": "Look at the usage doc first."
+       },
+       {
+        "type": "tool-call",
+        "id": "call-read-1",
+        "name": "read",
+        "arguments": "{\"file_path\": \"/Users/alex/code/tally/docs/usage.md\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     },
+     "usage": {
+      "inputTokens": 600,
+      "outputTokens": 60,
+      "cacheReadTokens": 16100,
+      "totalTokens": 16760
+     },
+     "stream": []
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 17,
+    "time": 1792487681675,
+    "data": {
+     "turn": 2,
+     "step": 1,
+     "callId": "call-read-1",
+     "name": "read",
+     "arguments": "{\"file_path\": \"/Users/alex/code/tally/docs/usage.md\"}"
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 18,
+    "time": 1792487683175,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "inserted": [
+      {
+       "content": [
+        {
+         "type": "text",
+         "text": "Afterwards run the tests with /test-plan in mind"
+        }
+       ],
+       "source": {
+        "kind": "user"
+       },
+       "role": "user",
+       "id": "q-1"
+      }
+     ]
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 19,
+    "time": 1792487683975,
+    "data": {
+     "target": "next-turn",
+     "start": 1,
+     "inserted": [
+      {
+       "content": [
+        {
+         "type": "text",
+         "text": "Also mention the change in README.md"
+        }
+       ],
+       "source": {
+        "kind": "user"
+       },
+       "role": "user",
+       "id": "q-2"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "status": "running",
+ "composer": {
+  "active": [
+   "linear"
+  ]
+ }
+}

@@ -10,6 +10,7 @@ import { store, api, openSettings, openSession } from '../state.js';
 import { Segmented } from './settings.js';
 import { workspaceName } from './composer.js';
 import { IconChevronRight } from '../icons.js';
+import { compactChat } from './composer-extras.js';
 
 // ---- formatting --------------------------------------------------------------
 
@@ -237,7 +238,20 @@ function ContextChip({ stats }) {
     <dl class="ub-rows ub-legend">${parts.map((x) => html`<dt><span class=${`ub-swatch ub-seg-${x.key}`} />${x.name}</dt><dd>${shortTokens(x.tokens)}</dd>`)}</dl>
     <p class="ub-foot">${c.estimated ? t.ctxAfterCompaction : t.ctxEstimate}
       ${auto ? ` ${auto.auto ? t.ctxAuto(percent(auto.thresholdPercent / 100)) : t.ctxAutoOff}` : ''}</p>
+    ${auto ? html`<${CompactNow} />` : null}
   </${Pop}>`;
+}
+
+/** `/compact` from the context popover (only while no turn runs). */
+function CompactNow() {
+  const status = useStore(store, (s) => s.status);
+  const [busy, setBusy] = useState(false);
+  const idle = status === 'idle' || status === 'error';
+  const run = async () => {
+    setBusy(true);
+    try { await compactChat(); } finally { setBusy(false); }
+  };
+  return html`<button type="button" class="ub-action" disabled=${busy || !idle} onClick=${run}>${busy ? t.ciCompacting : t.ciCompactNow}</button>`;
 }
 
 function CacheChip({ stats }) {

@@ -11,6 +11,7 @@ import { openSettings, openPanel, openFile } from '../state.js';
 import { collectChanges, Counts } from './panel.js';
 import { staysVisible } from '../worklog.js';
 import { WorkGroup, WorkItem, ReasoningLine, ThinkingRow, TurnLine, useWorkPolicy } from './worklog.js';
+import { PillText } from './composer-input.js';
 
 export function Markdown({ text, class: klass }) {
   const htmlText = useMemo(() => renderMarkdown(text), [text]);
@@ -20,7 +21,7 @@ export function Markdown({ text, class: klass }) {
 function UserBubble({ text, images, pending }) {
   return html`<div class=${cx('user', pending && 'is-pending')}>
     ${images?.length ? html`<div class="user-images">${images.map((img) => html`<${Thumb} key=${img.attachmentId} image=${img} />`)}</div>` : null}
-    ${text ? html`<div class="bubble">${text}</div>` : null}
+    ${text ? html`<div class="bubble"><${PillText} text=${text} /></div>` : null}
   </div>`;
 }
 
@@ -49,6 +50,11 @@ function Notice({ item }) {
         ${auth ? html`<button type="button" class="btn btn-small" onClick=${openSettings}>${t.openSettings}</button>` : null}
       </div>
     </div>`;
+  }
+  if (item.code === 'mcp-activation' || item.code === 'mcp-deactivation') {
+    const on = item.code === 'mcp-activation';
+    return html`<div class="source-line"><span class="source-label">${t.ciMcpLabel}</span>
+      <span class="source-detail">${on ? t.ciActivated(item.server) : t.ciDeactivated(item.server)}</span></div>`;
   }
   if (item.code === 'goal' || item.code === 'schedule' || item.code === 'team-message') {
     const [label, detail] = item.code === 'goal' ? [t.goal, t.goalRounds(item.round ?? '?', item.max ?? '∞')]
@@ -89,7 +95,7 @@ function ChangesCard({ turn, cwd }) {
   </div>`;
 }
 
-const SOURCES = new Set(['goal', 'schedule', 'team-message']);
+const SOURCES = new Set(['goal', 'schedule', 'team-message', 'mcp-activation', 'mcp-deactivation']);
 
 /**
  * The running turn's segments plus what streams: reasoning and starting tool

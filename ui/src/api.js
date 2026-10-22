@@ -4,6 +4,7 @@
 // knows whether it talks to dshx-server or replays ui/fixtures/<name>.json.
 import { t } from './i18n.js';
 import { fixtureFs } from './fixture-fs.js';
+import { fixtureComposer } from './fixture-composer.js';
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -144,6 +145,26 @@ class HttpApi {
   deleteSession(id) { return this.req('DELETE', `/api/sessions/${enc(id)}`); }
   decide(callId, decision) { return this.req('POST', `/api/approvals/${enc(callId)}`, { decision }); }
   upload(file) { return this.req('POST', '/api/attachments', undefined, file); }
+
+  // Composer (package C): `/` and `@` menus, the chat's MCP servers, commands, queue, files.
+  /** `{kind: slash|mention, q, cwd?, session?, model?}` → `{sections, cacheMiss}`. */
+  suggest(params) { return this.req('GET', `/api/composer/suggest?${new URLSearchParams(params)}`); }
+  sessionMcp(id) { return this.req('GET', `/api/sessions/${enc(id)}/mcp`); }
+  setSessionMcp(id, server, on) { return this.req(on ? 'POST' : 'DELETE', `/api/sessions/${enc(id)}/mcp/${enc(server)}`); }
+  compact(id) { return this.req('POST', `/api/sessions/${enc(id)}/compact`); }
+  /** `{action: edit|remove|steer, text?}` on one queued prompt. */
+  updateQueue(id, item, body) { return this.req('POST', `/api/sessions/${enc(id)}/queue/${enc(item)}`, body); }
+  /** Any file → `{path, name, bytes, sha256}`, stored read-only by the server. */
+  uploadFile(file) { return this.req('POST', `/api/files?name=${enc(file.name || 'file')}`, undefined, file); }
+  skillSettings(name, body) { return this.req('PUT', `/api/skills/${enc(name)}/settings`, body); }
+  mcpSettings(name, body) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/settings`, body); }
+  /** The session log (JSONL) as a Blob. */
+  async exportLog(id) {
+    const headers = this.token ? { Authorization: `Bearer ${this.token}` } : {};
+    const r = await fetch(`/api/sessions/${enc(id)}/export`, { headers });
+    if (!r.ok) throw new ApiError(r.status);
+    return r.blob();
+  }
 
   /** Object URL for an attachment; <img> cannot send the bearer header itself. */
   loadImage(ref) {
@@ -483,6 +504,7 @@ class FixtureApi {
   async prompt(id, body) {
     await this.ready;
     this.cancelled = false;
+    fixtureComposer.onPrompt(this, body.text);
     const turn = 1 + this.history.filter((e) => e.type === 'turn/start').length;
     const msgId = `fixture-${Date.now().toString(36)}`;
     const content = [{ type: 'text', text: body.text }];
@@ -562,6 +584,17 @@ class FixtureApi {
     return { ...r, since, until: Date.now() };
   }
   assetUrl(url) { return url; }
+
+  // Composer (package C), see fixture-composer.js.
+  suggest(params) { return fixtureComposer.suggest(this, params); }
+  sessionMcp(id) { return fixtureComposer.sessionMcp(this, id); }
+  setSessionMcp(id, server, on) { return fixtureComposer.setSessionMcp(this, id, server, on); }
+  compact(id) { return fixtureComposer.compact(this, id); }
+  updateQueue(id, item, body) { return fixtureComposer.updateQueue(this, id, item, body); }
+  uploadFile(file) { return fixtureComposer.uploadFile(this, file); }
+  exportLog(id) { return fixtureComposer.exportLog(this, id); }
+  async skillSettings(name, body) { return { name, ...body }; }
+  async mcpSettings(name, body) { return { name, ...body }; }
 
   // Models page: DeepSeek plus an Anthropic route, kept in memory.
   async providers() {

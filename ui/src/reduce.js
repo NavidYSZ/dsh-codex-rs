@@ -110,6 +110,11 @@ export function buildTranscript(events) {
           t.items.push(sourceNotice(kind, d, e.seq));
           break;
         }
+        // An MCP server the user switched on or off for this chat: a quiet line.
+        if (kind === 'mcp-activation' || kind === 'mcp-deactivation') {
+          current(null, e.time).items.push({ kind: 'notice', key: `m:${e.seq}`, code: kind, tone: 'muted', server: d.source.server ?? '' });
+          break;
+        }
         // Runtime context, AGENTS.md, skills etc. are model-only user messages.
         if (kind !== 'user') break;
         const t = current(null, e.time);
@@ -192,9 +197,13 @@ export function buildTranscript(events) {
         current(d.turn, e.time).retry = { retry: d.retry, max: d.maxRetries ?? null, delayMs: d.delayMs ?? 0, failure: d.failure ?? null, time: e.time };
         break;
 
-      case 'compaction/end':
-        current(null, e.time).items.push({ kind: 'divider', key: `k:${e.seq}`, code: 'compacted' });
+      case 'compaction/end': {
+        if (d.error) break;
+        // A manual /compact runs between turns (`turn: null`): its line closes the last turn.
+        const t = !turn && d.turn == null ? out.turns[out.turns.length - 1] : current(null, e.time);
+        t?.items.push({ kind: 'divider', key: `k:${e.seq}`, code: 'compacted' });
         break;
+      }
 
       case 'turn/end': {
         const t = current(d.turn, e.time);
