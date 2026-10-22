@@ -482,6 +482,21 @@ export function markAllRead() {
   for (const x of store.get().sessions) if (x.unread) patchSession(x.id, { seen: true });
 }
 
+// ---- focus -----------------------------------------------------------------
+
+/**
+ * After a menu, bar or dialog closed: focus goes back to `el` when it is
+ * still on the page, else to the composer, unless something else took it.
+ */
+export function restoreFocus(el) {
+  setTimeout(() => {
+    const now = document.activeElement;
+    if (now && now !== document.body) return;
+    const target = el?.isConnected ? el : document.querySelector('textarea.composer-input');
+    target?.focus?.({ preventScroll: true });
+  }, 0);
+}
+
 // ---- questions -------------------------------------------------------------
 
 let answerAsked = null;

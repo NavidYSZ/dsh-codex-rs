@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
-import { api } from '../state.js';
+import { api, restoreFocus } from '../state.js';
 
 /** Text with a moving highlight while work is in progress (Codex "shimmer"). */
 export const Shimmer = ({ active, children }) => html`<span class=${cx('shimmer-wrap', active && 'shimmer')}>${children}</span>`;
@@ -12,6 +12,11 @@ export const Shimmer = ({ active, children }) => html`<span class=${cx('shimmer-
  */
 export function Menu({ open, onClose, anchor, align = 'start', side = 'top', class: klass, children, fixed, at }) {
   const ref = useRef(null);
+  // Who had the focus before the menu (and its search field) took it.
+  const opener = useRef(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current) opener.current = document.activeElement;
+  wasOpen.current = open;
   useLayoutEffect(() => {
     const el = ref.current;
     if (!open || !el || !(fixed || at)) return;
@@ -38,6 +43,8 @@ export function Menu({ open, onClose, anchor, align = 'start', side = 'top', cla
     return () => {
       document.removeEventListener('pointerdown', down, true);
       document.removeEventListener('keydown', key);
+      const back = opener.current && opener.current !== document.body ? opener.current : anchor?.current;
+      restoreFocus(back);
     };
   }, [open]);
   if (!open) return null;

@@ -8,7 +8,7 @@ import { useStore } from '../store.js';
 import {
   store, newChat, openSettings, deleteSession, toggleSidebar, setSidebarMode, setActivityFilter, toggleFolded,
   openPalette, setPinned, setArchived, setUnread, startRename, stopRename, renameSession, markAllRead,
-  toast, openPlugins, openAutomations,
+  toast, openPlugins, openAutomations, restoreFocus,
 } from '../state.js';
 import {
   IconCompose, IconGear, IconSidebar, IconTrash, IconFolder, IconSearch, IconBell, IconPin, IconArchive, IconMore,
@@ -49,6 +49,7 @@ function RenameInput({ s }) {
     if (done.current) return;
     done.current = true;
     stopRename();
+    restoreFocus(null);
     if (value.trim() !== (s.title || '')) renameSession(s.id, value);
   };
   return html`<input class="sb-rename" value=${value} aria-label=${t.rename} spellcheck="false"
@@ -56,7 +57,7 @@ function RenameInput({ s }) {
     onInput=${(e) => setValue(e.currentTarget.value)} onBlur=${commit}
     onKeyDown=${(e) => {
       if (e.key === 'Enter') { e.preventDefault(); commit(); }
-      if (e.key === 'Escape') { done.current = true; stopRename(); }
+      if (e.key === 'Escape') { done.current = true; stopRename(); restoreFocus(null); }
     }} />`;
 }
 

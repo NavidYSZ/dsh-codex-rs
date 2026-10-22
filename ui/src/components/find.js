@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { html } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store } from '../state.js';
+import { store, restoreFocus } from '../state.js';
 import { IconSearch, IconChevronDown, IconX } from '../icons.js';
 
 const SKIP = '.msg-actions, .find-bar, .turn-rail, .load-older, .chev, svg';
@@ -21,6 +21,7 @@ export function openFind() {
 
 export function closeFind() {
   store.set({ find: null });
+  restoreFocus(null);
 }
 
 // The bar closes when the chat changes.

@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, api, fail, setComposer, openSettings } from '../state.js';
+import { store, api, fail, setComposer, openSettings, restoreFocus } from '../state.js';
 import { IconChevronDown, IconChevronRight, IconSearch, IconPlus, IconTrash, IconX } from '../icons.js';
 import { Menu } from './common.js';
 import { useLoad } from './page.js';
@@ -237,7 +237,7 @@ export function Dialog({ title, description, onClose, footer, children, class: k
     return () => {
       document.removeEventListener('keydown', key, true);
       openDialogs.splice(openDialogs.indexOf(id.current), 1);
-      opener?.focus?.({ preventScroll: true });
+      restoreFocus(opener);
     };
   }, []);
   return html`<div class="md-scrim" onMouseDown=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
