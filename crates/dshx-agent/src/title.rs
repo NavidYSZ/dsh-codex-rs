@@ -204,7 +204,10 @@ pub(crate) async fn after_request(inner: &Arc<Inner>, model: &str) {
         );
         return;
     }
-    let provider = inner.llm.provider().to_owned();
+    // The chat's provider answers, with its title model when it has one.
+    let llm = inner.client();
+    let provider = llm.provider().to_owned();
+    let model = cfg.model.as_deref().unwrap_or(model);
     let system = system_prompt(&cfg);
     let user = Message {
         id: dshx_core::new_id(),
@@ -241,7 +244,7 @@ pub(crate) async fn after_request(inner: &Arc<Inner>, model: &str) {
     let model = model.to_owned();
     tokio::spawn(async move {
         let token = inner.lifetime.child_token();
-        let call = generate(&inner, request, token.clone());
+        let call = generate(llm.as_ref(), request, token.clone());
         let title = tokio::select! {
             r = tokio::time::timeout(cfg.timeout, call) => match r {
                 Ok(r) => r,
@@ -281,11 +284,11 @@ pub(crate) async fn after_request(inner: &Arc<Inner>, model: &str) {
 }
 
 async fn generate(
-    inner: &Inner,
+    llm: &dyn dshx_core::LlmClient,
     request: GenerateRequest,
     token: tokio_util::sync::CancellationToken,
 ) -> anyhow::Result<String> {
-    let mut stream = inner.llm.stream(request, token).await;
+    let mut stream = llm.stream(request, token).await;
     let mut asm = BlockAssembler::default();
     while let Some(chunk) = stream.next().await {
         asm.push(&chunk);

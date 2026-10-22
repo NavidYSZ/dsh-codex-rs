@@ -15,13 +15,15 @@ use dshx_core::{
     ApprovalDecision, Approver, AttachmentStore, ImageAttachmentRef, LlmClient, Message,
     SessionLog, Tool, ToolRegistry,
 };
-use dshx_llm::{DeepSeekClient, DeepSeekConfig, SharedApiKey};
+use dshx_llm::{DeepSeekClient, DeepSeekConfig, ProviderRouter, SharedApiKey};
 use dshx_session::{Credentials, FileAttachments, SessionStore};
 use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
 
 mod extensions;
+mod providers;
 
 pub use extensions::RuntimeExtensions;
+pub use providers::RuntimeProviders;
 
 use crate::automation::Automation;
 use crate::live::{LiveHub, LiveMini, Watched};
@@ -33,7 +35,13 @@ pub struct Runtime {
     pub attachments: Arc<FileAttachments>,
     pub credentials: Credentials,
     pub api_key: SharedApiKey,
+    /// The DeepSeek client this runtime started with, for DeepSeek model
+    /// metadata; requests go through `router`.
+    #[allow(dead_code)]
     pub llm: Arc<DeepSeekClient>,
+    /// DeepSeek plus every configured provider route; what agents talk to.
+    pub router: Arc<ProviderRouter>,
+    provider_keys: providers::ProviderKeys,
     /// One background Chrome per process, shared by all sessions.
     browser: Option<Arc<dshx_browser::BrowserTool>>,
     macos: Vec<Arc<dyn Tool>>,
@@ -111,9 +119,10 @@ impl Runtime {
         let macos = dshx_macos::macos_tools(&config.codex);
         let store = Arc::new(store);
         let llm = Arc::new(llm);
+        let router = Arc::new(ProviderRouter::new(llm.clone()));
         let sessions = Arc::new(dshx_subagent::StoreSessions::new(store.clone()));
         let subagents = dshx_subagent::SubagentRuntime::new(dshx_subagent::RuntimeDeps {
-            llm: llm.clone() as Arc<dyn LlmClient>,
+            llm: router.clone() as Arc<dyn LlmClient>,
             sessions: sessions.clone(),
             attachments: attachments.clone() as Arc<dyn AttachmentStore>,
             approver: Arc::new(NoApprover),
@@ -137,7 +146,7 @@ impl Runtime {
             child_automation.attach_child(child);
         }));
         subagents.set_child_tools(Arc::new(Automation::child_tools));
-        Ok(Arc::new(Runtime {
+        let runtime = Arc::new(Runtime {
             home,
             config: RwLock::new(config),
             store,
@@ -145,6 +154,8 @@ impl Runtime {
             credentials,
             api_key,
             llm,
+            router,
+            provider_keys: Default::default(),
             browser,
             macos,
             live,
@@ -153,7 +164,9 @@ impl Runtime {
             mcp,
             ext,
             automation,
-        }))
+        });
+        runtime.apply_providers();
+        Ok(runtime)
     }
 
     /// Connects the MCP servers of the config and of enabled plugins
@@ -291,16 +304,25 @@ impl Runtime {
         if let Some(s) = overrides.sandbox {
             core.sandbox = s;
         }
+        // `core.model` is a reference; the agent gets its route and bare id.
+        let reference = core.model.clone();
+        let (provider, model) = self.split_model(&reference);
+        core.model = model;
         let mut config = AgentConfig::from_core(&core, cwd);
-        config.route = Some(self.route(&config.model));
+        config.route = Some(self.route(&reference));
+        config.title.model = self
+            .router
+            .route(&provider)
+            .and_then(|c| c.spec().title_model.clone());
+        config.provider = Some(provider);
         config.prompt.extra_sections = self.prompt_sections();
         config
     }
 
-    /// Route capabilities from the DeepSeek model catalog.
+    /// Route capabilities of a model reference from its provider's catalog.
     pub fn route(&self, model: &str) -> RouteCapabilities {
-        let resolved = self.llm.resolve_model(model);
-        let mut route = RouteCapabilities::for_model(model);
+        let resolved = self.router.resolve(model).model;
+        let mut route = RouteCapabilities::for_model(&resolved.info.id);
         route.system_prompt_in_history = resolved.system_prompt_update.is_some();
         route.tool_update = resolved.tool_update.map(|u| match u {
             dshx_llm::ToolUpdate::InHistory => dshx_agent::ToolUpdate::InHistory,
@@ -324,7 +346,7 @@ impl Runtime {
         let agent = Agent::new(
             config,
             AgentDeps {
-                llm: self.llm.clone() as Arc<dyn LlmClient>,
+                llm: self.router.clone() as Arc<dyn LlmClient>,
                 tools: self.tools(),
                 log,
                 attachments: self.attachments.clone() as Arc<dyn AttachmentStore>,

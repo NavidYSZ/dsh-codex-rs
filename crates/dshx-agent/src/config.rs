@@ -235,6 +235,8 @@ pub struct TitleConfig {
     pub max_input_bytes: usize,
     pub max_output_tokens: u32,
     pub timeout: Duration,
+    /// Title model of the chat's provider; `None` = the chat's model.
+    pub model: Option<String>,
 }
 
 impl Default for TitleConfig {
@@ -250,6 +252,7 @@ impl Default for TitleConfig {
             max_input_bytes: 4096,
             max_output_tokens: 64,
             timeout: Duration::from_secs(60),
+            model: None,
         }
     }
 }
@@ -276,6 +279,10 @@ impl Default for RepeatReminderConfig {
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
     pub model: String,
+    /// Provider route of `model` (`deepseek-official`, `anthropic`, …);
+    /// `None` = the client's own provider. Picked through
+    /// [`dshx_core::LlmClient::for_provider`].
+    pub provider: Option<String>,
     /// Reasoning effort; `None` = adapter default (recorded as `adapterDefaults`).
     pub effort: Option<String>,
     /// Output cap; `None` = adapter default (recorded as `adapterDefaults`).
@@ -303,6 +310,7 @@ impl AgentConfig {
     pub fn new(model: impl Into<String>, cwd: impl Into<PathBuf>) -> Self {
         AgentConfig {
             model: model.into(),
+            provider: None,
             effort: None,
             max_tokens: None,
             sandbox: SandboxMode::WorkspaceWrite,
@@ -331,6 +339,16 @@ impl AgentConfig {
         c.approval = ApprovalPolicy::parse(&core.approval);
         c.prompt.goal_blocked_after = core.codex.goal.blocked_after_consecutive_rounds;
         c
+    }
+
+    /// Takes the model choice of `other`: model, provider, effort, route and
+    /// title model (the composer's pickers apply to a running chat).
+    pub fn adopt_route(&mut self, other: &AgentConfig) {
+        self.model = other.model.clone();
+        self.provider = other.provider.clone();
+        self.effort = other.effort.clone();
+        self.route = other.route.clone();
+        self.title.model = other.title.model.clone();
     }
 
     pub(crate) fn route(&self) -> RouteCapabilities {

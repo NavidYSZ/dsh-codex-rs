@@ -191,6 +191,8 @@ enum Delivery {
 struct ParentFacts {
     header: SessionHeader,
     model: String,
+    /// Provider route of `model` (the parent's last request).
+    provider: Option<String>,
     effort: Option<String>,
     max_tokens: Option<u32>,
     sandbox: SandboxMode,
@@ -431,12 +433,20 @@ impl SubagentRuntime {
             .rev()
             .find(|e| e.kind == kinds::REQUEST_HEADER)
             .map(|e| e.data["header"]["config"].clone());
-        let (model, effort) = match &header_config {
+        let (model, provider, effort) = match &header_config {
             Some(c) => (
                 c["model"].as_str().unwrap_or(&config.model).to_owned(),
+                c["provider"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .or(config.provider.clone()),
                 c["reasoningEffort"].as_str().map(str::to_owned),
             ),
-            None => (config.model.clone(), config.effort.clone()),
+            None => (
+                config.model.clone(),
+                config.provider.clone(),
+                config.effort.clone(),
+            ),
         };
         let sandbox_override = last_data(&events, kinds::SANDBOX_MODE, "mode").map(str::to_owned);
         let preset = last_data(&events, kinds::PERMISSION_PRESET, "preset")
@@ -445,6 +455,7 @@ impl SubagentRuntime {
         ParentFacts {
             header: parent.header(),
             model,
+            provider,
             effort,
             max_tokens: config.max_tokens,
             sandbox: config.sandbox,
@@ -521,6 +532,18 @@ impl SubagentRuntime {
             literal: false,
         });
         config
+    }
+
+    /// Puts a child on the provider route its model came from; the route's
+    /// capabilities then come from the model catalog again.
+    fn child_route(config: &mut AgentConfig, provider: Option<&str>) {
+        if let Some(provider) = provider
+            && config.provider.as_deref() != Some(provider)
+        {
+            config.provider = Some(provider.to_owned());
+            config.route = None;
+            config.title.model = None;
+        }
     }
 
     fn build_agent(
@@ -615,7 +638,7 @@ impl SubagentRuntime {
         } else {
             PathBuf::from(&header.cwd)
         };
-        let config = Self::child_config(
+        let mut config = Self::child_config(
             parent,
             cwd,
             &facts.model,
@@ -628,6 +651,7 @@ impl SubagentRuntime {
                 .unwrap_or(facts.sandbox),
             ApprovalPolicy::Never,
         );
+        Self::child_route(&mut config, facts.provider.as_deref());
         let poke = Arc::new(watch::channel(0u64).0);
         let agent = self.build_agent(parent, &id, config, log, poke.clone());
         self.reg.lock().unwrap().agents.insert(
@@ -987,10 +1011,14 @@ impl SubagentRuntime {
         }
         let facts = Self::parent_facts(&parent.agent);
         let depth = Self::child_depth(&facts.header, max_depth)?;
+        let agent_provider = facts
+            .provider
+            .clone()
+            .unwrap_or_else(|| self.deps.llm.provider().to_owned());
         let descriptor = records::continuable_descriptor(
             provider,
             label,
-            self.deps.llm.provider(),
+            &agent_provider,
             &facts.model,
             facts.effort.as_deref(),
         );
@@ -1483,6 +1511,8 @@ impl SubagentRuntime {
         };
         let config =
             Self::child_config(&parent.agent, cwd, &model, effort, None, sandbox, approval);
+        let mut config = config;
+        Self::child_route(&mut config, descriptor["agentProvider"].as_str());
         let poke = Arc::new(watch::channel(0u64).0);
         let agent = self.build_agent(&parent.agent, child_id, config, log, poke.clone());
         self.reg.lock().unwrap().agents.insert(

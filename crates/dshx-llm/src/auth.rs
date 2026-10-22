@@ -122,6 +122,46 @@ pub async fn resolve_api_key(source: &dyn ApiKeySource) -> Result<String, LlmFai
     Ok(key.to_string())
 }
 
+/// [`resolve_api_key`] for another provider route. Without a key, a route
+/// that may authenticate another way (`required == false`, e.g. a local
+/// server) sends none; `env` names the variable in the error.
+pub async fn resolve_provider_key(
+    source: &dyn ApiKeySource,
+    provider: &str,
+    env: Option<&str>,
+    required: bool,
+) -> Result<Option<String>, LlmFailure> {
+    let Some(raw) = source.api_key().await else {
+        if !required {
+            return Ok(None);
+        }
+        let hint = match env {
+            Some(var) => format!("store one in Settings → Models or export {var}"),
+            None => "store one in Settings → Models".to_owned(),
+        };
+        return Err(LlmFailure::new(
+            "MISSING_CREDENTIAL",
+            format!("no API key for provider \"{provider}\"; {hint}"),
+        ));
+    };
+    let key = raw.trim();
+    if key.is_empty() {
+        return Err(LlmFailure::new(
+            "INVALID_CREDENTIAL",
+            format!("the API key of provider \"{provider}\" is blank; set it to the raw key"),
+        ));
+    }
+    if !key.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
+        return Err(LlmFailure::new(
+            "INVALID_CREDENTIAL",
+            format!(
+                "the API key of provider \"{provider}\" contains characters no HTTP header can carry; set it to the raw key alone"
+            ),
+        ));
+    }
+    Ok(Some(key.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

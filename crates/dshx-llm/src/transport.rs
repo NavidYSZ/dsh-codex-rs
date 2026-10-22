@@ -87,16 +87,45 @@ pub fn provider_error(
     status: Option<u16>,
     headers: Option<&ErrorHeaders>,
 ) -> LlmFailure {
+    labeled_error("DeepSeek Messages", raw, status, headers)
+}
+
+/// [`provider_error`] for another protocol: `label` names it in messages
+/// (`Anthropic Messages`, `OpenAI Chat Completions`). A bare string `error`
+/// or a top-level `message` (common on gateways) becomes the message.
+pub fn labeled_error(
+    label: &str,
+    raw: Option<&Value>,
+    status: Option<u16>,
+    headers: Option<&ErrorHeaders>,
+) -> LlmFailure {
     let error = raw.and_then(|r| r.get("error")).and_then(Value::as_object);
     let field = |name: &str| error.and_then(|e| e.get(name)).and_then(Value::as_str);
+    let loose = || {
+        let raw = raw?;
+        raw.get("error")
+            .and_then(Value::as_str)
+            .or_else(|| raw.get("message").and_then(Value::as_str))
+            .filter(|m| !m.trim().is_empty())
+    };
     let message = field("message")
+        .or_else(|| if error.is_none() { loose() } else { None })
         .map(str::to_owned)
         .unwrap_or_else(|| match status {
-            Some(status) => format!("DeepSeek Messages request failed ({status})"),
-            None => "DeepSeek Messages request failed (stream error)".into(),
+            Some(status) => format!("{label} request failed ({status})"),
+            None => format!("{label} request failed (stream error)"),
         });
     let kind = field("type").unwrap_or("");
-    let detail = format!("{kind} {} {message}", field("code").unwrap_or(""));
+    // OpenAI-style bodies carry a numeric or string `code`.
+    let code_text = error
+        .and_then(|e| e.get("code"))
+        .map(|c| {
+            c.as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| c.to_string())
+        })
+        .unwrap_or_default();
+    let detail = format!("{kind} {code_text} {message}");
     let code = if matches!(status, Some(401 | 403))
         || matches!(kind, "authentication_error" | "permission_error")
     {
@@ -154,6 +183,17 @@ pub fn http_error(status: u16, text: &str, headers: &ErrorHeaders) -> LlmFailure
     // The status is authoritative when a gateway does not return JSON.
     let raw: Option<Value> = serde_json::from_str(text).ok();
     provider_error(raw.as_ref(), Some(status), Some(headers))
+}
+
+/// [`http_error`] for another protocol (see [`labeled_error`]).
+pub fn labeled_http_error(
+    label: &str,
+    status: u16,
+    text: &str,
+    headers: &ErrorHeaders,
+) -> LlmFailure {
+    let raw: Option<Value> = serde_json::from_str(text).ok();
+    labeled_error(label, raw.as_ref(), Some(status), Some(headers))
 }
 
 #[cfg(test)]

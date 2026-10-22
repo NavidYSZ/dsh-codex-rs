@@ -5,7 +5,9 @@
 //! plus the dsh automation features (`goal`, `schedule`, `time_context`,
 //! `team`) with dsh 0.2.0-rc.2's defaults.
 //! `[mcp_servers.<name>]` tables configure MCP servers (dsh `mcp-client`),
-//! `[plugins."<name>@<marketplace>"]` tables switch installed plugins on.
+//! `[plugins."<name>@<marketplace>"]` tables switch installed plugins on,
+//! `[providers.<id>]` tables add model providers besides the built-in
+//! DeepSeek route (dsh `llm-pi-ai` providers).
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -16,6 +18,7 @@ use crate::tool::SandboxMode;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct Config {
+    /// Model reference: a bare DeepSeek id (`deepseek-flash`) or `provider/model`.
     pub model: String,
     pub reasoning_effort: Option<String>,
     /// Anthropic-compatible endpoint root; `DEEPSEEK_BASE_URL` overrides it.
@@ -32,6 +35,10 @@ pub struct Config {
     /// contribute skills and MCP servers.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub plugins: BTreeMap<String, PluginConfig>,
+    /// Model providers by id (`anthropic`, or a custom endpoint); their API
+    /// keys live in `credentials.toml`, never here.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub providers: BTreeMap<String, ProviderConfig>,
 }
 
 impl Default for Config {
@@ -46,8 +53,114 @@ impl Default for Config {
             codex: CodexConfig::default(),
             mcp_servers: BTreeMap::new(),
             plugins: BTreeMap::new(),
+            providers: BTreeMap::new(),
         }
     }
+}
+
+/// One `[providers.<id>]` table. Every field is optional for a provider of
+/// the built-in catalog (`anthropic`), which fills in its protocol, base
+/// URL, key variable, models and prices; a custom provider needs `api`,
+/// `base_url` and at least one model. dsh's camelCase names are accepted as
+/// aliases.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct ProviderConfig {
+    /// Wire protocol: `anthropic-messages` or `openai-completions`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api: Option<String>,
+    /// Endpoint root; Anthropic Messages appends `/v1/messages`, OpenAI
+    /// Chat Completions `/chat/completions`.
+    #[serde(
+        alias = "baseURL",
+        alias = "baseUrl",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub base_url: Option<String>,
+    /// Environment variable with the key; when set it wins over the stored key.
+    #[serde(alias = "apiKeyEnv", skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+    #[serde(alias = "displayName", skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// Extra request headers (e.g. `anthropic-beta`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub headers: BTreeMap<String, String>,
+    /// Cheap model of this provider for session titles; unset = the chat's model.
+    #[serde(alias = "titleModel", skip_serializing_if = "Option::is_none")]
+    pub title_model: Option<String>,
+    /// Empty = the catalog's models (catalog providers only).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<ProviderModelConfig>,
+    #[serde(skip_serializing_if = "ProviderCompat::is_default")]
+    pub compat: ProviderCompat,
+}
+
+/// Endpoint quirks of a provider.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct ProviderCompat {
+    /// Anthropic Messages: `x-api-key` (default) or `bearer`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
+    /// Anthropic Messages: `false` sends no `cache_control` breakpoints.
+    #[serde(alias = "cacheControl", skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<bool>,
+    /// OpenAI Chat Completions: `max_tokens` (default) or `max_completion_tokens`.
+    #[serde(alias = "maxTokensField", skip_serializing_if = "Option::is_none")]
+    pub max_tokens_field: Option<String>,
+    /// OpenAI Chat Completions: send the reasoning of earlier assistant
+    /// messages of the same model back as `reasoning_content`.
+    #[serde(alias = "reasoningContent", skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<bool>,
+}
+
+impl ProviderCompat {
+    pub fn is_default(&self) -> bool {
+        *self == ProviderCompat::default()
+    }
+}
+
+/// One `[[providers.<id>.models]]` entry.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct ProviderModelConfig {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(alias = "contextWindow", skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u64>,
+    /// Output cap per request.
+    #[serde(alias = "maxTokens", skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    /// `["text"]` or `["text", "image"]`; empty = text only.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub input: Vec<String>,
+    /// Effort levels offered in the picker (`off`, `low`, `medium`, `high`,
+    /// `xhigh`, `max`); empty = the model has no reasoning control.
+    #[serde(alias = "reasoningEfforts", skip_serializing_if = "Vec::is_empty")]
+    pub reasoning_efforts: Vec<String>,
+    #[serde(alias = "defaultEffort", skip_serializing_if = "Option::is_none")]
+    pub default_effort: Option<String>,
+    /// Anthropic Messages thinking request: `adaptive` (Claude 4.6 and
+    /// later), `budget` (`budget_tokens`), `effort` (DeepSeek style) or `none`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<ModelCost>,
+}
+
+/// Prices in USD per one million tokens.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct ModelCost {
+    /// Uncached input.
+    pub input: f64,
+    pub output: f64,
+    #[serde(alias = "cacheRead")]
+    pub cache_read: f64,
+    /// Cache writes (5-minute entries).
+    #[serde(alias = "cacheWrite")]
+    pub cache_write: f64,
 }
 
 /// One `[mcp_servers.<name>]` table (dsh `mcp-client` config). `command`
@@ -537,5 +650,72 @@ mod tests {
         let defaults = CodexConfig::default();
         assert!(!defaults.schedule.enabled && !defaults.team.enabled);
         assert!(!defaults.time_context_enabled());
+    }
+
+    #[test]
+    fn provider_tables_and_back_compat() {
+        // A config from before providers keeps working unchanged.
+        let old: Config = toml::from_str(
+            "model = \"deepseek-flash\"\nbase_url = \"http://gw.example/anthropic\"\n",
+        )
+        .unwrap();
+        assert_eq!(old.model, "deepseek-flash");
+        assert_eq!(old.base_url, "http://gw.example/anthropic");
+        assert!(old.providers.is_empty());
+
+        let config: Config = toml::from_str(
+            r#"
+            model = "anthropic/claude-sonnet-5-5"
+
+            [providers.anthropic]
+
+            [providers.relay]
+            api = "openai-completions"
+            baseURL = "https://relay.example/v1"
+            apiKeyEnv = "RELAY_KEY"
+            headers = { X-Org = "acme" }
+            compat = { max_tokens_field = "max_completion_tokens", reasoning_content = true }
+
+            [[providers.relay.models]]
+            id = "moonshotai/kimi-k3"
+            contextWindow = 1048576
+            max_tokens = 131072
+            input = ["text", "image"]
+            reasoning_efforts = ["low", "high"]
+            cost = { input = 0.6, output = 2.5, cacheRead = 0.15 }
+            "#,
+        )
+        .unwrap();
+        assert_eq!(config.providers["anthropic"], ProviderConfig::default());
+        let relay = &config.providers["relay"];
+        assert_eq!(relay.api.as_deref(), Some("openai-completions"));
+        assert_eq!(relay.base_url.as_deref(), Some("https://relay.example/v1"));
+        assert_eq!(relay.api_key_env.as_deref(), Some("RELAY_KEY"));
+        assert_eq!(relay.headers["X-Org"], "acme");
+        assert_eq!(
+            relay.compat.max_tokens_field.as_deref(),
+            Some("max_completion_tokens")
+        );
+        let model = &relay.models[0];
+        assert_eq!(model.context_window, Some(1_048_576));
+        assert_eq!(model.max_tokens, Some(131_072));
+        let cost = model.cost.unwrap();
+        assert_eq!(
+            (cost.input, cost.cache_read, cost.cache_write),
+            (0.6, 0.15, 0.0)
+        );
+
+        // An added catalog provider is written as a bare table.
+        let text = toml::to_string(&config).unwrap();
+        assert!(text.contains("[providers.anthropic]\n"), "{text}");
+        assert!(
+            !text.contains("compat = {}") && !text.contains("title_model"),
+            "{text}"
+        );
+        assert!(
+            !toml::to_string(&Config::default())
+                .unwrap()
+                .contains("providers")
+        );
     }
 }

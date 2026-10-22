@@ -215,10 +215,8 @@ impl WebBackend {
     fn info_value(&self) -> Value {
         let config = self.runtime.config();
         let (browser, app, computer) = self.runtime.tool_flags();
-        let models: Vec<Value> = dshx_core::LlmClient::models(self.runtime.llm.as_ref())
-            .into_iter()
-            .map(|m| serde_json::to_value(m).unwrap_or(Value::Null))
-            .collect();
+        // Models of every provider, `id` = model reference, grouped by `providers`.
+        let (models, providers) = self.runtime.info_models();
         let effort = config
             .reasoning_effort
             .clone()
@@ -228,13 +226,14 @@ impl WebBackend {
             "platform": std::env::consts::OS,
             "locale": config.codex.computer_use.locale.clone().unwrap_or_else(dshx_browser::system_locale),
             "models": models,
+            "providers": providers,
             "settings": {
                 "model": config.model,
                 "effort": effort,
                 "sandbox": config.sandbox,
                 "approval": config.approval,
             },
-            "apiKeyConfigured": self.runtime.api_key_configured(),
+            "apiKeyConfigured": self.runtime.any_model_ready(),
             "tools": { "browser": browser, "app": app, "computer": computer },
             "automation": self.runtime.automation.features(),
         })
@@ -456,10 +455,13 @@ impl Backend for WebBackend {
     }
 
     async fn prompt(&self, id: &str, request: PromptRequest) -> anyhow::Result<()> {
-        anyhow::ensure!(
-            self.runtime.api_key_configured(),
-            "No DeepSeek API key yet. Add it in Settings."
-        );
+        let model = request
+            .model
+            .clone()
+            .unwrap_or_else(|| self.runtime.config().model);
+        self.runtime
+            .model_ready(&model)
+            .map_err(anyhow::Error::msg)?;
         let overrides = Overrides {
             model: request.model.clone(),
             effort: request.effort.clone(),
@@ -468,11 +470,7 @@ impl Backend for WebBackend {
         let s = self.session_handle(id, &overrides).await?;
         // The composer's pickers apply to this chat from now on.
         let route = self.runtime.agent_config(&s.cwd, &overrides);
-        s.agent.update_config(|c| {
-            c.model = route.model.clone();
-            c.effort = route.effort.clone();
-            c.route = route.route.clone();
-        });
+        s.agent.update_config(|c| c.adopt_route(&route));
         self.runtime.refresh_agent(&s.agent, &s.tools_version);
         if let Some(mode) = overrides.sandbox {
             let approval = s.agent.config().approval;
@@ -596,6 +594,12 @@ impl Backend for WebBackend {
 
     fn extensions(&self) -> Option<Arc<dyn dshx_server::Extensions>> {
         Some(Arc::new(crate::runtime::RuntimeExtensions::new(
+            self.runtime.clone(),
+        )))
+    }
+
+    fn providers(&self) -> Option<Arc<dyn dshx_server::Providers>> {
+        Some(Arc::new(crate::runtime::RuntimeProviders::new(
             self.runtime.clone(),
         )))
     }

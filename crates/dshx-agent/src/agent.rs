@@ -260,6 +260,11 @@ impl Agent {
         self.inner.config.lock().unwrap().clone()
     }
 
+    /// The provider route the next request goes to.
+    pub fn provider(&self) -> String {
+        self.inner.client().provider().to_owned()
+    }
+
     /// Changes model/effort/limits for later requests (a changed header is logged then).
     pub fn update_config(&self, f: impl FnOnce(&mut AgentConfig)) {
         f(&mut self.inner.config.lock().unwrap());
@@ -1030,11 +1035,26 @@ impl Inner {
         prompt::ordered_tools(self.tools.lock().unwrap().schemas())
     }
 
+    /// The client of a provider route; the base client serves `None` and
+    /// routes it does not know.
+    pub(crate) fn client_for(&self, provider: Option<&str>) -> Arc<dyn LlmClient> {
+        provider
+            .and_then(|p| self.llm.for_provider(p))
+            .unwrap_or_else(|| self.llm.clone())
+    }
+
+    /// The client of the configured provider route.
+    pub(crate) fn client(&self) -> Arc<dyn LlmClient> {
+        let provider = self.config.lock().unwrap().provider.clone();
+        self.client_for(provider.as_deref())
+    }
+
     fn rendered_prompt(&self, tools: &[ToolSchema]) -> anyhow::Result<String> {
         let c = self.config.lock().unwrap();
+        let llm = self.client_for(c.provider.as_deref());
         let names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
         let cwd = c.cwd.to_string_lossy().into_owned();
-        prompt::render_system_prompt(&c.prompt, &names, self.llm.provider(), &c.model, &cwd)
+        prompt::render_system_prompt(&c.prompt, &names, llm.provider(), &c.model, &cwd)
     }
 
     /// dsh `SystemPromptProjection.project`: per-node system prompt commits.
@@ -1106,7 +1126,8 @@ impl Inner {
         // dsh key order: an explicit effort precedes `maxTokens`, an adapter
         // default one is appended after it.
         let mut config = Map::new();
-        config.insert("provider".into(), self.llm.provider().into());
+        let llm = self.client_for(c.provider.as_deref());
+        config.insert("provider".into(), llm.provider().into());
         config.insert("model".into(), c.model.clone().into());
         if c.effort.is_some() {
             config.insert("reasoningEffort".into(), effort.clone().into());
@@ -1146,7 +1167,7 @@ impl Inner {
     pub(crate) fn context_window(&self) -> Option<u64> {
         let c = self.config.lock().unwrap();
         c.route().context_window.or_else(|| {
-            self.llm
+            self.client_for(c.provider.as_deref())
                 .models()
                 .into_iter()
                 .find(|m| m.id == c.model)
@@ -1156,14 +1177,15 @@ impl Inner {
 
     pub(crate) fn model_accepts_images(&self) -> bool {
         let model = self.config.lock().unwrap().model.clone();
-        self.llm
+        self.client()
             .models()
             .into_iter()
             .find(|m| m.id == model)
             .is_some_and(|m| m.accepts_images())
     }
 
-    /// Logs the request envelope as needed and derives the request (dsh `buildRequest`).
+    /// Logs the request envelope as needed and derives the request (dsh
+    /// `buildRequest`), with the client of the route it was built for.
     #[allow(clippy::too_many_arguments)]
     async fn build_request(
         self: &Arc<Self>,
@@ -1174,7 +1196,7 @@ impl Inner {
         turn: u64,
         step: u64,
         starts_request_series: bool,
-    ) -> anyhow::Result<GenerateRequest> {
+    ) -> anyhow::Result<(GenerateRequest, Arc<dyn LlmClient>)> {
         let baseline = self.journal.request_header();
         let generation = self.journal.surface().content_generation;
         let (logged, prev_generation) = {
@@ -1273,12 +1295,13 @@ impl Inner {
         self.state.lock().unwrap().request_surface_generation =
             self.journal.surface().content_generation;
 
-        let (model, route) = {
+        let (model, route, provider) = {
             let c = self.config.lock().unwrap();
-            (c.model.clone(), c.route())
+            (c.model.clone(), c.route(), c.provider.clone())
         };
+        let llm = self.client_for(provider.as_deref());
         let mut context = Map::new();
-        context.insert("provider".into(), self.llm.provider().into());
+        context.insert("provider".into(), llm.provider().into());
         context.insert("model".into(), model.clone().into());
         if let Some(w) = self.context_window() {
             context.insert("contextWindow".into(), w.into());
@@ -1292,7 +1315,7 @@ impl Inner {
         }
         crate::title::after_request(self, &model).await;
 
-        Ok(GenerateRequest {
+        let request = GenerateRequest {
             model,
             reasoning_effort: Some(effort),
             messages: self.journal.derive_messages(),
@@ -1300,7 +1323,8 @@ impl Inner {
             max_tokens: Some(max_tokens),
             temperature: None,
             session_id: Some(self.journal.id()),
-        })
+        };
+        Ok((request, llm))
     }
 
     /// One model call plus the tool calls it requested (dsh `step`).
@@ -1346,14 +1370,14 @@ impl Inner {
                 }
             }
             first_attempt = false;
-            let request = self
+            let (request, llm) = self
                 .build_request(header, effort, max_tokens, &tools, turn, step, forced)
                 .await?;
             self.journal.flush().await?;
             check(cancel)?;
             attempt += 1;
             self.observer.on_attempt(turn, step, attempt);
-            let provider = self.llm.provider().to_owned();
+            let provider = llm.provider().to_owned();
             let model = request.model.clone();
 
             let mut acc = StreamAccumulator::default();
@@ -1362,7 +1386,7 @@ impl Inner {
             let mut stream = tokio::select! {
                 biased;
                 _ = cancel.cancelled() => return Err(Aborted.into()),
-                s = self.llm.stream(request, cancel.child_token()) => s,
+                s = llm.stream(request, cancel.child_token()) => s,
             };
             let mut interrupted = false;
             loop {

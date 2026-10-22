@@ -1,9 +1,15 @@
-//! The DeepSeek API key file, `$DSHX_HOME/credentials.toml` (mode 0600):
+//! The API key file, `$DSHX_HOME/credentials.toml` (mode 0600):
 //!
 //! ```toml
 //! [deepseek]
 //! api_key = "sk-…"
+//!
+//! [providers.anthropic]
+//! api_key = "sk-ant-…"
 //! ```
+//!
+//! The DeepSeek key keeps its own table; every other provider route has
+//! one under `providers`.
 //!
 //! Writes are atomic (temp file + rename) and owner-only; other tables in the
 //! file are preserved.
@@ -12,6 +18,9 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{IoContext, Result, SessionError};
 use crate::lock::create_private_dir;
+
+/// The built-in DeepSeek provider route, whose key is `[deepseek] api_key`.
+const DEEPSEEK_ROUTE: &str = "deepseek-official";
 
 /// Handle on one credentials file.
 #[derive(Debug, Clone)]
@@ -90,6 +99,83 @@ impl Credentials {
             section.remove("api_key");
             if section.is_empty() {
                 table.remove("deepseek");
+            }
+        }
+        if table.is_empty() {
+            return match std::fs::remove_file(&self.path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    Err(SessionError::io(&self.path, e))
+                }
+                _ => Ok(()),
+            };
+        }
+        self.write_table(&table)
+    }
+
+    /// The stored key of a provider route; `deepseek-official` is the
+    /// `[deepseek]` key.
+    pub fn provider_key(&self, provider: &str) -> Result<Option<String>> {
+        if provider == DEEPSEEK_ROUTE {
+            return self.api_key();
+        }
+        let table = self.read_table()?;
+        Ok(table
+            .get("providers")
+            .and_then(|p| p.get(provider))
+            .and_then(|p| p.get("api_key"))
+            .and_then(toml::Value::as_str)
+            .filter(|k| !k.trim().is_empty())
+            .map(|k| k.trim().to_owned()))
+    }
+
+    /// Stores a provider's key (trimmed); an empty key clears it.
+    pub fn set_provider_key(&self, provider: &str, key: &str) -> Result<()> {
+        if provider == DEEPSEEK_ROUTE {
+            return self.set_api_key(key);
+        }
+        let key = key.trim();
+        if key.is_empty() {
+            return self.clear_provider_key(provider);
+        }
+        let mut table = self.read_table()?;
+        let corrupt = |what: &str| {
+            SessionError::Corrupt(format!("{}: {what} is not a table", self.path.display()))
+        };
+        let providers = table
+            .entry("providers")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| corrupt("[providers]"))?;
+        let section = providers
+            .entry(provider)
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| corrupt(&format!("[providers.{provider}]")))?;
+        section.insert("api_key".into(), toml::Value::String(key.to_owned()));
+        self.write_table(&table)
+    }
+
+    /// Removes a provider's key; empty tables and an empty file go too.
+    pub fn clear_provider_key(&self, provider: &str) -> Result<()> {
+        if provider == DEEPSEEK_ROUTE {
+            return self.clear_api_key();
+        }
+        let mut table = self.read_table()?;
+        if let Some(providers) = table
+            .get_mut("providers")
+            .and_then(toml::Value::as_table_mut)
+        {
+            if let Some(section) = providers
+                .get_mut(provider)
+                .and_then(toml::Value::as_table_mut)
+            {
+                section.remove("api_key");
+                if section.is_empty() {
+                    providers.remove(provider);
+                }
+            }
+            if providers.is_empty() {
+                table.remove("providers");
             }
         }
         if table.is_empty() {
@@ -209,5 +295,52 @@ mod tests {
         creds.set_api_key("").unwrap();
         assert!(!creds.path().exists());
         creds.clear_api_key().unwrap();
+    }
+
+    #[test]
+    fn keys_per_provider() {
+        let tmp = tempfile::tempdir().unwrap();
+        let creds = Credentials::new(tmp.path().join("credentials.toml"));
+        assert_eq!(creds.provider_key("anthropic").unwrap(), None);
+        creds.set_api_key("sk-ds").unwrap();
+        creds.set_provider_key("anthropic", " sk-ant ").unwrap();
+        creds.set_provider_key("relay", "sk-relay").unwrap();
+        assert_eq!(
+            creds.provider_key("anthropic").unwrap().as_deref(),
+            Some("sk-ant")
+        );
+        // The DeepSeek route reads and writes the old table.
+        assert_eq!(
+            creds.provider_key("deepseek-official").unwrap().as_deref(),
+            Some("sk-ds")
+        );
+        creds
+            .set_provider_key("deepseek-official", "sk-ds2")
+            .unwrap();
+        assert_eq!(creds.api_key().unwrap().as_deref(), Some("sk-ds2"));
+        let text = std::fs::read_to_string(creds.path()).unwrap();
+        assert!(
+            text.contains("[providers.anthropic]") && text.contains("[deepseek]"),
+            "{text}"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(creds.path())
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        creds.clear_provider_key("anthropic").unwrap();
+        creds.set_provider_key("relay", "").unwrap();
+        assert_eq!(creds.provider_key("anthropic").unwrap(), None);
+        assert!(
+            !std::fs::read_to_string(creds.path())
+                .unwrap()
+                .contains("providers")
+        );
+        creds.clear_api_key().unwrap();
+        assert!(!creds.path().exists());
     }
 }

@@ -33,16 +33,28 @@
 //!
 //! Retries are the agent's job: it asks [`RetryPolicy::decide`] after each
 //! failed attempt (see [`DeepSeekClient::retry_policy`]).
+//!
+//! Other providers ([`provider`]) speak Anthropic Messages ([`anthropic`])
+//! or OpenAI Chat Completions ([`openai`]) through a [`ProviderClient`];
+//! [`ProviderRouter`] serves DeepSeek itself and hands agents of another
+//! provider that provider's client. The DeepSeek wire stays as above.
 
+pub mod anthropic;
 pub mod assembler;
 pub mod auth;
 pub mod client;
 pub mod config;
+pub mod discover;
 pub mod images;
 pub mod json;
 pub mod models;
+pub mod openai;
+pub mod provider;
+pub mod provider_client;
 pub mod replay;
 pub mod retry;
+pub mod router;
+mod runner;
 pub mod serialize;
 pub mod sse;
 pub mod translate;
@@ -51,6 +63,7 @@ pub mod transport;
 pub use assembler::{BlockAssembler, chunk_json};
 pub use auth::{
     API_KEY_ENV, ApiKeyChain, ApiKeySource, EnvApiKey, SharedApiKey, StaticApiKey, resolve_api_key,
+    resolve_provider_key,
 };
 pub use client::{ANTHROPIC_VERSION, DeepSeekClient, DeepSeekClientBuilder, SESSION_ID_HEADER};
 pub use config::{BASE_URL_ENV, ConfigError, DeepSeekConfig, PUBLIC_BASE_URL};
@@ -58,8 +71,11 @@ pub use models::{
     CatalogModel, PROVIDER, REASONING_EFFORTS, ResolvedModel, SystemPromptUpdate, ToolUpdate,
     default_models,
 };
+pub use provider::{Api, ProviderModel, ProviderSpec, Thinking, model_ref, split_model_ref};
+pub use provider_client::{ProviderClient, UnavailableRoute};
 pub use replay::{REPLAY_KIND, REPLAY_VERSION, read_replay, replay_state};
 pub use retry::{DEFAULT_RETRYABLE_CODES, RetryDecision, RetryMode, RetryPolicy};
+pub use router::{ProviderRouter, ResolvedRoute};
 pub use serialize::{TOOL_CHANGES_BETA, WireRequest};
 pub use transport::{is_context_window_exceeded, is_quota_exceeded};
 
