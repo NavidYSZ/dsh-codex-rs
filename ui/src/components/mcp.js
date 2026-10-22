@@ -403,7 +403,7 @@ function PasteJson({ existing, onEdit, onAddMany }) {
   const chosen = servers.filter((_, i) => isOn(i));
   return html`<div class="mcp-json-step">
     <${Field} label=${t.mcpJsonLabel} hint=${t.mcpJsonHint} wide>
-      <textarea class="input mono mcp-json-input" rows="9" value=${text} spellcheck="false" placeholder=${t.mcpJsonPlaceholder}
+      <textarea class="input mono mcp-json-input" rows="9" value=${text} spellcheck=${false} placeholder=${t.mcpJsonPlaceholder}
         onInput=${(e) => { setText(e.currentTarget.value); setPicked({}); }} />
     </${Field}>
     ${text.trim() && parsed.error ? html`<p class="md-error" role="alert">${t.mcpJsonUnreadable}</p>` : null}

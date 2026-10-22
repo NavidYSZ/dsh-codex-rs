@@ -145,7 +145,7 @@ function PickerBody({ sel, onClose }) {
   return html`<div class="mp" onKeyDown=${onKey}>
     <label class="mp-search">
       <${IconSearch} size=${14} />
-      <input value=${q} placeholder=${t.pickerSearch} aria-label=${t.pickerSearch} spellcheck="false" autocomplete="off"
+      <input value=${q} placeholder=${t.pickerSearch} aria-label=${t.pickerSearch} spellcheck=${false} autocomplete="off"
         ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); } }}
         onInput=${(e) => { setQ(e.currentTarget.value); setCursor(-1); }} />
     </label>
@@ -337,7 +337,7 @@ function ModelRow({ row, n, open, onToggle, onChange, onRemove }) {
   const toggleList = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : EFFORTS.filter((e) => e === v || list.includes(e)));
   return html`<div class=${cx('mo-model', open && 'is-open')}>
     <div class="mo-model-row">
-      <input class="input mono" value=${row.id} placeholder=${t.modelId} aria-label=${`${t.modelId} ${n}`} spellcheck="false"
+      <input class="input mono" value=${row.id} placeholder=${t.modelId} aria-label=${`${t.modelId} ${n}`} spellcheck=${false}
         onInput=${(e) => set({ id: e.currentTarget.value })} />
       <input class="input" value=${row.name} placeholder=${t.modelNamePlaceholder} aria-label=${`${t.modelName} ${n}`}
         onInput=${(e) => set({ name: e.currentTarget.value })} />
@@ -507,7 +507,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
   const askable = !!(form.baseUrl.trim() || (!custom && defaultUrl)) && (!custom || form.api);
   const urlField = html`<${Labeled} label=${t.baseUrl} wide error=${tried || form.baseUrl ? urlError : null}
     hint=${builtin && provider.baseUrlLocked ? t.baseUrlLocked('DEEPSEEK_BASE_URL') : null}>
-    <input class="input mono" value=${builtin && provider.baseUrlLocked ? provider.baseUrl : form.baseUrl} spellcheck="false" autocomplete="off"
+    <input class="input mono" value=${builtin && provider.baseUrlLocked ? provider.baseUrl : form.baseUrl} spellcheck=${false} autocomplete="off"
       disabled=${builtin && provider.baseUrlLocked}
       placeholder=${defaultUrl ? `${t.baseUrlDefault}: ${defaultUrl}` : form.api === 'anthropic-messages' ? 'https://gateway.example' : 'https://gateway.example/v1'}
       onInput=${(e) => set({ baseUrl: e.currentTarget.value })} />
@@ -515,7 +515,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
   const keyField = html`<${Labeled} label=${t.keyInput} wide error=${keyError}
     hint=${!keyState.locked && keyState.required === false && !keyState.configured && !form.key ? t.keyOptional : null}>
     <span class="md-inline">
-      <input class="input mono" type="password" value=${form.key} autocomplete="off" spellcheck="false"
+      <input class="input mono" type="password" value=${form.key} autocomplete="off" spellcheck=${false}
         disabled=${keyState.locked} placeholder=${keyPlaceholder} onInput=${(e) => set({ key: e.currentTarget.value })} />
       ${keyState.configured && keyState.source === 'stored' && mode === 'edit' ? html`<button type="button" class="btn btn-small"
         disabled=${!!busy} onClick=${removeKey}>${t.keyRemove}</button>` : null}
@@ -529,7 +529,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
   return html`<${Dialog} title=${title} description=${mode === 'custom' ? t.addCustomHint : null} onClose=${onClose} footer=${footer} class="md-editor">
     <form id="mo-editor" class="md-form" onSubmit=${save} novalidate>
       ${mode === 'custom' ? html`<${Labeled} label=${t.providerId} hint=${t.providerIdHint} error=${tried || form.id ? idError : null}>
-        <input class="input mono" value=${form.id} placeholder="my-relay" spellcheck="false" autocomplete="off"
+        <input class="input mono" value=${form.id} placeholder="my-relay" spellcheck=${false} autocomplete="off"
           onInput=${(e) => set({ id: e.currentTarget.value.trim() })} />
       </${Labeled}>` : null}
       ${custom ? html`<${Labeled} label=${t.displayName}>

@@ -152,7 +152,7 @@ export function FindBar({ scroller, pinned, onQuery }) {
   return html`<div class="find-bar" role="search">
     <span class="find-icon"><${IconSearch} size=${14} /></span>
     <input ref=${input} class="find-input" value=${query} placeholder=${t.findInChat} aria-label=${t.findInChat}
-      spellcheck="false" autocomplete="off" onInput=${(e) => store.set({ find: e.currentTarget.value })} onKeyDown=${onKey} />
+      spellcheck=${false} autocomplete="off" onInput=${(e) => store.set({ find: e.currentTarget.value })} onKeyDown=${onKey} />
     <span class="find-count" role="status" aria-live="polite">${count}</span>
     <button type="button" class="icon-btn find-step is-up" aria-label=${t.findPrev} title=${`${t.findPrev} (⇧↩)`}
       disabled=${!state.count} onClick=${() => step(-1)}><${IconChevronDown} size=${14} /></button>

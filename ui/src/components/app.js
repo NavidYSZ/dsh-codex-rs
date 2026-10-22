@@ -41,7 +41,7 @@ function EditableTitle({ row, title }) {
     setEditing(false);
     if (save && value.trim() && value.trim() !== row.title) renameSession(row.id, value);
   };
-  return html`<input class="tb-rename" value=${value} aria-label=${t.rename} spellcheck="false"
+  return html`<input class="tb-rename" value=${value} aria-label=${t.rename} spellcheck=${false}
     ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); el.select(); } }}
     onInput=${(e) => setValue(e.currentTarget.value)} onBlur=${() => done(true)}
     onKeyDown=${(e) => { if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); }} />`;

@@ -52,7 +52,7 @@ function RenameInput({ s }) {
     restoreFocus(null);
     if (value.trim() !== (s.title || '')) renameSession(s.id, value);
   };
-  return html`<input class="sb-rename" value=${value} aria-label=${t.rename} spellcheck="false"
+  return html`<input class="sb-rename" value=${value} aria-label=${t.rename} spellcheck=${false}
     ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); el.select(); } }}
     onInput=${(e) => setValue(e.currentTarget.value)} onBlur=${commit}
     onKeyDown=${(e) => {

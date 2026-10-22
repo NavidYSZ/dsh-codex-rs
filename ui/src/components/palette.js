@@ -57,7 +57,7 @@ function Body() {
     <div class="palette" role="dialog" aria-label=${t.search}>
       <div class="palette-input">
         <${IconSearch} size=${16} />
-        <input value=${q} placeholder=${t.paletteHint} aria-label=${t.paletteHint} spellcheck="false" autocomplete="off"
+        <input value=${q} placeholder=${t.paletteHint} aria-label=${t.paletteHint} spellcheck=${false} autocomplete="off"
           ref=${(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.focus(); } }}
           onInput=${(e) => { setQ(e.currentTarget.value); setSel(0); }} onKeyDown=${onKey} />
         <kbd class="kbd">esc</kbd>

@@ -124,11 +124,11 @@ function AddMarketDialog({ onClose, onAdded }) {
   return html`<${Dialog} title=${t.addMarketplace} description=${t.marketLead} onClose=${() => { if (!busy) onClose(); }} footer=${footer}>
     <form id="mk-add" class="md-form" onSubmit=${submit}>
       <${Field} label=${t.marketSource} wide error=${invalid ? t.marketInvalid : null} hint=${hint}>
-        <input class="input mono" value=${source} placeholder="owner/repo" spellcheck="false" autocomplete="off" disabled=${busy}
+        <input class="input mono" value=${source} placeholder="owner/repo" spellcheck=${false} autocomplete="off" disabled=${busy}
           onInput=${(e) => { setSource(e.currentTarget.value); setError(null); }} />
       </${Field}>
       <${Field} label=${t.marketRef} wide hint=${local ? t.marketRefLocal : t.marketRefHint}>
-        <input class="input mono" value=${local ? '' : ref} placeholder="main" spellcheck="false" autocomplete="off" disabled=${busy || local}
+        <input class="input mono" value=${local ? '' : ref} placeholder="main" spellcheck=${false} autocomplete="off" disabled=${busy || local}
           onInput=${(e) => { setRef(e.currentTarget.value); setError(null); }} />
       </${Field}>
       <div class="md-field is-wide">

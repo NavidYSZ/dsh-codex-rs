@@ -125,10 +125,10 @@ function KeyValues({ rows, onChange, keyLabel, keyPlaceholder, addLabel, readOnl
   const set = (i, patchRow) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patchRow } : r)));
   return html`<div class="mf-table">
     ${rows.map((r, i) => html`<div class="mf-kv" key=${i}>
-      <input class="input mono mf-key" value=${r.key} placeholder=${keyPlaceholder} aria-label=${keyLabel} spellcheck="false"
+      <input class="input mono mf-key" value=${r.key} placeholder=${keyPlaceholder} aria-label=${keyLabel} spellcheck=${false}
         autocomplete="off" disabled=${readOnly || r.stored} onInput=${(e) => set(i, { key: e.currentTarget.value })} />
       <span class="mf-value">
-        <input class="input mono" type=${shown[i] ? 'text' : 'password'} value=${r.value} autocomplete="new-password" spellcheck="false"
+        <input class="input mono" type=${shown[i] ? 'text' : 'password'} value=${r.value} autocomplete="new-password" spellcheck=${false}
           disabled=${readOnly} aria-label=${`${t.mcpValue} ${r.key}`}
           placeholder=${r.stored ? t.mcpStored : t.mcpValue} onInput=${(e) => set(i, { value: e.currentTarget.value })} />
         <button type="button" class="icon-btn mf-eye" aria-label=${shown[i] ? t.mcpHide : t.mcpShow} title=${shown[i] ? t.mcpHide : t.mcpShow}
@@ -147,7 +147,7 @@ function Args({ args, onChange, readOnly }) {
   return html`<div class="mf-table">
     ${args.map((a, i) => html`<div class="mf-arg" key=${i}>
       <span class="mf-index">${i + 1}</span>
-      <input class="input mono" value=${a} spellcheck="false" autocomplete="off" disabled=${readOnly} aria-label=${t.mcpArgN(i + 1)}
+      <input class="input mono" value=${a} spellcheck=${false} autocomplete="off" disabled=${readOnly} aria-label=${t.mcpArgN(i + 1)}
         onInput=${(e) => onChange(args.map((x, j) => (j === i ? e.currentTarget.value : x)))}
         onKeyDown=${(e) => {
     if (e.key === 'Enter') { e.preventDefault(); onChange([...args.slice(0, i + 1), '', ...args.slice(i + 1)]); requestAnimationFrame(() => e.currentTarget.closest('.mf-table')?.querySelectorAll('.mf-arg input')[i + 1]?.focus()); }
@@ -171,7 +171,7 @@ function Chips({ values, onChange, placeholder, label, readOnly }) {
     ${values.map((v) => html`<span class="mf-chip mono" key=${v}>${v}
       ${readOnly ? null : html`<button type="button" aria-label=${t.mcpRemoveRow(v)} onClick=${() => onChange(values.filter((x) => x !== v))}><${IconX} size=${11} /></button>`}</span>`)}
     ${readOnly ? null : html`<input class="mf-chip-input mono" value=${draft} placeholder=${values.length ? '' : placeholder} aria-label=${label}
-      spellcheck="false" autocomplete="off" onInput=${(e) => setDraft(e.currentTarget.value.replace(/[^A-Za-z0-9_,\s]/g, ''))} onBlur=${add}
+      spellcheck=${false} autocomplete="off" onInput=${(e) => setDraft(e.currentTarget.value.replace(/[^A-Za-z0-9_,\s]/g, ''))} onBlur=${add}
       onKeyDown=${(e) => {
     if (['Enter', ',', ' '].includes(e.key)) { e.preventDefault(); add(); }
     else if (e.key === 'Backspace' && !draft && values.length) onChange(values.slice(0, -1));
@@ -199,7 +199,7 @@ export function ServerForm({ form, onChange, editing, readOnly, errors = {} }) {
   };
   return html`<div class="md-form mf-form">
     <${Field} label=${t.mcpName} error=${errors.name} hint=${editing ? t.mcpNameFixed : t.mcpNameHint}>
-      <input class="input mono" value=${form.name} spellcheck="false" autocomplete="off" maxlength="32" placeholder="github"
+      <input class="input mono" value=${form.name} spellcheck=${false} autocomplete="off" maxlength="32" placeholder="github"
         disabled=${editing || readOnly} onInput=${(e) => set({ name: e.currentTarget.value.replace(/\s+/g, '-').replace(/[^A-Za-z0-9_-]/g, '') })} />
     </${Field}>
     <${Field} label=${t.mcpType} as="div">
@@ -208,7 +208,7 @@ export function ServerForm({ form, onChange, editing, readOnly, errors = {} }) {
     </${Field}>
     ${form.type === 'stdio' ? html`
       <${Field} label=${t.mcpCommand} wide error=${errors.command} hint=${t.mcpCommandHint}>
-        <input class="input mono" value=${form.command} spellcheck="false" autocomplete="off" placeholder="npx" disabled=${readOnly}
+        <input class="input mono" value=${form.command} spellcheck=${false} autocomplete="off" placeholder="npx" disabled=${readOnly}
           onInput=${(e) => set({ command: e.currentTarget.value })} onBlur=${splitCommandLine} />
       </${Field}>
       <${Field} label=${t.mcpArgs} wide as="div">
@@ -223,14 +223,14 @@ export function ServerForm({ form, onChange, editing, readOnly, errors = {} }) {
       </${Field}>
       <${Field} label=${t.mcpCwd} wide as="div" hint=${t.mcpCwdHint}>
         <div class="md-inline">
-          <input class="input mono" value=${form.cwd} spellcheck="false" autocomplete="off" placeholder="~/code/project" disabled=${readOnly}
+          <input class="input mono" value=${form.cwd} spellcheck=${false} autocomplete="off" placeholder="~/code/project" disabled=${readOnly}
             aria-label=${t.mcpCwd} onInput=${(e) => set({ cwd: e.currentTarget.value })} />
           ${readOnly ? null : html`<button type="button" class="btn btn-small" onClick=${pickFolder}><${IconFolder} size=${14} />${t.chooseFolder}</button>`}
         </div>
       </${Field}>`
     : html`
       <${Field} label=${t.mcpUrl} wide error=${errors.url}>
-        <input class="input mono" type="url" value=${form.url} spellcheck="false" autocomplete="off" placeholder="https://mcp.example.com/mcp"
+        <input class="input mono" type="url" value=${form.url} spellcheck=${false} autocomplete="off" placeholder="https://mcp.example.com/mcp"
           disabled=${readOnly} onInput=${(e) => set({ url: e.currentTarget.value.trim() })} />
       </${Field}>
       <${Field} label=${t.mcpAuth} wide as="div" hint=${t.mcpAuthHints[form.auth]}>
@@ -239,11 +239,11 @@ export function ServerForm({ form, onChange, editing, readOnly, errors = {} }) {
       </${Field}>
       ${form.auth === 'bearer' ? html`
         <${Field} label=${t.mcpToken} error=${errors.bearer}>
-          <input class="input mono" type="password" value=${form.bearerToken} autocomplete="new-password" spellcheck="false" disabled=${readOnly}
+          <input class="input mono" type="password" value=${form.bearerToken} autocomplete="new-password" spellcheck=${false} disabled=${readOnly}
             placeholder=${form.storedToken ? t.mcpStored : t.mcpTokenPlaceholder} onInput=${(e) => set({ bearerToken: e.currentTarget.value })} />
         </${Field}>
         <${Field} label=${t.mcpTokenEnv} hint=${t.mcpTokenEnvHint}>
-          <input class="input mono" value=${form.bearerEnv} spellcheck="false" autocomplete="off" placeholder="LINEAR_API_KEY" disabled=${readOnly}
+          <input class="input mono" value=${form.bearerEnv} spellcheck=${false} autocomplete="off" placeholder="LINEAR_API_KEY" disabled=${readOnly}
             onInput=${(e) => set({ bearerEnv: e.currentTarget.value.replace(/[^A-Za-z0-9_]/g, '') })} />
         </${Field}>` : null}
       <${Field} label=${form.auth === 'headers' ? t.mcpHeaders : t.mcpHeadersExtra} wide as="div" error=${errors.table}

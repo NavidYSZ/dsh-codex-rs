@@ -267,7 +267,7 @@ function BlankSkillDialog({ cwd, scope: initial, onClose, onCreated }) {
     <form id="sk-blank" class="md-form" onSubmit=${submit}>
       <${Field} label=${t.skName} wide error=${invalid ? t.skNameInvalid : error}
         hint=${clean ? html`${t.skNameHint} <span class="mono">/${clean}</span>` : t.skNameHint}>
-        <input class="input mono" value=${name} spellcheck="false" autocomplete="off" placeholder="release-notes" maxlength="64"
+        <input class="input mono" value=${name} spellcheck=${false} autocomplete="off" placeholder="release-notes" maxlength="64"
           onInput=${(e) => { setName(slug(e.currentTarget.value)); setError(null); }} />
       </${Field}>
       <${Field} label=${t.skDescription} wide hint=${t.skDescriptionHint}>
@@ -372,7 +372,7 @@ export function SkillsTab() {
     <div class="xe-toolbar">
       <label class="xe-search">
         <${IconSearch} size=${14} />
-        <input type="search" value=${query} placeholder=${t.skSearch} aria-label=${t.skSearch} spellcheck="false"
+        <input type="search" value=${query} placeholder=${t.skSearch} aria-label=${t.skSearch} spellcheck=${false}
           onInput=${(e) => setQuery(e.currentTarget.value)} onKeyDown=${(e) => { if (e.key === 'Escape' && query) { e.stopPropagation(); setQuery(''); } }} />
       </label>
       <${NewSkillButton} rows=${rows} onBlank=${() => setBlank('personal')} />
