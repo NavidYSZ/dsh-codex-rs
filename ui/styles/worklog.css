@@ -1,0 +1,52 @@
+/* Work details: the status line of a run of steps (dsh ProcessGroupHeader),
+   one-line reasoning (dsh ReasoningRow) and the line a finished turn folds
+   into (dsh TurnProcessNodeView). Rows reuse .row, .lead, .chev from app.css. */
+
+.wl-group { display: flex; flex-direction: column; min-width: 0; }
+.wl-group + .wl-group, .tool + .wl-group, .wl-group + .tool, .wl-reasoning + .tool, .tool + .wl-reasoning { margin-top: 2px; }
+.md + .wl-group, .wl-group + .md { margin-top: 6px; }
+
+.wl-head .shimmer-wrap { flex: 0 1 auto; min-width: 0; }
+.row-title.wl-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wl-head:not(.is-expandable) { cursor: default; }
+
+/* The steps of an opened group hang off a hairline. */
+.wl-body {
+  display: flex; flex-direction: column; min-width: 0;
+  margin: 2px 0 8px 7px; padding-left: 14px; border-left: 1px solid var(--line-2);
+  animation: wl-in .16s ease-out;
+}
+@keyframes wl-in { from { opacity: 0; transform: translateY(-3px); } }
+
+/* Reasoning in one line: label · first line; the live line shimmers. */
+.wl-preview { color: var(--ink-caption); }
+.row:hover .wl-preview { color: var(--ink-3); }
+.wl-preview.is-live {
+  background: linear-gradient(90deg, var(--ink-caption) 0%, var(--ink-caption) 38%, var(--ink-2) 50%, var(--ink-caption) 62%, var(--ink-caption) 100%);
+  background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+.wl-reasoning .reasoning-body { margin-left: 7px; }
+
+/* "Completed in 1m 20s · 12 tool calls · $0.0031" */
+.wl-turn {
+  display: flex; align-items: center; gap: 2px; min-width: 0; margin: 2px 0 10px; padding-bottom: 6px;
+  border-bottom: .5px solid var(--line-2); color: var(--ink-3); font-size: 13px; line-height: 24px;
+}
+.wl-turn.is-folded { margin-bottom: 12px; }
+.wl-turn-btn {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 0; border: 0; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer; transition: color .15s;
+}
+.wl-turn-btn:disabled { cursor: default; }
+.wl-turn-btn:not(:disabled):hover { color: var(--ink); }
+.wl-turn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wl-turn-chev { display: inline-flex; flex: none; transition: transform .15s; transform: rotate(180deg); }
+.wl-turn.is-folded .wl-turn-chev { transform: none; }
+.wl-turn .ub-wrap { flex: none; }
+.wl-turn .ub-wrap::before { content: '·'; margin: 0 2px 0 4px; color: var(--ink-caption); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wl-body { animation: none; }
+  .wl-preview.is-live { animation: none; color: var(--ink-3); background: none; }
+}

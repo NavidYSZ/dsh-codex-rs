@@ -1,0 +1,134 @@
+/* Context, cache and cost under the composer, their popovers, the cost of a
+   turn and Settings → Usage. Series colours: the first three slots of the
+   dataviz reference palette (blue, orange, aqua), validated for CVD in light
+   and dark; a fourth model and beyond fold into a neutral "other". */
+:root {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-other: #1a1c1f40;
+}
+:root[data-theme="dark"] {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-other: #ffffff40;
+}
+
+/* ---- the bar: three quiet chips, right-aligned under the composer ---------- */
+
+.usage-bar { display: flex; justify-content: flex-end; align-items: center; gap: 2px; min-width: 0; padding: 6px 4px 0; }
+.ub-wrap { position: relative; display: inline-flex; min-width: 0; }
+.ub-chip {
+  height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; min-width: 0;
+  border: 0; border-radius: 999px; background: none; color: var(--ink-3); font-size: 12px;
+  font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s;
+}
+.ub-chip:hover, .ub-chip[aria-expanded="true"] { background: var(--hover); color: var(--ink-2); }
+.ub-chip .icon { flex: none; }
+
+.ub-ring { flex: none; color: var(--ink-3); }
+.ub-ring-track { fill: none; stroke: var(--line-4); stroke-width: 2; }
+.ub-ring-fill { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.ub-ring.is-high { color: var(--warn); }
+.ub-ring.is-full { color: var(--error); }
+
+/* ---- popovers (dsh stat dialog) -------------------------------------------- */
+
+.ub-pop {
+  position: fixed; left: -9999px; top: 0; z-index: 60; box-sizing: border-box;
+  width: max-content; min-width: min(280px, calc(100vw - 16px)); max-width: min(360px, calc(100vw - 16px));
+  padding: 14px; border-radius: 14px; background: var(--menu); box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
+  color: var(--ink-2); font-size: 12.5px; line-height: 18px; text-align: left; white-space: normal; cursor: default;
+  animation: menu-in .14s ease-out;
+}
+.ub-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; color: var(--ink); font-weight: 500; }
+.ub-head-title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.ub-head-value { flex: none; font-variant-numeric: tabular-nums; }
+.ub-rule { margin-bottom: 10px; border-top: .5px solid var(--line-3); }
+.ub-rows { display: grid; grid-template-columns: minmax(84px, auto) minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+.ub-rows dt { display: inline-flex; align-items: center; min-width: 0; color: var(--ink-3); }
+.ub-rows dd { min-width: 0; margin: 0; text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ub-note { color: var(--ink-3); }
+.ub-route { overflow-wrap: anywhere; }
+.ub-section { margin: 12px 0 8px; padding-top: 10px; border-top: .5px solid var(--line-3); color: var(--ink); font-weight: 500; }
+.ub-foot { margin: 10px 0 0; color: var(--ink-3); font-size: 12px; line-height: 17px; }
+.ub-link {
+  display: inline-flex; align-items: center; gap: 2px; margin-top: 12px; padding: 0; border: 0; background: none;
+  color: var(--link); font-size: 12.5px; font-weight: 500; cursor: pointer;
+}
+
+/* Context composition: segments scaled to the measured occupancy (dsh ContextMeter). */
+.ub-meter { display: flex; gap: 2px; height: 6px; margin: 2px 0 12px; border-radius: 999px; background: var(--hover); overflow: hidden; }
+.ub-seg { flex: none; height: 100%; border-radius: 2px; }
+.ub-seg-system { background: var(--series-1); }
+.ub-seg-tools { background: var(--series-2); }
+.ub-seg-messages { background: var(--series-3); }
+.ub-swatch { display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
+
+/* The cost of a turn in its folded line. */
+.ub-chip.ub-turn { height: 22px; padding: 0 6px; margin-left: -2px; font-size: 13px; }
+
+/* ---- Settings → Usage --------------------------------------------------------- */
+
+.uv { scroll-margin-top: 16px; }
+.uv-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.uv-title-row .card-title { margin: 4px 0 0; }
+.uv-lead { margin: 6px 0 12px; font-size: 12px; color: var(--ink-3); }
+.uv-state { padding: 18px 0 20px; font-size: 13px; color: var(--ink-3); }
+.uv-body { transition: opacity .15s; }
+.uv-body.is-loading { opacity: .55; }
+.uv-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.uv-tile { padding: 10px 12px; border-radius: 12px; background: var(--bg-module); min-width: 0; }
+.uv-tile-label { font-size: 12px; color: var(--ink-3); }
+.uv-tile-value { margin-top: 2px; font-size: 17px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uv-sub { margin: 18px 0 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+
+/* Bars: 4 px rounded tops on the baseline, 2 px gaps between stacked models. */
+.uv-chart { min-width: 0; }
+.uv-bars { display: flex; align-items: stretch; gap: 3px; height: 120px; padding-bottom: 18px; border-bottom: 0; position: relative; }
+.uv-col { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 4px; }
+.uv-col::before { content: ''; position: absolute; inset: 0; border-radius: 4px; transition: background .12s; }
+.uv-col:hover::before { background: var(--hover); }
+.uv-stack { position: relative; display: flex; flex-direction: column; gap: 2px; min-height: 0; margin-bottom: 0; }
+.uv-seg { flex: 1 1 0; min-height: 2px; border-radius: 1px; }
+.uv-seg:first-child { border-radius: 4px 4px 1px 1px; }
+.uv-day { position: absolute; left: 0; right: 0; bottom: -18px; height: 16px; font-size: 11px; line-height: 16px; text-align: center; color: var(--ink-caption); font-variant-numeric: tabular-nums; }
+.uv-s1 { background: var(--series-1); }
+.uv-s2 { background: var(--series-2); }
+.uv-s3 { background: var(--series-3); }
+.uv-other { background: var(--series-other); }
+.uv-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.uv-legend span { display: inline-flex; align-items: center; }
+.uv-swatch { display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
+
+.uv-table { display: flex; flex-direction: column; }
+.uv-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 16px;
+  min-height: 34px; padding: 6px 0; border: 0; border-top: .5px solid var(--line-2); background: none;
+  color: var(--ink-2); font-size: 13px; text-align: left; width: 100%;
+}
+.uv-row:first-child { border-top: 0; }
+.uv-headrow { min-height: 24px; padding: 0 0 2px; font-size: 11.5px; color: var(--ink-3); }
+.uv-headrow .uv-num { color: var(--ink-3); }
+.uv-row.uv-chat { grid-template-columns: minmax(0, 1fr) auto auto; cursor: pointer; border-radius: 0; }
+.uv-row.uv-chat:hover .uv-chat-title { color: var(--link); }
+.uv-name { display: flex; align-items: center; gap: 0; min-width: 0; color: var(--ink); overflow: hidden; white-space: nowrap; }
+.uv-row.uv-chat .uv-name { flex-direction: column; align-items: flex-start; gap: 1px; }
+.uv-chat-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.uv-dim { margin-left: 8px; color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.uv-row.uv-chat .uv-dim { margin-left: 0; max-width: 100%; }
+.uv-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink-3); }
+.uv-strong { color: var(--ink); font-weight: 500; }
+
+@media (max-width: 860px) {
+  .uv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .uv-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .uv-row > :nth-child(3):not(:last-child) { display: none; }
+  .usage-bar { justify-content: flex-end; }
+}
+@media (max-width: 480px) {
+  .ub-chip { padding: 0 6px; }
+  .uv-bars { gap: 2px; }
+}

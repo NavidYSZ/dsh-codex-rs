@@ -121,6 +121,10 @@ class HttpApi {
   deleteSchedule(id) { return this.req('DELETE', `/api/schedules/${enc(id)}`); }
   scheduleHistory(id, limit = 20) { return this.req('GET', `/api/schedules/${enc(id)}/history?limit=${limit}`); }
   team(id) { return this.req('GET', `/api/sessions/${enc(id)}/team`); }
+  /** Tokens, USD costs and timings of a chat; `fromTurn` limits the turn list. */
+  stats(id, fromTurn) { return this.req('GET', `/api/sessions/${enc(id)}/stats${fromTurn != null ? `?fromTurn=${fromTurn}` : ''}`); }
+  /** `{since, tz, top}` → usage of all chats per day and model, and the top chats. */
+  usage(query) { return this.req('GET', `/api/usage?${new URLSearchParams(query)}`); }
   deleteSession(id) { return this.req('DELETE', `/api/sessions/${enc(id)}`); }
   decide(callId, decision) { return this.req('POST', `/api/approvals/${enc(callId)}`, { decision }); }
   upload(file) { return this.req('POST', '/api/attachments', undefined, file); }
@@ -194,6 +198,7 @@ const DEFAULT_INFO = {
   settings: { model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask' },
   apiKeyConfigured: true,
   tools: { browser: true, app: true, computer: true },
+  ui: { workDetails: 'standard', performanceUsage: 'detailed' },
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -225,6 +230,9 @@ class FixtureApi {
     this.fx = fx;
     this.shared = shared;
     this.infoData = { ...DEFAULT_INFO, ...shared.info, ...fx.info };
+    // ?view=compact|standard|detailed|verbose picks the work-details view for screenshots.
+    const view = new URLSearchParams(location.search).get('view');
+    if (view) this.infoData.ui = { ...this.infoData.ui, workDetails: view };
     const s = fx.session;
     this.sessionData = s ? { header: s.header, events: s.events } : null;
     const live = this.speed === 0 ? s?.events.length ?? 0 : fx.live ?? s?.events.length ?? 0;
@@ -252,8 +260,9 @@ class FixtureApi {
 
   async updateSettings(patch) {
     await this.ready;
-    const { apiKey, ...rest } = patch;
+    const { apiKey, ui, ...rest } = patch;
     this.infoData.settings = { ...this.infoData.settings, ...rest };
+    if (ui) this.infoData.ui = { ...this.infoData.ui, ...ui };
     if (apiKey) this.infoData.apiKeyConfigured = true;
     return clone(this.infoData);
   }
@@ -464,6 +473,32 @@ class FixtureApi {
   async schedules() { return []; }
   async goal() { return { goal: null }; }
   async team() { throw new ApiError(404, 'team'); }
+
+  /** The fixture's `stats` came from the server's stats route; turns appear once they end. */
+  async stats(_id, fromTurn) {
+    await this.ready;
+    const s = this.fx.stats;
+    if (!s) throw new ApiError(404, 'stats');
+    const ended = new Set(this.history.filter((e) => e.type === 'turn/end').map((e) => e.data?.turn));
+    return clone({ ...s, turns: s.turns.filter((x) => ended.has(x.turn) && (fromTurn == null || x.turn >= fromTurn)) });
+  }
+
+  /** `_shared.json` holds a 7- and a 30-day report with days counted back from today. */
+  async usage({ since }) {
+    await this.ready;
+    const reports = this.shared.usage;
+    if (!reports) throw new ApiError(404, 'usage');
+    const span = Math.round((Date.now() - since) / 86400000);
+    const r = clone(span > 8 ? reports.month : reports.week);
+    const label = (ago) => {
+      const d = new Date();
+      d.setDate(d.getDate() - ago);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    for (const d of r.days) d.day = label(d.ago);
+    for (const c of r.topChats) c.updatedAt = Date.now() - (c.updatedAgo ?? 0);
+    return { ...r, since, until: Date.now() };
+  }
   assetUrl(url) { return url; }
 
   async files(_id, dir) {

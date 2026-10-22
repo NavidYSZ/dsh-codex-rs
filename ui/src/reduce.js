@@ -3,6 +3,7 @@
 // Only the events the UI needs are folded; everything else (request/header,
 // inbox splices, delivery receipts, unknown plugin events) is ignored, so a
 // log written by the official dsh renders too.
+import { groupItems, turnWork } from './worklog.js';
 
 export const CODEX_TOOLS = new Set(['computer', 'app', 'browser']);
 
@@ -244,6 +245,11 @@ export function buildTranscript(events) {
     }
   }
   if (lastTodoCall) lastTodoCall.latestTodo = true;
+  // Work groups and the fold of finished turns, once per event, not per render.
+  for (const tn of out.turns) {
+    Object.assign(tn, groupItems(tn.items, tn.end != null));
+    tn.work = turnWork(tn.items);
+  }
   return out;
 }
 

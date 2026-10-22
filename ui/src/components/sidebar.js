@@ -16,6 +16,7 @@ import {
 } from '../icons.js';
 import { Menu, MenuItem, ActionItem } from './common.js';
 import { WorkspaceMenu, workspaceName } from './composer.js';
+import { ViewModeItems } from './worklog.js';
 
 const PREVIEW = 5; // chats per project before "Show more"
 const enc = encodeURIComponent;
@@ -57,7 +58,8 @@ function RenameInput({ s }) {
 }
 
 /** Rename, pin, read state, archive and delete: in the row's "…" and on right-click. */
-export function ChatMenu({ s, open, onClose, anchor, at, side = 'bottom' }) {
+/** `view` adds the work-details switch (the chat header's menu). */
+export function ChatMenu({ s, open, onClose, anchor, at, side = 'bottom', view }) {
   const desktop = useStore(store, (st) => !!st.desktop);
   const copy = async () => {
     try { await navigator.clipboard.writeText(s.cwd); } catch { toast(s.cwd); }
@@ -69,6 +71,7 @@ export function ChatMenu({ s, open, onClose, anchor, at, side = 'bottom' }) {
     ${s.cwd ? html`<${ActionItem} icon=${html`<${IconCopy} size=${14} />`} onClick=${copy}>${t.copyPath}</${ActionItem}>` : null}
     ${desktop && s.cwd ? html`<${ActionItem} icon=${html`<${IconFolder} size=${14} />`} onClick=${() => window.dshxDesktop?.revealInFinder?.(s.cwd)}>${t.revealInFinder}</${ActionItem}>
       <${ActionItem} icon=${html`<${IconPencil} size=${14} />`} onClick=${() => window.dshxDesktop?.openInEditor?.(s.cwd)}>${t.openInEditor}</${ActionItem}>` : null}
+    ${view ? html`<${ViewModeItems} />` : null}
     <div class="menu-sep" />
     <${ActionItem} icon=${html`<${IconArchive} size=${14} />`} onClick=${() => setArchived(s.id, !s.archived)}>${s.archived ? t.unarchive : t.archive}</${ActionItem}>
     <${ActionItem} icon=${html`<${IconTrash} size=${14} />`} tone="danger" onClick=${() => deleteSession(s.id)}>${t.deleteChat}</${ActionItem}>

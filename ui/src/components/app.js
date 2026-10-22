@@ -55,7 +55,7 @@ function TopBar({ title, sub, row }) {
         aria-pressed=${panelOpen} onClick=${togglePanel}><${IconPanelRight} size=${16} /></button>` : null}
     ${row ? html`<button type="button" ref=${anchor} class="icon-btn" aria-label=${t.more} title=${t.more} aria-haspopup="menu"
         onClick=${() => setMenu((v) => !v)}><${IconMore} size=${16} /></button>
-      <${ChatMenu} s=${row} open=${menu} onClose=${() => setMenu(false)} anchor=${anchor} />` : null}
+      <${ChatMenu} s=${row} open=${menu} onClose=${() => setMenu(false)} anchor=${anchor} view />` : null}
   </header>`;
 }
 

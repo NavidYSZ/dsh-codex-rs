@@ -1,8 +1,8 @@
 // Composer seat: approval card, banners, the hero tray (workspace + access),
-// the borderless composer card and the faint stats line under it.
+// the borderless composer card and the usage bar under it.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
-import { t, compact } from '../i18n.js';
+import { t } from '../i18n.js';
 import { useStore } from '../store.js';
 import {
   store, api, send, cancel, decide, setComposer, pickWorkspace, addWorkspace, openSettings, fail,
@@ -14,6 +14,7 @@ import { Menu, MenuItem, ActionItem, Thumb } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
 import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
+import { UsageBar } from './usage.js';
 
 const ACCESS = ['read-only', 'workspace-write', 'danger-full-access'];
 
@@ -269,7 +270,7 @@ function ApprovalCard({ approval }) {
   </div>`;
 }
 
-// ---- banners and stats -------------------------------------------------------
+// ---- banners -----------------------------------------------------------------
 
 function Banners() {
   const info = useStore(store, (s) => s.info);
@@ -289,17 +290,6 @@ function Banners() {
   </div>`)}</div>`;
 }
 
-function Stats({ tx, sel }) {
-  const u = tx.usage;
-  if (!u.input && !u.output) return null;
-  const total = u.input + u.output;
-  const window = sel.modelInfo?.contextWindow ?? tx.contextWindow;
-  const parts = [sel.model, t.tokens(compact(total))];
-  if (u.input) parts.push(t.cached(Math.round((u.cached / u.input) * 100)));
-  if (window && u.lastInput) parts.push(t.context(Math.max(1, Math.round((u.lastInput / window) * 100))));
-  return html`<div class="stats">${parts.join(' · ')}</div>`;
-}
-
 export function ComposerSeat({ hero, tx }) {
   const sel = useSelection(tx);
   const approval = useApproval(tx);
@@ -310,7 +300,7 @@ export function ComposerSeat({ hero, tx }) {
       ${hero ? null : html`<${GoalBar} />`}
       ${hero ? html`<${HeroTray} sel=${sel} />` : null}
       <${Composer} hero=${hero} tx=${tx} />
-      ${hero ? null : html`<${Stats} tx=${tx} sel=${sel} />`}
+      ${hero ? null : html`<${UsageBar} />`}
     </div>
   </div>`;
 }
