@@ -11,7 +11,7 @@ import { workspaceName } from './composer.js';
 import { ModeSetting } from './modes.js';
 import { AppearanceCard } from './worklog.js';
 import { UsageCard } from './usage.js';
-import { ModelsSection, ModelSelect } from './models.js';
+import { ModelsSection, ModelSelect, modelHint } from './models.js';
 import { confirmFullAccess, FullAccessSetting } from './confirm.js';
 
 export function Segmented({ value, options, onChange, label }) {
@@ -70,7 +70,7 @@ export function Settings() {
       <section class="card">
         <h2 class="card-title">${t.defaults}</h2>
         <${ModeSetting} />
-        <${Field} label=${t.model}>
+        <${Field} label=${t.model} hint=${[modelHint(model), model?.offPeakCost ? t.pickerOffPeak : null].filter(Boolean).join(' · ')}>
           <${ModelSelect} value=${s.model} onChange=${(model) => updateSettings({ model })} />
         </${Field}>
         ${efforts.length ? html`<${Field} label=${t.effort}>

@@ -291,6 +291,13 @@ async fn providers_routes_and_a_chat_across_three_routes() {
         .unwrap();
     assert_eq!(sonnet["cost"]["input"], 2.0);
     assert_eq!(sonnet["providerName"], "Anthropic");
+    // DeepSeek rows carry the display name and the price book's list prices.
+    let flash = &info["models"][0];
+    assert_eq!(flash["id"], "deepseek-flash");
+    assert_eq!(flash["name"], "DeepSeek-V4.1-Flash");
+    assert_eq!(flash["cost"]["input"], 0.30);
+    assert_eq!(flash["cost"]["output"], 1.20);
+    assert_eq!(flash["offPeakCost"]["output"], 0.60);
     let groups: Vec<&str> = info["providers"]
         .as_array()
         .unwrap()

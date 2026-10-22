@@ -531,6 +531,11 @@ const EN = {
   mcpWarnSse: 'Uses the old SSE transport; dsh-codex speaks Streamable HTTP. Check the URL (often /mcp instead of /sse).',
   mcpWarnInput: 'Contains VS Code ${input:…} placeholders; enter those values yourself.', mcpWarnCommand: 'No command found.',
   mcpAdded: (n) => `${n} added`, mcpAddedMany: (n) => `${n} servers added`,
+
+  // ---- package H ----
+  pickerOffPeak: 'Off-peak: half price',
+  pickerPeakPrices: (peak, off) => `Peak hours: ${peak}\nOff-peak: ${off}`,
+  offPeakHint: 'Prices at peak hours (Monday to Friday, 01:00–04:00 and 06:00–10:00 UTC); all other hours cost half.',
 };
 
 const DE = {
@@ -1031,6 +1036,11 @@ const DE = {
   mcpWarnSse: 'Nutzt das alte SSE-Protokoll; dsh-codex spricht Streamable HTTP. Prüf die URL (oft /mcp statt /sse).',
   mcpWarnInput: 'Enthält ${input:…}-Platzhalter aus VS Code; trag diese Werte selbst ein.', mcpWarnCommand: 'Kein Befehl gefunden.',
   mcpAdded: (n) => `${n} hinzugefügt`, mcpAddedMany: (n) => `${n} Server hinzugefügt`,
+
+  // ---- package H ----
+  pickerOffPeak: 'Nebenzeit: halber Preis',
+  pickerPeakPrices: (peak, off) => `Spitzenzeit: ${peak}\nNebenzeit: ${off}`,
+  offPeakHint: 'Preise zur Spitzenzeit (Montag bis Freitag, 01:00–04:00 und 06:00–10:00 UTC); zu allen anderen Zeiten kostet es die Hälfte.',
 };
 
 export const t = de ? DE : EN;

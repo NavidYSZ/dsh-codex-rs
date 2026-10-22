@@ -174,6 +174,11 @@
   sharing the plugin's; `[codex.browser] mockKeychain` /
   `DSHX_BROWSER_MOCK_KEYCHAIN=1` start Chrome with `--use-mock-keychain`, which
   the Chrome tests now always do, so they never prompt for the login keychain.
+- DeepSeek models show their list prices like the other providers: the model
+  picker, Settings → Models and the default model in Settings give the peak
+  price per 1M tokens and note that off-peak hours cost half (`/api/info`
+  and `/api/providers` rows carry `cost` and `offPeakCost` from the usage
+  price book). Prices use the same currency format as the usage bar.
 
 ### Fixed
 

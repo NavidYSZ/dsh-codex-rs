@@ -10,6 +10,7 @@ import { store, api, fail, setComposer, openSettings } from '../state.js';
 import { IconChevronDown, IconChevronRight, IconSearch, IconPlus, IconTrash, IconX } from '../icons.js';
 import { Menu } from './common.js';
 import { useLoad } from './page.js';
+import { usd } from './usage.js';
 
 const DEEPSEEK = 'deepseek-official';
 const EFFORTS = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
@@ -39,7 +40,6 @@ export function formatCapacity(n) {
 
 /** Context sizes in the picker: 1M, 262K. */
 const tokens = (n) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
-const usd = (v) => `$${v < 1 ? v.toFixed(2) : +v.toFixed(2)}`;
 
 // ---- recently used ------------------------------------------------------------
 
@@ -64,13 +64,24 @@ export function modelGroups(info) {
 
 // ---- picker ---------------------------------------------------------------------
 
-function modelHint(m) {
+/** Input and output price per 1M tokens ("$0.30 / $1.20 per 1M"). */
+const priceText = (cost) => t.pickerPrice(usd(cost.input), usd(cost.output));
+
+/** Context, image input and the (peak) list price of a model. */
+export function modelHint(m) {
+  if (!m) return '';
   if (m.available === false) return t.pickerNoKey;
   const parts = [];
   if (m.contextWindow) parts.push(t.pickerContext(tokens(m.contextWindow)));
   if (m.inputModalities?.includes('image')) parts.push(t.pickerImage);
-  if (m.cost) parts.push(t.pickerPrice(usd(m.cost.input), usd(m.cost.output)));
+  if (m.cost) parts.push(priceText(m.cost));
   return parts.join(' · ');
+}
+
+/** DeepSeek's two clocks spelled out, for a tooltip; null for flat prices. */
+export function offPeakTitle(m) {
+  if (!m?.cost || !m.offPeakCost) return null;
+  return t.pickerPeakPrices(priceText(m.cost), priceText(m.offPeakCost));
 }
 
 function PickerBody({ sel, onClose }) {
@@ -140,13 +151,14 @@ function PickerBody({ sel, onClose }) {
     </label>
     <div class="mp-list" role="listbox" aria-label=${t.model} ref=${list}>
       ${sections.length ? sections.map((s) => html`<div class="mp-group" key=${s.key} role="group" aria-label=${s.title}>
-        <div class="menu-head">${s.title}</div>
+        <div class="menu-head mp-head">${s.title}${s.models.some((m) => m.offPeakCost)
+    ? html`<span class="mp-head-note">${t.pickerOffPeak}</span>` : null}</div>
         ${s.models.map((m) => {
           n += 1;
           const i = n;
           const checked = m.id === sel.model;
           return html`<button type="button" key=${`${s.key}:${m.id}`} role="option" aria-selected=${checked}
-            class=${cx('mp-row', i === cursor && 'is-cursor')} disabled=${m.available === false}
+            class=${cx('mp-row', i === cursor && 'is-cursor')} disabled=${m.available === false} title=${offPeakTitle(m)}
             onMouseMove=${() => { if (cursor !== i && m.available !== false) setCursor(i); }} onClick=${() => pick(m)}>
             <span class="mp-text"><span class="mp-name">${m.name ?? m.id}</span><span class="mp-hint">${modelHint(m)}</span></span>
             <span class="menu-check">${checked ? html`<svg width="16" height="16" viewBox="0 0 16 16"><path d="m3.5 8.25 2.9 2.9 6.1-6.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>` : null}</span>
@@ -529,7 +541,11 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
           ${editableModels ? html`<button type="button" class="link-btn" disabled=${!!busy || !askable}
             title=${askable ? null : t.fetchNeedsBaseUrl} onClick=${fetchModels}>${busy === 'fetch' ? t.fetching : t.fetchModels}</button>` : null}
         </div>
-        ${builtin ? html`<ul class="mo-fixed">${provider.models.map((m) => html`<li key=${m.id}><span>${m.name}</span><span class="mono">${m.id}</span></li>`)}</ul>`
+        ${builtin ? html`<ul class="mo-fixed">${provider.models.map((m) => html`<li key=${m.id} title=${offPeakTitle(m)}>
+          <span class="mo-fixed-name">${m.name}<span class="mono">${m.id}</span></span>
+          ${m.cost ? html`<span class="mo-fixed-price">${priceText(m.cost)}</span>` : null}
+        </li>`)}</ul>
+          ${provider.models.some((m) => m.offPeakCost) ? html`<p class="md-hint">${t.offPeakHint}</p>` : null}`
         : html`${rows.length ? null : html`<p class="md-hint">${t.modelsEmpty}</p>`}
           <div class="mo-model-list">${rows.map((r, i) => html`<${ModelRow} key=${r.key} row=${r} n=${i + 1} open=${open.has(r.key)}
             onToggle=${() => setOpen((s) => { const next = new Set(s); if (!next.delete(r.key)) next.add(r.key); return next; })}

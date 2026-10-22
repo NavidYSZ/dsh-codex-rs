@@ -247,12 +247,13 @@ const DEFAULT_INFO = {
   platform: 'darwin',
   locale: 'en',
   models: [
-    { id: 'deepseek-flash', name: 'deepseek-flash', contextWindow: 1000000, inputModalities: ['text', 'image'],
-      reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high',
-      provider: 'deepseek-official', providerName: 'DeepSeek', model: 'deepseek-flash', available: true },
-    { id: 'deepseek-v4-pro', name: 'deepseek-v4-pro', contextWindow: 1000000, inputModalities: ['text'],
-      reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high',
-      provider: 'deepseek-official', providerName: 'DeepSeek', model: 'deepseek-v4-pro', available: true },
+    ...[['deepseek-flash', 'DeepSeek-V4.1-Flash', ['text', 'image'], 0.30, 1.20, 0.006], ['deepseek-v4-pro', 'DeepSeek-V4-Pro', ['text'], 1.32, 3.96, 0.044]]
+      .map(([id, name, inputModalities, input, output, cacheRead]) => ({
+        id, name, contextWindow: 1000000, inputModalities, reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high',
+        provider: 'deepseek-official', providerName: 'DeepSeek', model: id, available: true,
+        cost: { input, output, cacheRead, cacheWrite: input },
+        offPeakCost: { input: input / 2, output: output / 2, cacheRead: cacheRead / 2, cacheWrite: input / 2 },
+      })),
     ...[['claude-opus-5-5', 'Claude Opus 5.5', 4, 20], ['claude-sonnet-5-5', 'Claude Sonnet 5.5', 2, 10]].map(([model, name, input, output]) => ({
       id: `anthropic/${model}`, name, contextWindow: 1000000, maxTokens: 128000, inputModalities: ['text', 'image'],
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultReasoningEffort: 'high',
@@ -301,7 +302,7 @@ function fixtureProviders() {
       defaultBaseUrl: 'https://api.deepseek.com/anthropic', apiKeyEnv: 'DEEPSEEK_API_KEY', builtin: true, catalog: true,
       modelsEditable: false, key: { configured: true, source: 'stored', locked: false, required: true }, headers: [],
       models: DEFAULT_INFO.models.filter((m) => m.provider === 'deepseek-official')
-        .map((m) => ({ id: m.id, ref: m.id, name: m.name, contextWindow: m.contextWindow, input: m.inputModalities, reasoningEfforts: m.reasoningEfforts })),
+        .map((m) => ({ id: m.id, ref: m.id, name: m.name, contextWindow: m.contextWindow, input: m.inputModalities, reasoningEfforts: m.reasoningEfforts, cost: m.cost, offPeakCost: m.offPeakCost })),
     },
     {
       id: 'anthropic', name: 'Anthropic', api: 'anthropic-messages', baseUrl: 'https://api.anthropic.com',

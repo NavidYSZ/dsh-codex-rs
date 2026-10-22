@@ -157,3 +157,11 @@
   .mo-text { flex: 1 1 calc(100% - 44px); }
   .mo-actions { margin-left: 44px; }
 }
+
+/* ---- package H: DeepSeek list prices ---------------------------------------------- */
+
+.mp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mp-head-note { font-weight: 400; color: var(--ink-caption); }
+.mo-fixed li { align-items: baseline; }
+.mo-fixed-name { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.mo-fixed-price { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
