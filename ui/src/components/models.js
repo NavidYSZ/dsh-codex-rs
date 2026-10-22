@@ -451,7 +451,7 @@ function ProviderEditor({ mode, provider, entry, takenIds, onClose, onSaved }) {
     : form.baseUrl.trim() && !isHttpUrl(form.baseUrl.trim()) ? t.customBaseUrlInvalid : null;
   const keyError = keyOk(form.key) ? null : t.keyIllegal;
   const modelsError = rowsError(rows) ?? (custom && !rows.length ? t.customNeedsModels : null);
-  const protocolError = custom && !form.api ? t.protocolUnset : null;
+  const protocolError = custom && !form.api ? t.protocolRequired : null;
   const invalid = idError || urlError || keyError || modelsError || protocolError;
   const editableModels = mode !== 'catalog' && !builtin;
   const targetId = mode === 'custom' ? form.id : (provider ?? entry).id;
