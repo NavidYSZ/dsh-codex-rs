@@ -15,6 +15,7 @@ import { Markdown } from './transcript.js';
 import { useSelection } from './composer.js';
 import { editProvider } from './models.js';
 import { shortTokens } from './usage.js';
+import { compactChat } from './composer-extras.js';
 
 const S = { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
 const IconBranch = ({ size = 14 }) => html`<svg class="icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true">
@@ -156,7 +157,8 @@ export function FailureNotice({ item, turn, acts, cwd }) {
   const code = f.code ?? '';
   const known = t.failure[code];
   const provider = item.provider ?? acts.provider;
-  const retry = code === 'CONTEXT_WINDOW_EXCEEDED' ? null : acts.retry(turn);
+  const full = code === 'CONTEXT_WINDOW_EXCEEDED';
+  const retry = acts.retry(turn);
   const top = code === 'QUOTA' ? TOP_UP[provider] : null;
   const buttons = [];
   if (code === 'AUTH') buttons.push(html`<button type="button" key="key" class="btn btn-small btn-primary" onClick=${() => editProvider(provider)}>${t.checkKey}</button>`);
@@ -166,8 +168,10 @@ export function FailureNotice({ item, turn, acts, cwd }) {
   } else if (code === 'QUOTA') {
     buttons.push(html`<button type="button" key="prov" class="btn btn-small" onClick=${() => editProvider(provider)}>${t.providerSettings}</button>`);
   }
-  if (code === 'CONTEXT_WINDOW_EXCEEDED') buttons.push(html`<button type="button" key="new" class="btn btn-small" onClick=${() => newChat(cwd)}>${t.newChatAction}</button>`);
+  // A full context: compact (dsh /compact), then send again, or move on in a new chat.
+  if (full && retry) buttons.push(html`<button type="button" key="compact" class="btn btn-small btn-primary" onClick=${compactChat}>${t.ciCompactNow}</button>`);
   if (retry) buttons.push(html`<button type="button" key="retry" class="btn btn-small" onClick=${retry}><${IconRefresh} size=${13} />${t.resend}</button>`);
+  if (full) buttons.push(html`<button type="button" key="new" class="btn btn-small" onClick=${() => newChat(cwd)}>${t.newChatAction}</button>`);
   const codeTag = code ? html`<span class="notice-code">${code}${f.status ? ` · ${f.status}` : ''}</span>` : null;
   return html`<div class="notice notice-error" role="alert" data-code=${code || undefined}>
     <span class="notice-icon"><${IconAlert} size=${16} /></span>
