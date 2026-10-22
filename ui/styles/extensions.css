@@ -126,3 +126,9 @@ html.dshx-desktop .dr-panel { padding-top: env(safe-area-inset-top); }
 /* A plugin card an @plugin pill pointed at. */
 .plug-card { transition: box-shadow .2s; }
 .plug-card.is-focus { box-shadow: 0 0 0 1.5px var(--accent), 0 0 0 5px color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* "Add marketplace": the accepted sources and the clone in progress. */
+.mk-examples { margin: 0; padding: 8px 12px; list-style: none; display: flex; flex-direction: column; gap: 4px; border-radius: 10px; background: var(--bg-module); }
+.mk-examples li { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 12px; color: var(--ink-3); }
+.mk-examples code { flex: none; font-size: 12px; color: var(--ink-2); }
+.mk-progress { display: flex; align-items: center; gap: 8px; }

@@ -191,6 +191,12 @@
   failure notice) open the right pane. The Plugins page's tabs are
   deep-linkable the same way (`#/plugins/skills`, `#/plugins/mcp`), and
   "Manage skills" / "Manage apps" in the composer menus open their tab.
+- **"Add marketplace" is a dialog** like "Add server": the source (GitHub
+  `owner/repo`, a Git URL or a local folder) with a live note on what will
+  be cloned or read, an optional branch or tag, the accepted forms, progress
+  while the repository is cloned and errors in plain words (already added,
+  no catalog, repository not found or private). The Plugins tab gets the
+  button in its toolbar, and empty marketplaces say so.
 
 ### Fixed
 
