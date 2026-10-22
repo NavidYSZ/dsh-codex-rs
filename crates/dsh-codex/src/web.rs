@@ -233,7 +233,9 @@ impl WebBackend {
                 "effort": effort,
                 "sandbox": config.sandbox,
                 "approval": config.approval,
+                "defaultPreset": crate::presets::default_of(&config).id(),
             },
+            "presets": crate::presets::catalog(),
             "apiKeyConfigured": self.runtime.api_key_configured(),
             "tools": { "browser": browser, "app": app, "computer": computer },
             "automation": self.runtime.automation.features(),
@@ -281,7 +283,15 @@ impl Backend for WebBackend {
             self.runtime.set_api_key(key.as_str())?;
         }
         let sandbox = parse_sandbox(patch.get("sandbox").and_then(Value::as_str))?;
+        let preset = patch
+            .get("defaultPreset")
+            .and_then(Value::as_str)
+            .map(crate::presets::parse)
+            .transpose()?;
         self.runtime.update_config(|c| {
+            if let Some(p) = preset {
+                c.default_preset = Some(p.id().to_owned());
+            }
             if let Some(m) = patch.get("model").and_then(Value::as_str) {
                 c.model = m.to_owned();
             }
@@ -361,6 +371,19 @@ impl Backend for WebBackend {
     }
 
     async fn create_session(&self, cwd: String) -> anyhow::Result<String> {
+        self.create_session_with_preset(cwd, None).await
+    }
+
+    async fn create_session_with_preset(
+        &self,
+        cwd: String,
+        preset: Option<String>,
+    ) -> anyhow::Result<String> {
+        // Chosen at the start and fixed for the chat's life (prompt cache).
+        let preset = match preset.as_deref() {
+            Some(id) => crate::presets::parse(id)?,
+            None => self.runtime.default_preset(),
+        };
         // No folder: the chat gets a private one that never shows up as a project.
         let scratch = cwd.trim().is_empty();
         let dir = if scratch {
@@ -371,8 +394,10 @@ impl Backend for WebBackend {
                 .map_err(|e| anyhow::anyhow!("{cwd}: {e}"))?
         };
         anyhow::ensure!(dir.is_dir(), "{} is not a folder", dir.display());
-        let log: Arc<dyn SessionLog> =
-            Arc::new(self.runtime.store.create(&dir.display().to_string())?);
+        let log: Arc<dyn SessionLog> = Arc::new(
+            self.runtime
+                .create_session(&dir.display().to_string(), Some(preset))?,
+        );
         let id = log.id().to_owned();
         let s = self.start_agent(&id, log, dir.clone(), &Overrides::default());
         self.open.lock().await.insert(id.clone(), s);
@@ -605,7 +630,11 @@ impl Backend for WebBackend {
     }
 
     async fn goal_command(&self, id: &str, body: Value) -> anyhow::Result<Value> {
-        self.session_handle(id, &Overrides::default()).await?;
+        let s = self.session_handle(id, &Overrides::default()).await?;
+        anyhow::ensure!(
+            s.agent.config().preset != dshx_agent::Preset::Minimal,
+            "goals are not part of Minimal mode; start a Standard chat for a goal"
+        );
         crate::automation::goal_command(&self.runtime, id, &body).await
     }
 

@@ -33,8 +33,9 @@ mod title;
 
 pub use agent::{Agent, AgentDeps};
 pub use config::{
-    AgentConfig, ApprovalPolicy, CompactionConfig, ExtraSection, InstructionsConfig, PromptConfig,
-    PrunerConfig, RepeatReminderConfig, RouteCapabilities, TitleConfig, ToolUpdate,
+    AgentConfig, ApprovalPolicy, CompactionConfig, ExtraSection, InstructionsConfig,
+    MINIMAL_PERSONA, Preset, PromptConfig, PrunerConfig, RepeatReminderConfig, RouteCapabilities,
+    TitleConfig, ToolUpdate,
 };
 pub use events::{CancelCause, TurnEndReason, TurnOutcome};
 pub use hooks::{PreStep, PreStepHook};

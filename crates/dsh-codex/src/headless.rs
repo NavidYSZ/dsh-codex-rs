@@ -17,6 +17,8 @@ pub struct HeadlessArgs {
     pub session_id: Option<String>,
     pub json: bool,
     pub overrides: Overrides,
+    /// Preset of a new session; `None` = the config's default.
+    pub preset: Option<dshx_agent::Preset>,
 }
 
 const MAX_STRING_BYTES: usize = 8 * 1024;
@@ -43,7 +45,14 @@ pub async fn run(runtime: Arc<Runtime>, args: HeadlessArgs) -> anyhow::Result<i3
             }
             Arc::new(log)
         }
-        None => Arc::new(runtime.store.create(&cwd_text)?),
+        None => {
+            // Recorded only when one was chosen, so plain runs stay as before.
+            let configured = runtime.config().default_preset.is_some();
+            let preset = args
+                .preset
+                .or_else(|| configured.then(|| runtime.default_preset()));
+            Arc::new(runtime.create_session(&cwd_text, preset)?)
+        }
     };
 
     let reasoning = (!args.json).then(|| Arc::new(ReasoningToStderr::default()));

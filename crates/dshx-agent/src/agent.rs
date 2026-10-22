@@ -511,13 +511,15 @@ impl Agent {
         }
     }
 
-    /// Stops background work (title generation, the session's jobs) and
-    /// cancels a running turn.
+    /// Stops background work (title generation, the session's jobs and
+    /// persistent shells) and cancels a running turn.
     pub async fn dispose(&self) {
         self.cancel_with(CancelCause::Disposed, false).await;
         self.inner.lifetime.cancel();
         if let Some(state) = &self.inner.tools_state {
-            state.jobs().shutdown(Some(&self.inner.journal.id()));
+            let id = self.inner.journal.id();
+            state.jobs().shutdown(Some(&id));
+            state.shells().close(Some(&id));
         }
     }
 }

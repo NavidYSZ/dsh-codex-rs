@@ -4,6 +4,7 @@ mod chats;
 mod headless;
 mod jsonrpc;
 mod live;
+mod presets;
 mod runtime;
 mod sdk;
 mod web;
@@ -45,6 +46,10 @@ struct Cli {
     /// Continue an existing session.
     #[arg(long = "session-id")]
     session_id: Option<String>,
+    /// Agent preset of a new session: standard or minimal (default: the
+    /// config's `default_preset`). A session keeps its preset.
+    #[arg(long, value_parser = parse_preset)]
+    preset: Option<dshx_agent::Preset>,
     /// Compatibility with `dsh --profile <headless|web|sdk>` (used by the dsh Python SDK).
     #[arg(long, hide = true)]
     profile: Option<String>,
@@ -73,6 +78,10 @@ enum Command {
     Login,
     /// Remove the stored API key.
     Logout,
+}
+
+fn parse_preset(s: &str) -> Result<dshx_agent::Preset, String> {
+    presets::parse(s).map_err(|e| e.to_string())
 }
 
 fn parse_sandbox(s: &str) -> Result<SandboxMode, String> {
@@ -164,12 +173,17 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
             };
             anyhow::ensure!(!task.trim().is_empty(), "the task is empty");
             let runtime = start().await?;
+            anyhow::ensure!(
+                cli.preset.is_none() || cli.session_id.is_none(),
+                "--preset only applies to new sessions; a session keeps the preset it started with"
+            );
             let args = headless::HeadlessArgs {
                 task,
                 cwd,
                 session_id: cli.session_id,
                 json: cli.json,
                 overrides,
+                preset: cli.preset,
             };
             headless::run(runtime, args).await
         }

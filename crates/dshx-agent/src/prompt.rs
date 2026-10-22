@@ -60,6 +60,15 @@ pub(crate) struct Variables<'a> {
 
 /// The sections dsh contributes for the given tool set, in assembly order.
 pub(crate) fn sections(config: &PromptConfig, tool_names: &[String]) -> Vec<Section> {
+    if config.complete {
+        // dsh restores a complete persona as the sole section.
+        return vec![Section {
+            name: "deployment:persona-prefix".into(),
+            order: 0,
+            text: config.persona_prefix.clone(),
+            literal: false,
+        }];
+    }
     let has = |n: &str| tool_names.iter().any(|t| t == n);
     let mut out: Vec<Section> = Vec::new();
     let mut add = |name: &str, order: i64, text: String| {
