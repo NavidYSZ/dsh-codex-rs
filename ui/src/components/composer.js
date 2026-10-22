@@ -225,7 +225,10 @@ function ApprovalCard({ approval }) {
 
 // ---- banners -----------------------------------------------------------------
 
-function Banners() {
+/** Whether the chat's last turn ended with a failure card (it says what happened). */
+const failureShown = (tx) => !!tx?.turns[tx.turns.length - 1]?.items.some((x) => x.kind === 'notice' && x.code === 'error');
+
+function Banners({ tx }) {
   const info = useStore(store, (s) => s.info);
   const conn = useStore(store, (s) => s.conn);
   const statusError = useStore(store, (s) => s.statusError);
@@ -235,7 +238,7 @@ function Banners() {
   else if (conn === 'offline') list.push({ key: 'off', tone: 'error', text: t.offline });
   else if (conn === 'retry') list.push({ key: 'retry', tone: 'muted', text: t.reconnecting });
   if (info && !info.apiKeyConfigured) list.push({ key: 'key', tone: 'info', text: t.noKey, action: [t.openSettings, () => openSettings('models')] });
-  if (statusError) list.push({ key: 'status', tone: 'error', text: statusError });
+  if (statusError && !failureShown(tx)) list.push({ key: 'status', tone: 'error', text: statusError });
   if (toast) list.push({ key: 'toast', tone: 'error', text: toast });
   if (!list.length) return null;
   return html`<div class="banners">${list.map((b) => html`<div key=${b.key} class=${cx('banner', `tone-${b.tone}`)} role="status">
@@ -248,7 +251,7 @@ export function ComposerSeat({ hero, tx }) {
   const approval = useApproval(tx);
   return html`<div class=${cx('seat', hero && 'is-hero')}>
     <div class="column seat-column">
-      <${Banners} />
+      <${Banners} tx=${tx} />
       ${approval ? html`<${ApprovalCard} approval=${approval} />` : null}
       ${hero ? null : html`<${GoalBar} />`}
       ${hero ? null : html`<${PlanBar} tx=${tx} />`}
