@@ -313,6 +313,7 @@ pub fn cost_json(cost: &ModelCost) -> Value {
     json!({
         "input": cost.input, "output": cost.output,
         "cacheRead": cost.cache_read, "cacheWrite": cost.cache_write,
+        "cacheReadPrice": cost.cache_read_price(), "cacheWritePrice": cost.cache_write_price(),
     })
 }
 

@@ -234,6 +234,10 @@
 - Changing a setting in the UI (skills, MCP switches, servers, providers,
   defaults) edits only the affected keys of `config.toml`: comments, order
   and formatting stay, and defaults that were left out are not written.
+- A model price left blank in Settings → Models is unknown, not free: the
+  form no longer saves blank cache prices as 0, and cache reads and writes
+  without a price are counted like uncached input (`[providers.*.models]`
+  `cost.cache_read` / `cache_write` are optional).
 
 ## 0.2.0 – 2026-10-17
 

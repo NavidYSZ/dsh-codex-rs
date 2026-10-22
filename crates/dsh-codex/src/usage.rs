@@ -181,8 +181,8 @@ pub fn price_book(config: &dshx_core::config::Config) -> PriceBook {
                     Price {
                         input: cost.input,
                         output: cost.output,
-                        cache_read: cost.cache_read,
-                        cache_write: cost.cache_write,
+                        cache_read: cost.cache_read_price(),
+                        cache_write: cost.cache_write_price(),
                     },
                 );
             }
@@ -1376,8 +1376,8 @@ mod tests {
             cost: Some(dshx_core::config::ModelCost {
                 input: 1.0,
                 output: 2.0,
-                cache_read: 0.5,
-                cache_write: 1.0,
+                cache_read: Some(0.5),
+                cache_write: None,
             }),
             ..Default::default()
         });
@@ -1387,6 +1387,8 @@ mod tests {
         assert!(book.quote("anthropic", "claude-sonnet-5-5", when).is_some());
         let lab = book.quote("lab", "local-model", when).unwrap();
         assert_eq!((lab.price.input, lab.price.output), (1.0, 2.0));
+        // An unknown cache price counts like uncached input, never as free.
+        assert_eq!((lab.price.cache_read, lab.price.cache_write), (0.5, 1.0));
         assert!(
             book.quote("deepseek-official", "deepseek-flash", when)
                 .is_some()

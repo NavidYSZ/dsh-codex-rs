@@ -317,7 +317,9 @@ function rowBody(r) {
   if (r.defaultEffort && r.efforts.includes(r.defaultEffort)) out.defaultEffort = r.defaultEffort;
   if (r.thinking) out.thinking = r.thinking;
   if (Object.values(r.cost).some((v) => String(v).trim())) {
-    out.cost = Object.fromEntries(Object.entries(r.cost).map(([k, v]) => [k, priceOf(v)]));
+    // A blank field is an unknown price (the server prices unknown cache
+    // tokens like input), not a free one.
+    out.cost = Object.fromEntries(Object.entries(r.cost).filter(([, v]) => String(v).trim()).map(([k, v]) => [k, priceOf(v)]));
   }
   return out;
 }
@@ -367,6 +369,7 @@ function ModelRow({ row, n, open, onToggle, onChange, onRemove }) {
           <input class="input" inputmode="decimal" value=${row.cost[k]} placeholder="–" aria-label=${`${label} ${n}`}
             onInput=${(e) => set({ cost: { ...row.cost, [k]: e.currentTarget.value } })} />
         </label>`)}
+        <span class="md-hint mo-price-hint">${t.priceBlankHint}</span>
       </fieldset>
     </div>` : null}
   </div>`;

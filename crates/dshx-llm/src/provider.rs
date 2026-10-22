@@ -422,9 +422,10 @@ fn resolve_model(
     }
     let cost = config.cost.or(known.and_then(|k| k.cost));
     if let Some(c) = &cost
-        && [c.input, c.output, c.cache_read, c.cache_write]
-            .iter()
-            .any(|p| !p.is_finite() || *p < 0.0)
+        && [Some(c.input), Some(c.output), c.cache_read, c.cache_write]
+            .into_iter()
+            .flatten()
+            .any(|p| !p.is_finite() || p < 0.0)
     {
         return Err(ConfigError(format!(
             "model {id:?}: prices must be non-negative numbers"
@@ -727,8 +728,8 @@ pub fn known_model(api: Api, id: &str) -> Option<ProviderModel> {
         cost: Some(ModelCost {
             input,
             output,
-            cache_read,
-            cache_write,
+            cache_read: Some(cache_read),
+            cache_write: Some(cache_write),
         }),
     })
 }
