@@ -92,10 +92,16 @@ fn parse_sandbox(s: &str) -> Result<SandboxMode, String> {
     })
 }
 
-/// Loads the runtime and connects the configured MCP servers.
-async fn start() -> anyhow::Result<Arc<Runtime>> {
+/// How long `web` waits for MCP servers before it serves the UI; a server
+/// that hangs in its handshake (an `npx` download, a dead remote) would
+/// otherwise hold the page, and the Mac app's instance, for up to a minute.
+const WEB_MCP_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Loads the runtime and connects the configured MCP servers, waiting at
+/// most `mcp_wait` (`None`: until every first attempt finished).
+async fn start(mcp_wait: Option<std::time::Duration>) -> anyhow::Result<Arc<Runtime>> {
     let runtime = Runtime::load()?;
-    runtime.start_mcp().await?;
+    runtime.start_mcp(mcp_wait).await?;
     Ok(runtime)
 }
 
@@ -161,8 +167,8 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
             port,
             no_open,
             ready_file,
-        }) => web::run(start().await?, port, !no_open, ready_file).await,
-        Some(Command::Sdk) => sdk::run(start().await?).await,
+        }) => web::run(start(Some(WEB_MCP_WAIT)).await?, port, !no_open, ready_file).await,
+        Some(Command::Sdk) => sdk::run(start(None).await?).await,
         None => {
             let task = match cli.task.as_deref() {
                 Some(t) if t != "-" => t.to_owned(),
@@ -174,7 +180,7 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
                 _ => anyhow::bail!("a task is required, for example: dsh-codex \"run the tests\""),
             };
             anyhow::ensure!(!task.trim().is_empty(), "the task is empty");
-            let runtime = start().await?;
+            let runtime = start(None).await?;
             anyhow::ensure!(
                 cli.preset.is_none() || cli.session_id.is_none(),
                 "--preset only applies to new sessions; a session keeps the preset it started with"

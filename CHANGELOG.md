@@ -222,6 +222,10 @@
   opens that skill's or server's drawer on its Plugins tab instead of only
   the Plugins page; an `@plugin` pill highlights the plugin's card, and a
   skill or server that is gone says so.
+- `dsh-codex web` (and with it the Mac app's instances) no longer waits up
+  to a minute for an MCP server that hangs in its handshake: after 3 s it
+  serves the UI and slow servers keep connecting in the background, shown
+  as "Connecting…". `run` and `sdk` still wait like dsh before the first turn.
 
 ## 0.2.0 – 2026-10-17
 

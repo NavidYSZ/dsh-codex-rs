@@ -188,9 +188,12 @@ impl Runtime {
 
     /// Connects the MCP servers of the config and of enabled plugins
     /// (concurrently, each bounded by its handshake timeout, like dsh before
-    /// its first turn). Without an enabled server this does nothing.
-    pub async fn start_mcp(&self) -> anyhow::Result<()> {
-        if let Err(e) = self.reload_extensions(None).await {
+    /// its first turn). `wait` bounds the wait: servers that take longer keep
+    /// connecting in the background (the web UI shows them as connecting),
+    /// and only failures within it count. Without an enabled server this
+    /// does nothing.
+    pub async fn start_mcp(&self, wait: Option<std::time::Duration>) -> anyhow::Result<()> {
+        if let Err(e) = self.reload_extensions(wait).await {
             self.mcp.shutdown().await;
             return Err(e);
         }
