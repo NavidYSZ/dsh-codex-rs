@@ -72,7 +72,7 @@ html.dshx-desktop .dr-panel { padding-top: env(safe-area-inset-top); }
 .dr-lead { margin: 0 0 14px; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
 .dr-section { margin-top: 18px; }
 .dr-section:first-child { margin-top: 0; }
-.dr-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-3); }
+.dr-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
 .dr-count { font-weight: 500; font-variant-numeric: tabular-nums; }
 .dr-setting { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--bg-module); }
 .dr-setting + .dr-setting { margin-top: 6px; }
@@ -132,3 +132,6 @@ html.dshx-desktop .dr-panel { padding-top: env(safe-area-inset-top); }
 .mk-examples li { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 12px; color: var(--ink-3); }
 .mk-examples code { flex: none; font-size: 12px; color: var(--ink-2); }
 .mk-progress { display: flex; align-items: center; gap: 8px; }
+
+/* Dialog footers share one button size with the Models dialogs. */
+.md-foot .btn-small { height: 30px; padding: 0 14px; font-size: 13px; }

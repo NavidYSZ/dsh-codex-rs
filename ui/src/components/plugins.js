@@ -13,6 +13,10 @@ import { SkillsTab } from './skills.js';
 import { McpTab, ServerDrawer } from './mcp.js';
 import { Dialog, Field } from './drawer.js';
 
+/** A list that failed to load: what happened and "Try again", like the Skills and MCP tabs. */
+const LoadFailed = ({ text, onRetry }) => html`<div class="page-empty xe-empty"><p>${text}</p>
+  <button type="button" class="btn btn-small" onClick=${onRetry}><${IconRefresh} size=${14} />${t.retry}</button></div>`;
+
 // ---- plugins and marketplaces -------------------------------------------------
 
 function PluginCard({ p, busy, run, focused }) {
@@ -173,7 +177,8 @@ function PluginsTab() {
     <section class="page-section">
       <h2 class="section-title">${t.installed}</h2>
       ${installed.length ? html`<div class="plug-grid">${installed.map((p) => html`<${PluginCard} key=${p.id} p=${p} busy=${busy} run=${run} focused=${p.id === focused} />`)}</div>`
-    : html`<div class="page-empty">${plugins.loading ? t.loading : markets.data?.length ? t.noPluginsPick : t.noPlugins}</div>`}
+    : plugins.error && !plugins.data ? html`<${LoadFailed} text=${t.pluginsLoadFailed} onRetry=${plugins.reload} />`
+      : html`<div class="page-empty">${plugins.loading ? t.loading : markets.data?.length ? t.noPluginsPick : t.noPlugins}</div>`}
     </section>
     ${(markets.data ?? []).map((m) => html`<section class="page-section" key=${m.name} data-market=${m.name}>
       <div class="section-head">
@@ -247,7 +252,8 @@ function ConnectorsTab() {
   const list = conns.data ?? [];
   return html`<div class="plug-grid">${list.map((c) => html`<${ConnectorCard} key=${c.id} c=${c} busy=${busy} run=${run}
     waiting=${waiting?.key === c.id} onLogin=${login} onOpen=${setOpened} />`)}</div>
-    ${!list.length ? html`<div class="page-empty">${conns.loading ? t.loading : '–'}</div>` : null}
+    ${list.length ? null : conns.error && !conns.data ? html`<${LoadFailed} text=${t.appsLoadFailed} onRetry=${conns.reload} />`
+    : html`<div class="page-empty">${conns.loading ? t.loading : t.noApps}</div>`}
     ${opened ? html`<${ServerDrawer} key=${opened} name=${opened} connectors=${list} onClose=${() => setOpened(null)}
       onChanged=${conns.reload} onLogin=${(name) => login(name, list.find((c) => c.servers?.includes(name))?.id)} />` : null}`;
 }
