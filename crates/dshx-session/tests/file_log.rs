@@ -353,3 +353,60 @@ async fn closing_an_empty_created_session_leaves_no_footprint() {
     assert!(!tmp.path().join("root").exists());
     assert!(store.list().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn seeded_session_keeps_seq_and_time_of_its_seed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = SessionStore::new(tmp.path().join("sessions"));
+    let cwd = cwd(&tmp);
+    let source = store.create(&cwd).unwrap();
+    let events = common::scripted_turn(&cwd, "run date", "call_1", "date", "Mon Oct 20\n", "done");
+    source.append(events).await.unwrap();
+    source.flush().await.unwrap();
+    let mut seed = source.events();
+    let last = seed.last().unwrap().clone();
+    seed.push(dshx_core::SessionEvent {
+        kind: "session/end-seed".into(),
+        seq: last.seq + 1,
+        time: last.time,
+        data: json!({"inherited": true}),
+        extra: Default::default(),
+    });
+
+    let mut header = SessionStore::new_header(&cwd);
+    header
+        .extra
+        .insert("parentSession".into(), json!(source.id()));
+    assert!(
+        matches!(
+            store.create_seeded(header.clone(), seed.clone()),
+            Err(SessionError::InvalidEvent(_))
+        ),
+        "an unseeded header refuses an inherited cut"
+    );
+    header.is_seeded = true;
+    let child = store.create_seeded(header.clone(), seed.clone()).unwrap();
+    let next = child
+        .append(vec![NewEvent::new("session/end-seed", json!({}))])
+        .await
+        .unwrap();
+    assert_eq!(next[0].seq, seed.len() as u64);
+    child.flush().await.unwrap();
+
+    let stored = store.read(&header.id).unwrap();
+    assert_eq!(stored.header, header);
+    assert_eq!(&stored.events[..seed.len()], &seed[..], "seq and time kept");
+    validate_log(&stored.header, &stored.events).unwrap();
+    let row = store
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|r| r.id == header.id)
+        .unwrap();
+    assert_eq!(row.parent_session.as_deref(), Some(source.id()));
+    assert_eq!(row.origin, None, "a branch is no subagent");
+    assert!(matches!(
+        store.create_seeded(header, seed),
+        Err(SessionError::AlreadyExists(_))
+    ));
+}

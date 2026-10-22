@@ -856,7 +856,9 @@ struct IndexFile {
     sessions: BTreeMap<String, IndexedSession>,
 }
 
-const INDEX_VERSION: u32 = 1;
+/// 2: requests inherited by a fork (branch or forked subagent) count only
+/// in the session that made them.
+const INDEX_VERSION: u32 = 2;
 
 fn marker(row: &SessionSummary) -> (u64, u64, u64) {
     (row.updated_at, row.size_bytes, row.event_count)
@@ -865,7 +867,13 @@ fn marker(row: &SessionSummary) -> (u64, u64, u64) {
 fn buckets_of(events: &[SessionEvent], prices: &PriceBook) -> Vec<Bucket> {
     let mut by_key: BTreeMap<(u64, String, String), Tally> = BTreeMap::new();
     let (mut provider, mut model) = (String::new(), String::new());
-    for e in events {
+    let inherited = events
+        .iter()
+        .rposition(|e| {
+            e.kind == "session/end-seed" && e.data.get("inherited") == Some(&Value::Bool(true))
+        })
+        .map_or(0, |cut| cut + 1);
+    for (i, e) in events.iter().enumerate() {
         if e.kind == "request/context" {
             if let Some(p) = e.data.get("provider").and_then(Value::as_str) {
                 provider = p.to_owned();
@@ -878,6 +886,9 @@ fn buckets_of(events: &[SessionEvent], prices: &PriceBook) -> Vec<Bucket> {
         let Some((p, m, usage)) = request_of(e, &provider, &model) else {
             continue;
         };
+        if i < inherited {
+            continue;
+        }
         let quote = prices.quote(&p, &m, e.time);
         by_key
             .entry((e.time - e.time % HOUR_MS, p, m))
@@ -1010,14 +1021,22 @@ impl UsageIndex {
             let Ok(stored) = store.read(&row.id) else {
                 continue;
             };
-            let parent = row.parent_session.clone().or_else(|| {
-                stored
-                    .header
-                    .extra
-                    .get("parentSession")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            });
+            // Branches name their source too, but only delegated children
+            // count toward its subagents.
+            let subagent =
+                stored.header.extra.get("origin").and_then(Value::as_str) == Some("subagent");
+            let parent = subagent
+                .then(|| {
+                    row.parent_session.clone().or_else(|| {
+                        stored
+                            .header
+                            .extra
+                            .get("parentSession")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                })
+                .flatten();
             file.sessions.insert(
                 row.id.clone(),
                 IndexedSession {
@@ -1556,6 +1575,31 @@ mod tests {
     }
 
     #[test]
+    fn inherited_requests_count_only_where_they_were_made() {
+        let mut events = log(at(2026, 10, 19, 12, 0));
+        let requests = |events: &[SessionEvent]| {
+            buckets_of(events, &PriceBook::deepseek())
+                .iter()
+                .map(|b| b.usage.requests)
+                .sum::<u64>()
+        };
+        assert_eq!(requests(&events), 2);
+        let last = events.last().unwrap().clone();
+        events.push(SessionEvent {
+            kind: "session/end-seed".into(),
+            seq: last.seq + 1,
+            time: last.time,
+            data: json!({ "inherited": true }),
+            extra: Default::default(),
+        });
+        assert_eq!(
+            requests(&events),
+            0,
+            "a branch inherits the requests, not their cost"
+        );
+    }
+
+    #[test]
     fn compaction_estimates_the_context_until_the_next_request() {
         let mut events = log(at(2026, 10, 19, 12, 0));
         events.push(ev(
@@ -1595,6 +1639,7 @@ mod tests {
         let mut header = SessionStore::new_header(&cwd.display().to_string());
         if let Some(p) = parent {
             header.extra.insert("parentSession".into(), json!(p));
+            header.extra.insert("origin".into(), json!("subagent"));
         }
         let log = store.create_with_header(header).unwrap();
         log.append_now(
