@@ -25,6 +25,8 @@ const KIND = {
 const KINDS = ['project', 'personal', 'plugin', 'system'];
 const kindOf = (s) => (s.plugin ? 'plugin' : KIND[s.source] ?? 'system');
 const keyOf = (s) => `${s.source}:${s.path}`;
+/** "qa-28" before "qa-112". */
+const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 /** The Mac app shows files of this instance (local instances only). */
 const localDesktop = () => !!window.dshxDesktop?.capabilities?.revealInFinder;
@@ -329,7 +331,7 @@ export function SkillsTab() {
     return rows
       .filter((r) => filter === 'all' || kindOf(r) === filter)
       .filter((r) => !q || [r.title, r.name, r.description, r.plugin].some((v) => v?.toLowerCase().includes(q)))
-      .sort((a, b) => order(a) - order(b) || rank(a) - rank(b) || (a.title || a.name).localeCompare(b.title || b.name));
+      .sort((a, b) => order(a) - order(b) || rank(a) - rank(b) || NATURAL.compare(a.title || a.name, b.title || b.name));
   }, [rows, filter, query]);
   // The open row follows reloads (switches change it).
   const current = opened && (rows.find((r) => keyOf(r) === opened) ?? null);
