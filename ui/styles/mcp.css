@@ -1,0 +1,178 @@
+/* MCP servers and Apps (components/mcp.js, mcp-form.js, plugins.js):
+   server cards, the drawer's tabs, the server form and "Add server". */
+
+.mcp-lead { flex: 1; min-width: 0; margin: 0; white-space: normal; line-height: 1.45; }
+
+/* ---- status ----------------------------------------------------------------------- */
+
+.mcp-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.mcp-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--ink-caption); }
+.mcp-status.is-ok .mcp-dot { background: var(--success); }
+.mcp-status.is-warn .mcp-dot { background: var(--warn); }
+.mcp-status.is-error .mcp-dot { background: var(--error); }
+.mcp-status.is-busy .mcp-dot { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.mcp-status.is-warn { color: var(--warn); }
+.mcp-status.is-error { color: var(--error); }
+
+/* ---- cards ------------------------------------------------------------------------- */
+
+.mcp-card { flex-wrap: wrap; align-items: flex-start; padding: 0; gap: 0; transition: box-shadow .15s; }
+.mcp-card:hover { box-shadow: 0 0 0 .5px var(--line-4), 0 2px 10px -6px #00000026; }
+.mcp-card > .chip-wrap { margin: 10px 8px 0 0; }
+.mcp-card-main {
+  flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 12px 6px 10px 14px;
+  border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 12px 12px 0 0;
+}
+.mcp-card-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-card .plug-name { align-items: center; }
+.mcp-card-status { display: flex; align-items: center; gap: 6px; min-height: 20px; font-size: 12.5px; color: var(--ink-2); }
+.mcp-sep { color: var(--ink-caption); }
+.mcp-card-where { display: block; font-size: 11.5px; }
+.mcp-card.is-off .mcp-card-main { opacity: .6; }
+.mcp-card-foot {
+  flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 9px 14px 11px 60px; border-top: .5px solid var(--line-2);
+}
+.mcp-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; user-select: none; }
+.mcp-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+
+/* Apps: a card with a server opens the shared drawer. */
+.conn-card { flex-wrap: wrap; }
+.conn-main { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.conn-main { cursor: pointer; border-radius: 10px; }
+.conn-token { flex-basis: 100%; margin: 8px 0 0 46px; }
+.conn-help { flex-basis: 100%; margin: 4px 0 0 46px; white-space: normal; }
+
+/* ---- drawer: tools ----------------------------------------------------------------- */
+
+.mcp-tools-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.mcp-tools-bar .xe-search { max-width: none; }
+.mcp-tools-count { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.mcp-tools-bar .link-btn { font-size: 12.5px; }
+.mcp-tools-bar .link-btn:disabled { opacity: .4; cursor: default; }
+.mcp-tool-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border-radius: 12px; box-shadow: 0 0 0 .5px var(--line-3); overflow: hidden; }
+.mcp-tool-row { border-top: .5px solid var(--line-2); }
+.mcp-tool-row:first-child { border-top: 0; }
+.mcp-tool-line { display: flex; align-items: center; gap: 8px; padding-right: 12px; }
+.mcp-tool-open {
+  flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 6px; padding: 9px 4px 9px 10px; border: 0; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.mcp-tool-open .pf-chev { margin-top: 3px; }
+.mcp-tool-open.is-open .pf-chev { transform: rotate(90deg); }
+.mcp-tool-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mcp-tool-name { font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+.mcp-tool-desc { font-size: 12.5px; line-height: 1.45; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mcp-tool-open.is-open .mcp-tool-desc { -webkit-line-clamp: unset; display: block; }
+.mcp-tool-row.is-off .mcp-tool-text { opacity: .5; }
+.mcp-schema { padding: 0 12px 12px 32px; }
+.mcp-params { margin: 0 0 6px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.mcp-params li { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+.mcp-param { color: var(--ink); }
+.mcp-req { color: var(--warn); margin-left: 2px; }
+.mcp-ptype { color: var(--ink-3); font-size: 11.5px; }
+.mcp-pdesc { grid-column: 1 / -1; color: var(--ink-2); line-height: 1.45; }
+.mcp-raw { font-size: 12px; }
+.mcp-json, .mf-stderr {
+  margin: 6px 0 0; padding: 10px 12px; max-height: 260px; overflow: auto; border-radius: 8px; background: var(--code-block);
+  font: 11.5px/1.5 var(--mono); color: var(--ink-2); white-space: pre-wrap; word-break: break-word;
+}
+
+/* ---- drawer: settings, log, sign-in -------------------------------------------------- */
+
+.mcp-settings-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: .5px solid var(--line-2); }
+.mcp-settings-actions .btn { gap: 5px; }
+.mcp-log-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mcp-log-bar .plug-meta { white-space: normal; }
+.mcp-log-bar .btn { gap: 5px; flex: none; }
+.mcp-log {
+  max-height: min(60dvh, 560px); overflow: auto; padding: 8px 0; border-radius: 10px; background: var(--shell);
+  box-shadow: inset 0 0 0 .5px var(--line-2); font: 11.5px/1.55 var(--mono); outline: 0;
+}
+.mcp-log:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.mcp-log-line { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; padding: 1px 12px; }
+.mcp-log-time { color: var(--ink-caption); font-variant-numeric: tabular-nums; }
+.mcp-log-kind { min-width: 3.6em; color: var(--ink-3); }
+.mcp-log-text { color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+.mcp-log-line.is-error .mcp-log-kind, .mcp-log-line.is-error .mcp-log-text { color: var(--error); }
+.mcp-log-line.is-stderr .mcp-log-text { color: var(--ink); }
+.mcp-auth { display: flex; flex-direction: column; gap: 10px; }
+.mcp-auth-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: var(--bg-module); }
+.mcp-auth-card .dr-note { margin: 0; }
+.mcp-auth-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.mcp-auth-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 12.5px; }
+.mcp-auth-facts dt { color: var(--ink-3); }
+.mcp-auth-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+.mcp-auth-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* ---- the server form ---------------------------------------------------------------- */
+
+.mf-form { margin-bottom: 4px; }
+.mf-table { display: flex; flex-direction: column; gap: 6px; }
+.mf-kv, .mf-arg { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* models.css gives field inputs the full width; in these rows they share it. */
+.md-field .mf-kv .input, .md-field .mf-arg .input { flex: 1; width: auto; min-width: 0; }
+.md-field .mf-kv .mf-key { flex: 0 0 44%; }
+.mf-value { position: relative; flex: 1; min-width: 0; display: flex; }
+.mf-value .input { padding-right: 34px; }
+.mf-eye { position: absolute; right: 2px; top: 1px; width: 28px; height: 28px; }
+.mf-eye:disabled { opacity: .3; cursor: default; background: none; }
+.mf-index { flex: none; width: 18px; text-align: right; font-size: 11.5px; color: var(--ink-caption); font-variant-numeric: tabular-nums; }
+.mf-add { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; font-size: 12.5px; padding: 2px 0; }
+.mf-chips {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 30px; padding: 3px 6px; border-radius: 8px;
+  background: var(--bg-1); box-shadow: inset 0 0 0 1px var(--line-3); cursor: text;
+}
+.mf-chips:focus-within { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.mf-chips.is-readonly { opacity: .7; }
+.mf-chip { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 4px 0 8px; border-radius: 6px; background: var(--hover); font-size: 11.5px; color: var(--ink); }
+.mf-chip button { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--ink-3); cursor: pointer; }
+.mf-chip button:hover { background: var(--active); color: var(--ink); }
+.mf-chip-input { flex: 1; min-width: 120px; height: 22px; border: 0; outline: 0; background: none; color: var(--ink); font-size: 12.5px; }
+.mf-probe { margin-top: 14px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; }
+.mf-probe.is-busy { display: flex; align-items: center; gap: 8px; background: var(--bg-module); color: var(--ink-2); }
+.mf-probe.is-ok { background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); }
+.mf-probe.is-warn { background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--warn); }
+.mf-probe.is-error { background: var(--error-bg); color: var(--error); }
+.mf-probe.is-stale { opacity: .6; }
+.mf-probe-head { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.mf-probe-time { margin-left: auto; font-weight: 400; font-size: 12px; color: var(--ink-3); }
+.mf-probe-error { margin-top: 4px; color: var(--ink); overflow-wrap: anywhere; }
+.mf-probe-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.mf-probe .mf-chip { padding-right: 8px; }
+.mf-more { font-size: 12px; color: var(--ink-3); align-self: center; }
+.mf-untested { display: inline-flex; align-items: center; gap: 5px; margin-right: auto; font-size: 12.5px; color: var(--warn); }
+
+/* ---- add server: catalog and pasted JSON ---------------------------------------------- */
+
+.mcp-catalog { display: flex; flex-direction: column; gap: 10px; }
+.mcp-catalog .xe-search { max-width: none; flex: none; }
+.mcp-catalog-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; max-height: min(52dvh, 460px); overflow-y: auto; }
+.mcp-catalog-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 4px; border-top: .5px solid var(--line-2); }
+.mcp-catalog-row:first-child { border-top: 0; }
+.mcp-catalog-row > .btn, .mcp-catalog-row > .pill { flex: none; margin-top: 3px; gap: 5px; }
+.mcp-catalog-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mcp-catalog-name { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; font-weight: 550; color: var(--ink); }
+.mcp-catalog-token { margin-top: 6px; }
+.mcp-json-input { height: auto; min-height: 160px; padding: 8px 10px; font-size: 12px; line-height: 1.5; resize: vertical; white-space: pre; }
+.mcp-found { margin-top: 14px; }
+.mcp-found-head { margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.mcp-found-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.mcp-found-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-2); box-shadow: 0 0 0 .5px var(--line-3); }
+.mcp-found-row input[type="checkbox"] { margin: 3px 0 0; accent-color: var(--accent); }
+.mcp-found-row > .btn { flex: none; }
+.mcp-found-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.mcp-found-text .plug-warn { white-space: normal; }
+.mcp-found-name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 550; color: var(--ink); }
+.mcp-found-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+@media (max-width: 640px) {
+  .mcp-grid { grid-template-columns: 1fr; }
+  .mcp-card-foot { padding-left: 14px; }
+  .mf-kv { flex-wrap: wrap; }
+  .md-field .mf-kv .mf-key { flex: 1 1 calc(100% - 34px); }
+  .mf-kv .mf-value { flex-basis: calc(100% - 34px); }
+  .mcp-tools-bar { flex-wrap: wrap; }
+  .mcp-tools-bar .xe-search { flex-basis: 100%; }
+  .mcp-log-line { grid-template-columns: auto 1fr; }
+  .mcp-log-kind { display: none; }
+}
