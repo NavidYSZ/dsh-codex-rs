@@ -426,7 +426,10 @@ export function refreshSessions() {
 export async function send(text, images, opts) {
   const s = store.get();
   const body = { text, ...(images.length ? { images } : {}), ...opts, ...timeZone() };
-  store.set({ pending: { text, images, time: Date.now() }, statusError: null });
+  // Only a prompt that starts a turn now shows as pending; one sent while a
+  // turn runs is steered into it or queued (the queue list shows it).
+  const busy = !!s.activeId && (s.status === 'running' || s.status === 'waiting-approval');
+  store.set({ ...(busy ? {} : { pending: { text, images, time: Date.now() } }), statusError: null });
   try {
     let id = s.activeId;
     if (!id) {
@@ -438,7 +441,7 @@ export async function send(text, images, opts) {
     if (store.get().activeId === id && store.get().status === 'idle') store.set({ status: 'running' });
     return true;
   } catch (e) {
-    store.set({ pending: null });
+    if (!busy) store.set({ pending: null });
     fail(e);
     return false;
   }
