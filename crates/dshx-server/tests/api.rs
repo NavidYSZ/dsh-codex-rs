@@ -162,6 +162,12 @@ impl Backend for Fake {
     async fn cancel(&self, _id: &str) -> anyhow::Result<()> {
         Ok(())
     }
+    async fn fork_session(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        if id != "s1" {
+            return Err(NotFound(id.into()).into());
+        }
+        Ok(json!({ "id": "s3", "turn": body["turn"] }))
+    }
     async fn delete_session(&self, _id: &str) -> anyhow::Result<()> {
         Ok(())
     }
@@ -314,6 +320,27 @@ async fn routes_map_to_backend() {
         .await
         .unwrap();
     assert_eq!(r.status(), 200);
+    // Branching after a turn answers the new chat's id.
+    let r = http
+        .post(url("/sessions/s1/fork"))
+        .bearer_auth("secret")
+        .json(&json!({ "turn": 2 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(
+        r.json::<Value>().await.unwrap(),
+        json!({ "id": "s3", "turn": 2 })
+    );
+    let r = http
+        .post(url("/sessions/nope/fork"))
+        .bearer_auth("secret")
+        .json(&json!({ "turn": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
     // Backends without sidebar state refuse PATCH instead of pretending.
     let r = http
         .patch(url("/sessions/s1"))

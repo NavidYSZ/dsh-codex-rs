@@ -19,6 +19,7 @@ import { workspaceName } from './composer.js';
 import { ViewModeItems } from './worklog.js';
 import { openProject } from './folders.js';
 import { InstanceSwitcher } from './instances.js';
+import { ViewOptions, useSidebarView } from './sidebar-view.js';
 
 const PREVIEW = 5; // chats per project before "Show more"
 const enc = encodeURIComponent;
@@ -88,7 +89,7 @@ function ChatRow({ s, activeId, now, project, icon }) {
   const [menu, setMenu] = useState(null);
   const anchor = useRef(null);
   const active = s.id === activeId;
-  return html`<div class=${cx('sb-row', active && 'is-active', menu && 'has-menu')}
+  return html`<div class=${cx('sb-row', active && 'is-active', menu && 'has-menu', s.archived && 'is-archived')}
       onContextMenu=${(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}>
     ${renaming
     ? html`<div class="sb-link"><${Lead} s=${s} icon=${icon} /><${RenameInput} s=${s} /></div>`
@@ -96,6 +97,7 @@ function ChatRow({ s, activeId, now, project, icon }) {
         <${Lead} s=${s} icon=${icon} />
         <span class=${cx('sb-title', s.unread && 'is-unread')}>${s.title || t.newChat}</span>
         ${project ? html`<span class="sb-proj">${project}</span>` : null}
+        ${s.archived ? html`<span class="sb-tag">${t.archivedTag}</span>` : null}
         <span class="sb-age">${age(when(s) || now, now)}</span>
       </a>`}
     <button type="button" ref=${anchor} class="sb-more" aria-label=${t.more} title=${t.more} aria-haspopup="menu"
@@ -139,24 +141,31 @@ function ProjectGroup({ p, folded, activeId, now }) {
   </div>`;
 }
 
-/** Projects: folders with chats (or added on purpose), most recent first. */
-function useProjects(sessions, workspaces) {
+/**
+ * Projects: folders with chats (or added on purpose), most recent first.
+ * `sessions` are those the view shows; `when` orders them.
+ */
+function useProjects(sessions, workspaces, view) {
   return useMemo(() => {
     const groups = new Map();
     const named = new Map(workspaces.map((w) => [w.path, w]));
-    for (const w of workspaces) groups.set(w.path, { cwd: w.path, sessions: [], latest: w.lastUsed ?? 0 });
+    // Only archived chats: folders without one stay out.
+    if (view.archived !== 'only') {
+      for (const w of workspaces) groups.set(w.path, { cwd: w.path, sessions: [], latest: view.order === 'activity' ? w.lastUsed ?? 0 : 0 });
+    }
     for (const s of sessions) {
-      if (s.scratch || s.archived || s.pinned) continue;
+      if (s.scratch || s.pinned) continue;
       if (!groups.has(s.cwd)) groups.set(s.cwd, { cwd: s.cwd, sessions: [], latest: 0 });
       const g = groups.get(s.cwd);
       g.sessions.push(s);
-      g.latest = Math.max(g.latest, when(s));
+      g.latest = Math.max(g.latest, view.when(s));
     }
-    for (const g of groups.values()) g.sessions.sort(byRecent);
+    const order = (a, b) => view.when(b) - view.when(a);
+    for (const g of groups.values()) g.sessions.sort(order);
     return [...groups.values()]
       .sort((a, b) => b.latest - a.latest)
       .map((g) => ({ ...g, name: named.get(g.cwd)?.name || workspaceName(g.cwd) }));
-  }, [sessions, workspaces]);
+  }, [sessions, workspaces, view.order, view.archived]);
 }
 
 /** Straight to the folder dialog; the projects are listed right below anyway. */
@@ -165,14 +174,15 @@ function AddProject() {
     title=${`${t.addProject} (⌘O)`} onClick=${openProject}><${IconFolderPlus} size=${14} /></button>`;
 }
 
-function ProjectsView({ sessions, workspaces, activeId, now }) {
+function ProjectsView({ sessions, workspaces, activeId, now, view }) {
   const folded = useStore(store, (s) => s.folded);
-  const projects = useProjects(sessions, workspaces);
-  const pinned = sessions.filter((s) => s.pinned && !s.archived).sort(byRecent);
-  const chats = sessions.filter((s) => s.scratch && !s.pinned && !s.archived).sort(byRecent);
+  const projects = useProjects(sessions, workspaces, view);
+  const order = (a, b) => view.when(b) - view.when(a);
+  const pinned = sessions.filter((s) => s.pinned).sort(order);
+  const chats = sessions.filter((s) => s.scratch && !s.pinned).sort(order);
   const projectOf = (s) => (s.scratch ? '' : workspaceName(s.cwd));
   const isFolded = (key) => folded.includes(key);
-  if (!sessions.length && !projects.length) return html`<div class="sb-empty">${t.noSessions}</div>`;
+  if (!sessions.length && !projects.length) return html`<div class="sb-empty">${view.archived === 'only' ? t.noArchived : t.noSessions}</div>`;
   return html`
     ${pinned.length ? html`<${Section} id="pinned" title=${t.pinned} folded=${isFolded('section:pinned')}>
       <${Rows} list=${pinned} activeId=${activeId} now=${now} project=${projectOf} icon=${html`<${IconPin} size=${13} />`} />
@@ -186,6 +196,25 @@ function ProjectsView({ sessions, workspaces, activeId, now }) {
       ${chats.length
     ? html`<${Rows} list=${chats} activeId=${activeId} now=${now} limit=${8} icon=${html`<${IconChat} size=${13} />`} />`
     : html`<button type="button" class="sb-hint" onClick=${() => newChat('')}>${t.newChatNoProject}</button>`}
+    </${Section}>`;
+}
+
+/** One list: pinned chats, then every other chat with its project's name. */
+function FlatView({ sessions, activeId, now, view }) {
+  const folded = useStore(store, (s) => s.folded);
+  const order = (a, b) => view.when(b) - view.when(a);
+  const pinned = sessions.filter((s) => s.pinned).sort(order);
+  const rest = sessions.filter((s) => !s.pinned).sort(order);
+  const projectOf = (s) => (s.scratch ? '' : workspaceName(s.cwd));
+  if (!sessions.length) return html`<div class="sb-empty">${view.archived === 'only' ? t.noArchived : t.noSessions}</div>`;
+  return html`
+    ${pinned.length ? html`<${Section} id="pinned" title=${t.pinned} folded=${folded.includes('section:pinned')}>
+      <${Rows} list=${pinned} activeId=${activeId} now=${now} project=${projectOf} icon=${html`<${IconPin} size=${13} />`} />
+    </${Section}>` : null}
+    <${Section} id="all" title=${t.chats} folded=${folded.includes('section:all')}
+      actions=${html`<button type="button" class="sb-more is-shown" aria-label=${t.newChat} title=${t.newChat}
+        onClick=${() => newChat()}><${IconCompose} size=${14} /></button>`}>
+      <${Rows} list=${rest} activeId=${activeId} now=${now} limit=${20} project=${projectOf} />
     </${Section}>`;
 }
 
@@ -225,10 +254,13 @@ export function Sidebar() {
   const shownId = view === 'chat' ? activeId : null;
   const info = useStore(store, (s) => s.info);
   const active = useStore(store, (s) => s.schedules.filter((r) => r.status !== 'inactive').length);
+  const sbView = useSidebarView();
+  const listed = useMemo(() => sessions.filter(sbView.keep), [sessions, sbView.archived]);
   return html`<aside class="sidebar" aria-label="Sidebar">
     <div class="sb-head">
       <${InstanceSwitcher} />
       <span class="spacer" />
+      ${activity ? null : html`<${ViewOptions} />`}
       <button type="button" class=${cx('icon-btn', 'sb-bell', activity && 'is-on')} aria-pressed=${activity}
         aria-label=${t.activity} title=${t.activity} onClick=${() => setSidebarMode(activity ? 'projects' : 'activity')}>
         <${IconBell} size=${16} />${unread ? html`<span class="sb-bell-dot" />` : null}
@@ -257,7 +289,8 @@ export function Sidebar() {
     <div class="sb-list">
       ${activity
     ? html`<${ActivityView} sessions=${sessions} activeId=${shownId} now=${now} />`
-    : html`<${ProjectsView} sessions=${sessions} workspaces=${workspaces} activeId=${shownId} now=${now} />`}
+    : sbView.group === 'flat' ? html`<${FlatView} sessions=${listed} activeId=${shownId} now=${now} view=${sbView} />`
+    : html`<${ProjectsView} sessions=${listed} workspaces=${workspaces} activeId=${shownId} now=${now} view=${sbView} />`}
     </div>
     <div class="sb-foot">
       <button type="button" class=${cx('nav-item', view === 'settings' && 'is-active')} data-dshx-command="settings" onClick=${openSettings}>

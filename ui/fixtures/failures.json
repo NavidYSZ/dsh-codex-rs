@@ -1,0 +1,606 @@
+{
+ "description": "Package F: one failed turn per failure code, each with its text and action; the last turn (QUOTA) also offers \"Send again\".",
+ "status": "error",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+   "createdAt": 1792750000000,
+   "cwd": "/Users/alex/code/timeparse",
+   "isSeeded": false,
+   "delegationDepth": 0,
+   "agentPreset": "standard"
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792750000005,
+    "data": {
+     "preset": "workspace-write"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792750000010,
+    "data": {
+     "mode": "workspace-write"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792750000015,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 3,
+    "time": 1792750020015,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 4,
+    "time": 1792750020265,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 5,
+    "time": 1792750020270,
+    "data": {
+     "role": "user",
+     "id": "u-1-5",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Run the test suite once more."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 6,
+    "time": 1792750020275,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 7,
+    "time": 1792750020280,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 8,
+    "time": 1792750021480,
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "AUTH",
+       "status": 401,
+       "message": "Authentication Fails, Your api key: ****f00d is invalid"
+      }
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 9,
+    "time": 1792750041480,
+    "data": {
+     "turn": 2
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 10,
+    "time": 1792750041730,
+    "data": {
+     "turn": 2,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 11,
+    "time": 1792750041735,
+    "data": {
+     "role": "user",
+     "id": "u-2-11",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Profile the lexer on the big sample."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 12,
+    "time": 1792750041740,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 13,
+    "time": 1792750041745,
+    "data": {
+     "turn": 2,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 14,
+    "time": 1792750042945,
+    "data": {
+     "turn": 2,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "RATE_LIMIT",
+       "status": 429,
+       "message": "Rate limit reached for requests"
+      }
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 15,
+    "time": 1792750062945,
+    "data": {
+     "turn": 3
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 16,
+    "time": 1792750063195,
+    "data": {
+     "turn": 3,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 17,
+    "time": 1792750063200,
+    "data": {
+     "role": "user",
+     "id": "u-3-17",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Read every log in the archive and compare them."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 18,
+    "time": 1792750063205,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 19,
+    "time": 1792750063210,
+    "data": {
+     "turn": 3,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 20,
+    "time": 1792750064410,
+    "data": {
+     "turn": 3,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "CONTEXT_WINDOW_EXCEEDED",
+       "status": 400,
+       "message": "This model's maximum context length is 1000000 tokens. However, you requested 1048213 tokens."
+      }
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 21,
+    "time": 1792750084410,
+    "data": {
+     "turn": 4
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 22,
+    "time": 1792750084660,
+    "data": {
+     "turn": 4,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 23,
+    "time": 1792750084665,
+    "data": {
+     "role": "user",
+     "id": "u-4-23",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Fetch the latest release notes."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 24,
+    "time": 1792750084670,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 25,
+    "time": 1792750084675,
+    "data": {
+     "turn": 4,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 26,
+    "time": 1792750085875,
+    "data": {
+     "turn": 4,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "TRANSPORT",
+       "message": "error sending request for url (https://api.deepseek.com/anthropic/v1/messages): connection refused"
+      }
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 27,
+    "time": 1792750105875,
+    "data": {
+     "turn": 5
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 28,
+    "time": 1792750106125,
+    "data": {
+     "turn": 5,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 29,
+    "time": 1792750106130,
+    "data": {
+     "role": "user",
+     "id": "u-5-29",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Try again with the smaller sample."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 30,
+    "time": 1792750106135,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 31,
+    "time": 1792750106140,
+    "data": {
+     "turn": 5,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 32,
+    "time": 1792750107340,
+    "data": {
+     "turn": 5,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "TIMEOUT",
+       "message": "The model request timed out after 600 s"
+      }
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 33,
+    "time": 1792750127340,
+    "data": {
+     "turn": 6
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 34,
+    "time": 1792750127590,
+    "data": {
+     "turn": 6,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 35,
+    "time": 1792750127595,
+    "data": {
+     "role": "user",
+     "id": "u-6-35",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Describe these screenshots."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 36,
+    "time": 1792750127600,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 37,
+    "time": 1792750127605,
+    "data": {
+     "turn": 6,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 38,
+    "time": 1792750128805,
+    "data": {
+     "turn": 6,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "IMAGE_OFFLOAD_REQUIRED",
+       "message": "Offload 2 more images before the request fits the route"
+      }
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 39,
+    "time": 1792750148805,
+    "data": {
+     "turn": 7
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 40,
+    "time": 1792750149055,
+    "data": {
+     "turn": 7,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 41,
+    "time": 1792750149060,
+    "data": {
+     "role": "user",
+     "id": "u-7-41",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Write the exploit for this CVE."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 42,
+    "time": 1792750149065,
+    "data": {
+     "provider": "anthropic",
+     "model": "claude-sonnet-5-5",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 43,
+    "time": 1792750149070,
+    "data": {
+     "turn": 7,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 44,
+    "time": 1792750150270,
+    "data": {
+     "turn": 7,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "REFUSAL",
+       "message": "The model declined to continue."
+      }
+     }
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 45,
+    "time": 1792750170270,
+    "data": {
+     "turn": 8
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 46,
+    "time": 1792750170520,
+    "data": {
+     "turn": 8,
+     "step": 1
+    }
+   },
+   {
+    "type": "user/message",
+    "seq": 47,
+    "time": 1792750170525,
+    "data": {
+     "role": "user",
+     "id": "u-8-47",
+     "source": {
+      "kind": "user"
+     },
+     "content": [
+      {
+       "type": "text",
+       "text": "Rename the parse module to lexer."
+      }
+     ]
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/context",
+    "seq": 48,
+    "time": 1792750170530,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000
+    }
+   },
+   {
+    "type": "step/end",
+    "seq": 49,
+    "time": 1792750170535,
+    "data": {
+     "turn": 8,
+     "step": 1
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 50,
+    "time": 1792750171735,
+    "data": {
+     "turn": 8,
+     "reason": {
+      "kind": "error",
+      "error": {
+       "code": "QUOTA",
+       "status": 402,
+       "message": "Insufficient Balance"
+      }
+     }
+    }
+   }
+  ]
+ }
+}

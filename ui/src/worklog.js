@@ -173,14 +173,15 @@ export function turnWork(items) {
     if (x.kind === 'tool') toolCalls++;
     if (x.kind === 'text' && i < answer) messages++;
     if (x.kind === 'user') users++;
-    if (i !== answer && (x.kind === 'reasoning' || x.kind === 'tool' || x.kind === 'text' || x.kind === 'divider')) hidden = true;
+    if (i !== answer && (x.kind === 'reasoning' || x.kind === 'tool' || x.kind === 'text')) hidden = true;
   });
   return { answerKey: answer >= 0 ? items[answer].key : null, toolCalls, messages, steered: users > 1, hidden };
 }
 
 /** Items that stay visible in a folded turn besides its answer. */
 export function staysVisible(item) {
-  if (item.kind === 'user') return true;
+  // Prompts and compaction markers (what the model still sees changed there).
+  if (item.kind === 'user' || item.kind === 'divider') return true;
   if (item.kind !== 'notice') return false;
   return item.code !== 'stopped' && item.code !== 'interrupted';
 }

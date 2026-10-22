@@ -67,6 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc private func newChat(_ sender: Any?) { main.sendCommand("new-chat") }
     @objc private func openProject(_ sender: Any?) { main.sendCommand("open-project") }
     @objc private func openSettings(_ sender: Any?) { main.sendCommand("settings") }
+    /// Chat menu, find and the shortcut overview: the page runs the command
+    /// named by the item (ui/src/components/shortcuts.js).
+    @objc private func pageCommand(_ sender: NSMenuItem) {
+        guard let command = sender.representedObject as? String else { return }
+        main.sendCommand(command)
+    }
 
     @objc private func switchInstance(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
@@ -133,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch menuItem.action {
         case #selector(installHelper(_:)): return HelperInstaller.bundled != nil
         case #selector(reloadPage(_:)), #selector(zoomIn(_:)), #selector(zoomOut(_:)), #selector(zoomReset(_:)),
-             #selector(openProject(_:)):
+             #selector(openProject(_:)), #selector(pageCommand(_:)):
             return main?.currentWebView != nil
         default: return true
         }
@@ -175,6 +181,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return item
     }
 
+    /// An item that runs a command of the page (see `pageCommand`).
+    private func command(_ title: String, _ name: String, _ key: String,
+                         _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem {
+        let entry = item(title, #selector(pageCommand(_:)), key, modifiers)
+        entry.representedObject = name
+        return entry
+    }
+
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         let name = "dsh-codex"
@@ -213,7 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         edit.addItem(item("Einsetzen und Stil anpassen", #selector(NSTextView.pasteAsPlainText(_:)), "v", [.command, .option, .shift]))
         edit.addItem(item("Alles auswählen", #selector(NSText.selectAll(_:)), "a"))
         edit.addItem(.separator())
-        edit.addItem(item("Suchen …", #selector(NSTextView.performFindPanelAction(_:)), "f"))
+        edit.addItem(command("Im Chat suchen …", "find", "f"))
 
         let view = NSMenu(title: "Darstellung")
         view.addItem(item("Neu laden", #selector(reloadPage(_:)), "r"))
@@ -228,6 +242,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         view.addItem(item("Vollbild", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]))
 
+        // Codex's chat shortcuts; the page handles the keys itself and runs a
+        // command only once when the menu sees the same key.
+        let chat = NSMenu(title: "Chat")
+        chat.addItem(command("Umbenennen", "rename-chat", "r", [.command, .option]))
+        chat.addItem(command("Anpinnen oder lösen", "pin-chat", "p", [.command, .option]))
+        chat.addItem(command("Archivieren", "archive-chat", "a", [.command, .shift]))
+        chat.addItem(.separator())
+        chat.addItem(command("Vorheriger Chat", "previous-chat", "[", [.command, .shift]))
+        chat.addItem(command("Nächster Chat", "next-chat", "]", [.command, .shift]))
+        chat.addItem(command("Nächster Chat, der dich braucht", "next-attention", "a", [.command, .option]))
+        chat.addItem(.separator())
+        // ⇧Esc in the page; no key here, so typing in a field never triggers it.
+        chat.addItem(command("Alle als gelesen markieren", "mark-all-read", ""))
+
         rebuildInstanceMenu()
 
         let window = NSMenu(title: "Fenster")
@@ -239,6 +267,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.windowsMenu = window
 
         let help = NSMenu(title: "Hilfe")
+        help.addItem(command("Tastenkürzel", "shortcuts", "/"))
+        help.addItem(.separator())
         help.addItem(item("Protokolle anzeigen", #selector(showLogs(_:)), ""))
         help.addItem(item("instances.json im Finder zeigen", #selector(showInstancesFile(_:)), ""))
         help.addItem(item("Computer-Use-Helfer installieren …", #selector(installHelper(_:)), ""))
@@ -246,7 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         help.addItem(item("Mitteilungen testen", #selector(testNotifications(_:)), ""))
         NSApp.helpMenu = help
 
-        for submenu in [app, file, edit, view, instanceMenu, window, help] {
+        for submenu in [app, file, edit, view, chat, instanceMenu, window, help] {
             let top = NSMenuItem(title: submenu.title, action: nil, keyEquivalent: "")
             top.submenu = submenu
             menu.addItem(top)

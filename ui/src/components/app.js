@@ -1,6 +1,6 @@
 // App shell: Codex-like sidebar, chat header, start page or conversation,
 // composer seat, and the ⌘K palette.
-import { useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
@@ -18,11 +18,21 @@ import { useTeamTab } from './team.js';
 import { PluginsPage } from './plugins.js';
 import { AutomationsPage } from './automations.js';
 import { ModeLabel, ModeGuide } from './modes.js';
+import { ShortcutsDialog } from './shortcuts.js';
+import { FullAccessConfirm } from './confirm.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
+  // ⌘⌥R while the chat's sidebar row is out of sight.
+  const asked = useStore(store, (s) => !!row && s.renameTitle === row.id);
+  useEffect(() => {
+    if (!asked) return;
+    store.set({ renameTitle: null });
+    setValue(row.title || title);
+    setEditing(true);
+  }, [asked]);
   if (!editing || !row) {
     return html`<span class="tb-title" title=${row ? t.rename : undefined}
       onDblClick=${row ? () => { setValue(row.title || title); setEditing(true); } : undefined}>${title}</span>`;
@@ -126,5 +136,7 @@ export function App() {
     : view === 'automations' ? html`<${AutomationsPage} />` : html`<${Chat} />`}</main>
     <${Palette} />
     <${ModeGuide} />
+    <${ShortcutsDialog} />
+    <${FullAccessConfirm} />
   </div>`;
 }
