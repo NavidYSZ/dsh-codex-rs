@@ -494,10 +494,14 @@ impl Timings {
     fn finish(&mut self) {
         self.avg_ttft_ms =
             (self.ttft_steps > 0).then(|| self.ttft_ms as f64 / self.ttft_steps as f64);
-        self.tokens_per_second = (self.decode_ms > 0)
+        // A stream that arrived at once (a cache, a mock) has no meaningful speed.
+        self.tokens_per_second = (self.decode_ms >= MIN_DECODE_MS)
             .then(|| self.decode_tokens as f64 / (self.decode_ms as f64 / 1000.0));
     }
 }
+
+/// Decode time below which tokens per second are not shown.
+const MIN_DECODE_MS: u64 = 200;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
