@@ -374,7 +374,7 @@ export function PillText({ text }) {
     const label = p.kind === 'skill' || p.kind === 'command' ? `/${p.label}` : p.kind === 'server' || p.kind === 'plugin' ? `@${p.label}` : p.label;
     if (p.kind === 'skill' || p.kind === 'server' || p.kind === 'plugin') {
       return html`<button type="button" key=${i} class=${cx('pill', `is-${p.kind}`)} title=${s.text}
-        onClick=${() => openDetails(p.kind === 'skill' ? 'skill' : 'server', p.name)}>${label}</button>`;
+        onClick=${() => openDetails(p.kind, p.name)}>${label}</button>`;
     }
     return html`<span key=${i} class=${cx('pill', `is-${p.kind}`)} title=${p.name}>${icon}${label}</span>`;
   });

@@ -229,10 +229,10 @@ async function deactivate(server) {
   }
 }
 
-/** Opens a server's (or skill's) details on the Plugins page. */
+/** Opens a skill's, server's or plugin's details on its tab of the Plugins page. */
 export function openDetails(kind, name) {
   store.set({ pluginFocus: { kind, name } });
-  openPlugins();
+  openPlugins({ skill: 'skills', server: 'mcp' }[kind] ?? 'plugins');
 }
 
 function ActiveServers() {

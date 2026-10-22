@@ -10,7 +10,7 @@ import { api, fail, toast } from '../state.js';
 import { copyText } from '../markdown.js';
 import { IconPlus, IconRefresh, IconTrash, IconSearch, IconCopy, IconChevronRight, IconAlert, IconKey, IconFile, IconPlug } from '../icons.js';
 import { useLoad, Toggle, Pill } from './page.js';
-import { Logo, MoreMenu, StatusDot, useAction, useLoginWait, useRoute, routeMissing, isMissingRoute } from './plugin-kit.js';
+import { Logo, MoreMenu, StatusDot, useAction, useLoginWait, useRoute, routeMissing, isMissingRoute, usePluginFocus } from './plugin-kit.js';
 import { Drawer, Dialog, Field } from './drawer.js';
 import { ServerForm, ProbeResult, emptyForm, formOf, fromImport, validate, bodyOf, useProbe } from './mcp-form.js';
 import { parseServers } from '../mcp-import.js';
@@ -507,6 +507,12 @@ export function McpTab() {
   }, [servers.data]);
   const open = (name, tab) => setOpened({ name, tab });
   const onLogin = (name) => login(name);
+  // An @server pill or an active-server chip; names compare like the composer's.
+  usePluginFocus('server', servers, (name) => {
+    const hit = list.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    if (hit) open(hit.name);
+    return !!hit;
+  });
 
   let body;
   if (servers.loading && !servers.data) body = html`<${CardSkeleton} />`;

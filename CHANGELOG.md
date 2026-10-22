@@ -198,6 +198,10 @@
   logs `image/offload`, sends the oldest images as text with their read-only
   path and retries without spending the retry budget. Compaction summaries
   and the tool-result pruner keep those marks; resumed chats keep them too.
+- A `/skill` or `@server` pill in a sent prompt (and an active-server chip)
+  opens that skill's or server's drawer on its Plugins tab instead of only
+  the Plugins page; an `@plugin` pill highlights the plugin's card, and a
+  skill or server that is gone says so.
 
 ## 0.2.0 – 2026-10-17
 

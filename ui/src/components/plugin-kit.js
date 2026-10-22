@@ -143,3 +143,20 @@ export function PageToast() {
   useEffect(() => () => store.set({ toast: null }), []);
   return text ? html`<${Portal}><div class="xe-toast" role="status" aria-live="polite">${text}</div></${Portal}>` : null;
 }
+
+const FOCUS_LABEL = { skill: (n) => `/${n}`, server: (n) => `@${n}`, plugin: (n) => `@${n}` };
+
+/**
+ * A pill or chip asked for one skill, server or plugin (`store.pluginFocus`,
+ * set by `openDetails`): once `list` has loaded, `find(name)` opens it and
+ * returns whether it exists; a missing one gets a toast. A failed load drops
+ * the request.
+ */
+export function usePluginFocus(kind, list, find) {
+  const focus = useStore(store, (s) => s.pluginFocus);
+  useEffect(() => {
+    if (focus?.kind !== kind || list.loading) return;
+    store.set({ pluginFocus: null });
+    if (list.data && !find(focus.name)) toast(t.focusMissing(FOCUS_LABEL[kind](focus.name)));
+  }, [focus, list.loading, list.data]);
+}

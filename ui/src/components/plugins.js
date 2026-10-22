@@ -1,24 +1,24 @@
 // Plugins page, like the Codex app's: installed plugins and marketplaces,
 // apps (connectors with sign-in), skills and MCP servers. Changes apply at
 // once; open chats see new tools and skills with their next prompt.
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
 import { store, api, openPlugins } from '../state.js';
 import { IconRefresh, IconTrash, IconPlus } from '../icons.js';
 import { PageShell, Tabs, useLoad, Toggle, Pill } from './page.js';
-import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast } from './plugin-kit.js';
+import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast, usePluginFocus } from './plugin-kit.js';
 import { SkillsTab } from './skills.js';
 import { McpTab, ServerDrawer } from './mcp.js';
 
 // ---- plugins and marketplaces -------------------------------------------------
 
-function PluginCard({ p, busy, run }) {
+function PluginCard({ p, busy, run, focused }) {
   const ui = p.interface ?? {};
   const name = ui.displayName || p.name;
   const problems = [p.error, ...(p.warnings ?? [])].filter(Boolean);
-  return html`<div class=${cx('plug-card', !p.enabled && 'is-off')}>
+  return html`<div class=${cx('plug-card', !p.enabled && 'is-off', focused && 'is-focus')} data-plugin=${p.id}>
     <${Logo} url=${p.logoUrl} color=${ui.brandColor} name=${name} />
     <div class="plug-text">
       <div class="plug-name">${name}<span class="plug-meta">${p.marketplace}${p.version ? ` · ${p.version}` : ''}</span></div>
@@ -72,10 +72,24 @@ function PluginsTab() {
     if (await run('market', () => api.addMarketplace(src, ref))) setSource('');
   };
   const installed = plugins.data ?? [];
+  // An @plugin pill of a sent prompt: show that plugin's card for a moment.
+  const [focused, setFocused] = useState(null);
+  usePluginFocus('plugin', plugins, (name) => {
+    const key = name.toLowerCase();
+    const hit = installed.find((p) => [p.name, p.id, p.interface?.displayName].some((v) => v?.toLowerCase() === key));
+    if (hit) setFocused(hit.id);
+    return !!hit;
+  });
+  useEffect(() => {
+    if (!focused) return undefined;
+    document.querySelector(`[data-plugin="${CSS.escape(focused)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const id = setTimeout(() => setFocused(null), 2000);
+    return () => clearTimeout(id);
+  }, [focused]);
   return html`
     <section class="page-section">
       <h2 class="section-title">${t.installed}</h2>
-      ${installed.length ? html`<div class="plug-grid">${installed.map((p) => html`<${PluginCard} key=${p.id} p=${p} busy=${busy} run=${run} />`)}</div>`
+      ${installed.length ? html`<div class="plug-grid">${installed.map((p) => html`<${PluginCard} key=${p.id} p=${p} busy=${busy} run=${run} focused=${p.id === focused} />`)}</div>`
     : html`<div class="page-empty">${plugins.loading ? t.loading : t.noPlugins}</div>`}
     </section>
     ${(markets.data ?? []).map((m) => html`<section class="page-section" key=${m.name}>

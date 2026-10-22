@@ -122,3 +122,7 @@ html.dshx-desktop .dr-panel { padding-top: env(safe-area-inset-top); }
 @media (prefers-reduced-motion: reduce) {
   .dr-panel, .dr-scrim, .xe-toast { animation: none; }
 }
+
+/* A plugin card an @plugin pill pointed at. */
+.plug-card { transition: box-shadow .2s; }
+.plug-card.is-focus { box-shadow: 0 0 0 1.5px var(--accent), 0 0 0 5px color-mix(in srgb, var(--accent) 16%, transparent); }

@@ -11,7 +11,7 @@ import { renderMarkdown, onMarkdownClick, copyText } from '../markdown.js';
 import { IconSearch, IconPlus, IconFolder, IconPencil, IconCopy, IconFile, IconChat, IconAlert, IconCompose, IconRefresh } from '../icons.js';
 import { Menu, ActionItem, MenuItem } from './common.js';
 import { useLoad, Toggle, Pill } from './page.js';
-import { Logo, tint, useRoute, routeMissing, isMissingRoute } from './plugin-kit.js';
+import { Logo, tint, useRoute, routeMissing, isMissingRoute, usePluginFocus } from './plugin-kit.js';
 import { Drawer, Dialog, Field, Segmented } from './drawer.js';
 import { workspaceName } from './composer.js';
 
@@ -333,6 +333,13 @@ export function SkillsTab() {
   }, [rows, filter, query]);
   // The open row follows reloads (switches change it).
   const current = opened && (rows.find((r) => keyOf(r) === opened) ?? null);
+  // A /skill pill of a sent prompt: the skill that answers to that name (an active one first).
+  usePluginFocus('skill', skills, (name) => {
+    const named = rows.filter((r) => r.name === name);
+    const hit = named.find((r) => r.active !== false && !r.invalid) ?? named[0];
+    if (hit) setOpened(keyOf(hit));
+    return !!hit;
+  });
   const filters = ['all', 'project', 'personal', 'plugin', ...(counts.system ? ['system'] : [])];
 
   let body;
