@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright
 
 UI = pathlib.Path(__file__).resolve().parent.parent
 CHROME = '/root/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome'
-FIXTURES = ['hero', 'coding', 'markdown', 'approval', 'browser', 'computer', 'error', 'nokey']
+FIXTURES = ['hero', 'coding', 'markdown', 'approval', 'browser', 'computer', 'error', 'nokey', 'composer']
 SIZES = {'desktop': (1440, 900), 'phone': (390, 844)}
 
 

@@ -39,7 +39,8 @@ function Trail({ item, cursor }) {
   if (item.type === 'server' || item.type === 'plugin') {
     if (item.needsLogin) return html`<span class="ci-trail is-warn">${t.ciLogin}</span>`;
     const tone = item.status === 'connected' || item.type === 'plugin' ? 'on' : item.status === 'error' ? 'error' : 'off';
-    const label = item.active ? t.ciActiveTag : item.type === 'plugin' ? t.ciServers(item.servers?.length ?? 0) : t.ciTools(item.tools ?? 0);
+    const label = item.active ? t.ciActiveTag : item.type === 'plugin' ? t.ciServers(item.servers?.length ?? 0)
+      : item.status === 'error' ? t.ciError : item.status === 'connecting' ? t.ciConnecting : t.ciTools(item.tools ?? 0);
     return html`<span class="ci-trail"><span class=${cx('ci-dot', `is-${tone}`)} aria-hidden="true" />${label}</span>`;
   }
   if (item.type === 'folder' && cursor) return html`<span class="ci-trail ci-drill"><kbd class="kbd">Tab</kbd>${t.ciDrill}</span>`;

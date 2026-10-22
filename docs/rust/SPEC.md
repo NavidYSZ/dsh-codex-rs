@@ -321,7 +321,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | POST | `/api/sessions/:id/fork` | `{turn, title?}` → `{id}`: a new chat in the same folder and mode with the log through the `turn/end` of `turn` (seq and time kept; `0` = none of it), then dsh's `session/end-seed {inherited: true}` cut; header `parentSession` = the source, `isSeeded: true`, no `origin` (so it stays in the list and is a root agent); `title` (default dsh's "Title (1)") goes to `ui-state.json`; a turn without `turn/end` → 400, unknown session → 404. Inherited requests count only in the source's usage |
 | DELETE | `/api/sessions/:id` | → 204 |
 | POST | `/api/approvals/:callId` | `{decision:"allowed-once"\|"rejected"}` → 204 |
-| POST | `/api/attachments` | raw image body, `Content-Type` → `ImageAttachmentRef` |
+| POST | `/api/attachments` | raw image body (png, jpeg, webp, gif; ≤ 20 MB), `Content-Type` → `ImageAttachmentRef` |
 | GET | `/api/attachments/:id` | → image bytes |
 | GET | `/api/sessions/:id/goal` | → `{goal: GoalView \| null}`; `GoalView` = `{id, revision, objective, phase, maxGoalRounds, blockedReason?, roundsStarted, createdAt, updatedAt, activation}` |
 | POST | `/api/sessions/:id/goal` | `{action: "create"\|"edit"\|"pause"\|"resume"\|"clear", objective?, maxGoalRounds?}` (dsh `/goal`) → `{goal}`; refused transitions → 400 |
@@ -373,7 +373,7 @@ Without extensions every route below answers 404. Errors are `{error}` with 400,
 | POST | `/api/marketplaces` | `{source, ref?}` (git URL, `owner/repo`, local path; `#ref` suffix allowed) → `Marketplace` |
 | POST | `/api/marketplaces/:name/update` | → `Marketplace` |
 | DELETE | `/api/marketplaces/:name` | → 204 (installed plugins stay) |
-| GET | `/api/skills?cwd=` | → `[{name, description, whenToUse, source, plugin, path, active, modelInvocable, userInvocable}]` |
+| GET | `/api/skills?cwd=` | → `[{name, description, whenToUse, source, plugin, path, active, modelInvocable, userInvocable, enabled, model}]` (`modelInvocable` = the frontmatter allows it; `model` = the model may load it on its own under `[skills]`; `enabled` = `[skills.entries."name"] enabled`) |
 | GET | `/api/mcp/servers` | → `[McpServer]` (config servers, then plugin servers) |
 | POST | `/api/mcp/servers` | `{name?, connector?, config?}` (`config` = a `[mcp_servers.x]` table as JSON; `connector` fills the URL from the catalog, its id is the default name) → `McpServer` |
 | DELETE | `/api/mcp/servers/:name` | → 204 (config servers only; its tokens are revoked and deleted) |
@@ -396,7 +396,8 @@ Without extensions every route below answers 404. Errors are `{error}` with 400,
 - `McpServer`: `{name, origin:"config"|"plugin", plugin, originalName, connector, enabled, transport, url, command,
   args, headers:[names], auth:{oauth, login:{kind:"oauth"|"token", issuer?, scope?, expiresAt?, refreshable}|null},
   status:"connecting"|"connected"|"needs-login"|"error"|"disabled"|"stopped", error, retrying, challenge?:{status,
-  resourceMetadata?, scope?, error?, errorDescription?}, warnings, tools:[{name, rawName, description}]}`.
+  resourceMetadata?, scope?, error?, errorDescription?}, warnings, tools:[{name, rawName, description}], always,
+  disabledTools:[rawName]}`.
 - Login flow: `POST …/login` derives the redirect URI from the request's Host port
   (`http://127.0.0.1:<port>/api/oauth/callback`, so it also works through an SSH tunnel to the same port),
   the UI opens `authorizationUrl`, the authorization server sends the browser to the callback, the server
@@ -424,6 +425,48 @@ WebSocket messages (JSON):
   sidebarGroup: "projects"|"flat", sidebarOrder: "activity"|"created", sidebarArchived: "hide"|"show"|"only",
   confirmFullAccess: bool}` (the sidebar's view options and whether switching to Full access asks first).
 - `POST /api/sessions/:id/goal` on a Minimal session → 400 (goals are not part of Minimal).
+
+### Composer: `/` and `@`, skills and MCP on demand (`Backend::composer`, routes in `dshx-server/src/composer.rs`)
+
+Without a composer backend every route below answers 404. Errors are `{error}` with 400, unknown ids 404.
+
+| Method | Path | Body → Response |
+|---|---|---|
+| GET | `/api/composer/suggest?kind=slash\|mention&q=&cwd=&session=&model=` | → `{kind, query, sections:[{id, items}], cacheMiss}` (below); `cwd` defaults to the session's folder, `model` (the composer's pick) decides `cacheMiss` |
+| GET | `/api/sessions/:id/mcp` | → `{active:[server]}`: the MCP servers the chat offers (its log, `always` servers, changes not yet recorded); Minimal → `[]` |
+| POST \| DELETE | `/api/sessions/:id/mcp/:server` | → `{active}`; switches the server on or off for the chat from its next step on; unknown server → 404, Minimal → 400 |
+| POST | `/api/sessions/:id/compact` | → `{compacted:true, items, tokens}` or `{compacted:false}` (nothing to compact yet): dsh `/compact`, also below the pressure threshold, in a bracket with `turn: null`; while a turn runs or input is queued → 400; Minimal → 400 |
+| GET | `/api/sessions/:id/export` | → the session log as JSONL (`application/x-ndjson`, attachment `dsh-codex-<id>.jsonl`): the header line, then one event per line |
+| POST | `/api/sessions/:id/queue/:item` | `{action:"edit"\|"remove"\|"steer", text?}` → 204: dsh `updateQueue` on a prompt waiting in the inbox (`edit` replaces its text; `steer` moves a next-turn prompt into the running turn); gone → 400 "queued item is no longer pending" |
+| POST | `/api/files?name=` | raw body (≤ 100 MB) → `{path, name, bytes, sha256}`: a verbatim read-only copy at `$DSHX_HOME/attachments/files/<sha256[..16]>/<name>`; the UI references it as `@path` in the prompt |
+| PUT | `/api/skills/:name/settings` | `{enabled?, model?, cwd?}` → the skill's row of `GET /api/skills` (for `cwd`) |
+| PUT | `/api/mcp/servers/:name/settings` | `{always?, disabledTools?:[rawName]}` → `McpServer`; plugin servers keep theirs in `[plugins."id".mcp_servers.<name>]` |
+
+- Suggest items (`insert` is the plain text the pick puts in the prompt): `commands`: `{type:"command", name,
+  title, description, insert}` for `compact`, `goal`, `model`, `permission`, `status`, `view`, `export` (the ones
+  that work there: without a session only `model`, `permission`, `view`); `skills`: `{type:"skill", name, title,
+  description, source, plugin, model, insert:"/name "}` (enabled, user-invocable); `apps`: `{type:"server", name,
+  title, description, status, tools, needsLogin, active, always, connector, brandColor, insert:"@name "}` and
+  `{type:"plugin", name, id, title, description, servers, skills, active, brandColor, insert:"@name "}`;
+  `files`: `{type:"file"|"folder", name, path, dir, insert}` with dsh's `formatFileMention` (`@path`, `@folder/`,
+  `@"with spaces"`), at most 20, gitignore-aware, dsh-file-reference-local's excluded folders, at most 50 000
+  indexed per project (cached 20 s); a query with `/` lists that folder. Ranking: exact, prefix, word prefix,
+  substring, subsequence. `cacheMiss` = the model's route has no tool updates (switching a server on resends the
+  whole tool list once).
+- Config: `[skills] catalog = "manual"|"auto"` (default `manual`: no `<available_skills>` catalog and no `skill`
+  tool unless an entry says `model = true`; `auto` = dsh), `[skills.entries."<name>"] enabled` (default `true`;
+  `false` = neither listed nor loadable, not even by `/name`) and `model` (default `false`). `[mcp_servers.<name>]
+  always` (default `false`: tools offered in every chat) and `disabled_tools = [rawName]` (never offered).
+- Prompts: `/name` and `$name` load a skill's `<skill_content>` into that turn (dsh `skill-invocation`). `@server`
+  (case-insensitive) or `@plugin` (all of its servers) switches servers on for the chat: their tools join through the
+  agent's `developer/message` `tool-addition` (declared with `defer_loading` on DeepSeek's addition-only route,
+  sent with the `mid-conversation-tool-changes` beta), followed by a `user/message` with source `{kind:
+  "mcp-activation", server}` that names the tools and carries the server's instructions. Server instructions are no
+  longer part of the system prompt, except for `always` servers. Switching off writes `{kind: "mcp-deactivation",
+  server}`; the addition-only route keeps the declared tools (a call fails with "turned off"), other routes drop
+  them. The log is the record: the first request header, `tool-addition`s and these notes decide which servers a
+  chat offers after a restart.
+- The system prompt carries dsh's file-reference guidance (`context:file-reference`, order 900).
 
 ### Usage and costs (`crates/dsh-codex/src/usage.rs`)
 

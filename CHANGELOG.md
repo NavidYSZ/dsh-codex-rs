@@ -100,8 +100,39 @@
   with "I understand the risks" and "Don't ask again" (`ui-state.json`).
 - **Sidebar view options** (DSH workspace): group by project or one list,
   order by last activity or creation, hide, show or only archived chats.
+- **`/` and `@` in the composer** (DSH input triggers): `/` lists the
+  commands that work there (`/compact`, `/goal`, `/model`, `/permission`,
+  `/status`, `/view`, `/export`) and the skills, `@` the MCP servers, plugins
+  and the project's files and folders (gitignore-aware, Tab opens a folder),
+  ranked prefix › substring › fuzzy. Picks become pills in the text and in
+  the sent bubble; the text stays plain (`/name`, `@server`, `@path`).
+  `GET /api/composer/suggest`.
+- **Skills and MCP servers on demand:** with `[skills] catalog = "manual"`
+  (default) the model sees no skill catalog and no `skill` tool; `/name` or
+  `$name` loads a skill into that turn. Per skill `[skills.entries."name"]
+  enabled` and `model`. MCP servers join a chat only through `@server`,
+  `@plugin` or the active-server chips ("Active: linear ✕"): deferred
+  `tool-addition` plus a note with the server's instructions, so DeepSeek's
+  cached prefix stays valid; `always = true` and `disabled_tools` per server.
+  Routes: `GET/POST/DELETE /api/sessions/:id/mcp…`,
+  `PUT /api/skills/:name/settings`, `PUT /api/mcp/servers/:name/settings`.
+- **`/compact`** and "Compact now" in the context popover
+  (`POST /api/sessions/:id/compact`, dsh `compactNow`); **`/export`** downloads
+  the session log (`GET /api/sessions/:id/export`).
+- **Composer parity:** ↑ in an empty composer brings back this chat's last
+  prompts; any file can be attached (stored read-only, referenced as `@path`,
+  `POST /api/files`); a folder dropped from the project becomes an
+  `@folder/` reference; queued prompts show above the composer, editable,
+  deletable or steered one by one, ⌘↩ on an empty composer steers them all
+  (`POST /api/sessions/:id/queue/:item`); DSH's image limits and texts
+  (count, size, model without image input).
 
 ### Changed
+
+- The system prompt carries DSH's file-reference guidance; MCP server
+  instructions moved out of it (only `always` servers keep theirs there), so
+  existing chats see one prompt-cache rebuild on their next request.
+- Image uploads accept the documented 20 MB (the server's body limit was 2 MB).
 
 - Edit diffs stay closed in the transcript in the Compact and Standard views
   (the "N files changed" card and the Review panel still show them).
