@@ -302,14 +302,14 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | Method | Path | Body → Response |
 |---|---|---|
 | GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}`; each model row adds `{provider, providerName, model, maxTokens, available, cost?}` and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
-| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, ui?: {workDetails?, performanceUsage?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
+| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, ui?: {workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?, sidebarArchived?, confirmFullAccess?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
 | GET | `/api/fs/dirs?path=&hidden=` | → `{path, parent, root, home, roots, git, entries:[{name, path, git, hidden}], truncated}`: subfolders only, sorted by name, at most 500; `path` empty = home (or the first root), `~/…` allowed; `hidden=1` adds dot folders (and Finder-hidden ones on macOS). Only inside `Backend::folder_roots` (home, `[folders] roots`, the parent of every project except `/`); outside → 403 `outside-roots`, missing → 404 `not-found`, unreadable → 403 `permission-denied`, no roots → 404 `unsupported` (errors are `{error, code}`) |
 | GET | `/api/fs/suggestions` | → `{repos:[{name, path}]}`: up to 12 repositories (folders with `.git`) at most three levels below the roots, most recently changed first; skips dot folders, build output and, on macOS, the privacy-protected home folders |
 | POST | `/api/fs/mkdir` | `{path, name}` → 201 `{path}`; `name` is one plain folder name; exists → 409 `exists` |
 | POST | `/api/fs/pick` | `{prompt?, defaultPath?}` → `{path \| null}` (`null` = cancelled) from `osascript` "choose folder"; only on macOS when the server was not started from an SSH session, else 501 `unsupported` (the UI then shows its folder browser); a second dialog → 409 `busy` |
-| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread, preset?}]` (newest first; `preset` when the session recorded one) |
+| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread, preset?, parentSession?}]` (newest first; `preset` when the session recorded one; `parentSession` for branches; subagent children, header `origin: "subagent"`, are left out) |
 | POST | `/api/sessions` | `{cwd?, preset?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`); `preset` (`standard`, `minimal`, default `settings.defaultPreset`) is fixed for the session and recorded as header `agentPreset`; unknown → 400 |
 | GET | `/api/sessions/:id` | → `{header, events:[SessionEvent], status}` |
 | PATCH | `/api/sessions/:id` | `{title?, pinned?, archived?, seen?, unread?}` → list row; kept in `$DSHX_HOME/ui-state.json`, not in the log |
@@ -318,6 +318,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | GET | `/preview/:grant/*path` | no bearer; a file of the granted folder (folders serve `index.html`); HTML/SVG/XML get `CSP: sandbox` (opaque origin), everything `nosniff`, `no-store` |
 | POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?, steer?, timeZone?}` → 202; while a turn runs the text queues as the next turn, with `steer: true` its next step takes it; `timeZone` (IANA) makes the message source dsh's web form `{kind:"user", rpcId, clientTimeZone}` for the time context |
 | POST | `/api/sessions/:id/cancel` | → 202 |
+| POST | `/api/sessions/:id/fork` | `{turn, title?}` → `{id}`: a new chat in the same folder and mode with the log through the `turn/end` of `turn` (seq and time kept; `0` = none of it), then dsh's `session/end-seed {inherited: true}` cut; header `parentSession` = the source, `isSeeded: true`, no `origin` (so it stays in the list and is a root agent); `title` (default dsh's "Title (1)") goes to `ui-state.json`; a turn without `turn/end` → 400, unknown session → 404. Inherited requests count only in the source's usage |
 | DELETE | `/api/sessions/:id` | → 204 |
 | POST | `/api/approvals/:callId` | `{decision:"allowed-once"\|"rejected"}` → 204 |
 | POST | `/api/attachments` | raw image body, `Content-Type` → `ImageAttachmentRef` |
@@ -419,7 +420,9 @@ WebSocket messages (JSON):
 - `/api/info` additionally carries `automation: {goals, schedules, timeContext, team}`,
   `settings.defaultPreset`, `presets: [{id, name, description, help: {intro, explanation, usage}}]`
   (English; help in Markdown from dsh's agent-preset guide; the UI localizes by `id`) and
-  `ui: {workDetails: "compact"|"standard"|"detailed"|"verbose", performanceUsage: "compact"|"detailed"}`.
+  `ui: {workDetails: "compact"|"standard"|"detailed"|"verbose", performanceUsage: "compact"|"detailed",
+  sidebarGroup: "projects"|"flat", sidebarOrder: "activity"|"created", sidebarArchived: "hide"|"show"|"only",
+  confirmFullAccess: bool}` (the sidebar's view options and whether switching to Full access asks first).
 - `POST /api/sessions/:id/goal` on a Minimal session → 400 (goals are not part of Minimal).
 
 ### Usage and costs (`crates/dsh-codex/src/usage.rs`)

@@ -75,6 +75,32 @@
   lists recently used models first and shows context, image support and
   price; ⌃⇧M opens it.
 
+- **Message actions** (DSH `message.branch`, Codex): copy, "Send again" and
+  "Edit and send again" under prompts; copy and "Branch into a new
+  conversation" under a finished turn's answer. `POST /api/sessions/:id/fork
+  {turn}` copies the log through that turn behind dsh's inherited cut into a
+  new chat in the same folder and mode (header `parentSession`); "Edit and
+  send again" branches right before the prompt and puts it into the composer.
+- **Failure notices per code** with the action that helps: invalid key →
+  the provider's settings in Models, exhausted balance → the provider's top-up
+  page (DeepSeek, Anthropic), rate limit, full context (`/compact` or a new
+  chat), connection and timeout, refusal; "Send again" on the last turn. The
+  output limit shows DSH's hint with "Continue", sent in the prompt's language.
+- **Compaction** is readable: "Compacted 12 history items (~48,213 tokens)"
+  with the summary to unfold, "Compacting context…" while it runs.
+- **Long chats** render their latest 30 turns with "Load earlier"; slim turn
+  markers on the right edge preview each prompt and jump to any turn.
+  **Find in chat** (⌘F) highlights matches and loads the turns they are in.
+- **Keyboard shortcuts** like Codex: ⌘1–9 open the chats in sidebar order,
+  ⇧⌘[ / ⇧⌘] (⌃⇧Tab / ⌃Tab) previous and next chat, ⌥⌘A the next chat that
+  needs you, ⇧Esc mark all read, ⇧⌘A archive, ⌥⌘P pin, ⌥⌘R rename, and ⌘/ an
+  overview; the Mac app has a Chat menu, "Find in chat" and Help → Keyboard
+  shortcuts for them.
+- **Full access asks first** (DSH `confirm.*`) in the composer and Settings,
+  with "I understand the risks" and "Don't ask again" (`ui-state.json`).
+- **Sidebar view options** (DSH workspace): group by project or one list,
+  order by last activity or creation, hide, show or only archived chats.
+
 ### Changed
 
 - Edit diffs stay closed in the transcript in the Compact and Standard views
@@ -93,6 +119,9 @@
   the Chrome tests now always do, so they never prompt for the login keychain.
 
 ### Fixed
+
+- Settings → About showed "Tools" instead of "Mac tools": the About label had
+  the same i18n key as the MCP tools count (now `macTools`).
 
 - Image-heavy chats (many browser screenshots) no longer end with
   `IMAGE_OFFLOAD_REQUIRED`: like dsh `compaction-image-offload`, the agent

@@ -376,7 +376,11 @@ impl Inner {
     /// The calling agent as tools see it (`ToolContext::caller`).
     fn caller_info(&self) -> Option<CallerInfo> {
         let (turn, turn_start_seq) = self.state.lock().unwrap().open_turn?;
-        let root = !self.journal.header().extra.contains_key("parentSession");
+        // dsh `agents.roots()`: lineage alone does not make a child, so a
+        // branch (parentSession without origin "subagent") is still a root.
+        let header = self.journal.header();
+        let root = header.delegation_depth == 0
+            && header.extra.get("origin").and_then(|o| o.as_str()) != Some("subagent");
         Some(CallerInfo {
             root,
             turn,
