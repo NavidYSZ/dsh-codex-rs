@@ -1,0 +1,159 @@
+/* Model providers: the composer's model picker (mp-), the Models section of
+   Settings (mo-) and its dialogs (md-). Tokens from tokens.css only. */
+
+/* ---- picker ------------------------------------------------------------------ */
+
+.menu.mp-menu { width: min(380px, calc(100vw - 32px)); max-width: none; padding: 0; overflow: hidden; }
+.mp { display: flex; flex-direction: column; max-height: min(480px, 62vh); }
+.mp-search {
+  flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
+  border-bottom: .5px solid var(--line-3); color: var(--ink-3);
+}
+.mp-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--ink); font-size: 13px; }
+.mp-search input::placeholder { color: var(--ink-caption); }
+.mp-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 6px 6px; overscroll-behavior: contain; }
+.mp-group + .mp-group { margin-top: 2px; }
+.mp-row {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--ink); text-align: left; cursor: pointer;
+}
+.mp-row.is-cursor, .mp-row:focus-visible { background: var(--hover); outline: 0; }
+.mp-row:disabled { cursor: default; }
+.mp-row:disabled .mp-name { color: var(--ink-3); }
+.mp-row:disabled .mp-hint { color: var(--warn); }
+.mp-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mp-name { font-size: 13px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-hint { margin-top: 1px; font-size: 11.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mp-empty { padding: 18px 12px; font-size: 13px; color: var(--ink-3); text-align: center; }
+.mp-effort {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px 8px 16px;
+  border-top: .5px solid var(--line-3);
+}
+.mp-effort-label { font-size: 12px; color: var(--ink-3); }
+.mp-effort .segmented { flex-wrap: wrap; justify-content: flex-end; }
+.mp-effort .seg { padding: 0 8px; }
+.mp-manage {
+  flex: none; height: 34px; padding: 0 16px; border: 0; border-top: .5px solid var(--line-3); background: none;
+  color: var(--link); font-size: 12.5px; font-weight: 500; text-align: left; cursor: pointer;
+}
+.mp-manage:hover, .mp-manage:focus-visible { background: var(--hover); outline: 0; }
+
+/* ---- Models section ------------------------------------------------------------ */
+
+.mo-card { padding-bottom: 12px; }
+.mo-intro { margin: 2px 0 10px; font-size: 12.5px; color: var(--ink-3); }
+.mo-list { display: flex; flex-direction: column; gap: 8px; }
+.mo-row {
+  display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 10px 10px 12px; border-radius: 12px;
+  background: var(--bg-2); box-shadow: 0 0 0 .5px var(--line-3);
+}
+.mo-logo {
+  width: 32px; height: 32px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 9px; color: #fff; font-size: 14px; font-weight: 600; background: var(--ink-3);
+}
+.mo-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mo-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 550; color: var(--ink); }
+.mo-tag { height: 18px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 999px; background: var(--hover); color: var(--ink-3); font-size: 11px; font-weight: 500; }
+.mo-meta { font-size: 12px; line-height: 1.5; color: var(--ink-3); }
+.mo-sep { margin: 0 5px; }
+.mo-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 1px; border-radius: 50%; background: var(--ink-caption); }
+.mo-dot.is-ok { background: var(--success); }
+.mo-dot.is-missing { background: var(--warn); }
+.mo-actions { flex: none; display: flex; align-items: center; gap: 4px; }
+.icon-btn.mo-danger:hover { color: var(--error); background: var(--error-bg); }
+.mo-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.mo-foot .btn { gap: 5px; }
+.mo-status { font-size: 12.5px; color: var(--success); }
+.mo-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 12px; background: var(--error-bg); color: var(--error); font-size: 13px; }
+.mo-skeleton { height: 54px; }
+.mo-skeleton .mo-logo { background: var(--hover); }
+.mo-bar { height: 10px; width: 40%; border-radius: 5px; background: var(--hover); animation: pulse 1.2s ease-in-out infinite; }
+
+/* ---- dialogs -------------------------------------------------------------------- */
+
+.md-scrim {
+  position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-start;
+  padding: min(10vh, 80px) 16px 16px; background: #00000033; overflow-y: auto; animation: md-fade .14s ease-out;
+}
+@keyframes md-fade { from { opacity: 0; } }
+@keyframes md-rise { from { opacity: 0; transform: translateY(6px); } }
+.md-dialog {
+  width: min(560px, 100%); display: flex; flex-direction: column; max-height: calc(100dvh - min(10vh, 80px) - 16px);
+  border-radius: 16px; background: var(--bg-1); box-shadow: var(--menu-shadow); animation: md-rise .16s ease-out;
+}
+.md-dialog.md-editor { width: min(680px, 100%); }
+.md-dialog.md-small { width: min(440px, 100%); }
+.md-head { flex: none; display: flex; align-items: flex-start; gap: 12px; padding: 16px 16px 8px 20px; }
+.md-heading { flex: 1; min-width: 0; }
+.md-title { margin: 4px 0 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); }
+.md-desc { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+.md-close { flex: none; }
+.md-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 20px 16px; }
+.md-small .md-body:empty { display: none; }
+.md-foot { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 16px; border-top: .5px solid var(--line-2); }
+.btn.btn-danger { background: var(--error); color: #fff; }
+.btn.btn-danger:hover { background: color-mix(in srgb, var(--error) 86%, #000); }
+
+.md-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.md-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; margin: 0; padding: 0; border: 0; }
+/* `.input` grows along a row; in these columns it keeps its height. */
+.md-field .input, .md-field .select, .mo-price .input { flex: none; width: 100%; }
+.md-inline .input { flex: 1; width: auto; min-width: 0; }
+.is-wide { grid-column: 1 / -1; }
+.md-label { font-size: 12px; font-weight: 500; color: var(--ink-2); padding: 0; }
+.md-hint { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.md-error { margin: 0; font-size: 12px; line-height: 1.45; color: var(--error); }
+.md-inline { display: flex; gap: 8px; align-items: center; }
+.input:disabled, .select:disabled { opacity: .6; }
+
+.mo-catalog { display: flex; flex-direction: column; gap: 8px; }
+.mo-choice {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; border-radius: 12px;
+  background: var(--bg-2); box-shadow: 0 0 0 .5px var(--line-3); color: var(--ink-3); text-align: left; cursor: pointer;
+  transition: background .15s;
+}
+.mo-choice:hover:not(:disabled), .mo-choice:focus-visible { background: var(--hover); outline: 0; box-shadow: 0 0 0 1.5px var(--accent); }
+.mo-choice:disabled { cursor: default; }
+.mo-choice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mo-choice-title { font-size: 13.5px; font-weight: 550; color: var(--ink); }
+.mo-choice-hint { font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+
+.mo-models { display: flex; flex-direction: column; gap: 8px; }
+.mo-models-head { display: flex; align-items: baseline; gap: 10px; }
+.mo-models-meta { font-size: 12px; color: var(--ink-3); }
+.mo-models-head .link-btn:disabled { opacity: .45; cursor: default; }
+.mo-fixed { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.mo-fixed li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 8px; background: var(--bg-2); font-size: 13px; }
+.mo-fixed .mono { font-size: 12px; color: var(--ink-3); }
+.mo-model-list { display: flex; flex-direction: column; gap: 6px; }
+.mo-model { border-radius: 10px; }
+.mo-model.is-open { padding: 6px; margin: 0 -6px; background: var(--bg-2); box-shadow: 0 0 0 .5px var(--line-3); }
+.mo-model-row { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.mo-model-more { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; padding: 12px 4px 6px; }
+.mo-checks { flex-direction: row; flex-wrap: wrap; gap: 6px 14px; }
+.mo-checks .md-label { width: 100%; margin-bottom: 2px; }
+.mo-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.mo-check input { accent-color: var(--accent); margin: 0; }
+.mo-prices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mo-prices .md-label { grid-column: 1 / -1; }
+.mo-price { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--ink-3); }
+.mo-add-model { align-self: flex-start; gap: 5px; }
+
+.mo-fetch-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.mo-fetch-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; }
+.mo-fetch-row { width: 100%; padding: 6px 8px; border-radius: 8px; }
+.mo-fetch-row:hover { background: var(--hover); }
+.mo-fetch-row .mono { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mo-fetch-meta { font-size: 12px; color: var(--ink-3); }
+
+@media (max-width: 560px) {
+  .md-scrim { padding: 12px; align-items: flex-end; }
+  .md-dialog { max-height: calc(100dvh - 24px); }
+  .md-form, .mo-model-more { grid-template-columns: 1fr; }
+  .mo-model-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .mo-model-row .input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  .mo-prices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mo-row { flex-wrap: wrap; row-gap: 8px; }
+  .mo-text { flex: 1 1 calc(100% - 44px); }
+  .mo-actions { margin-left: 44px; }
+}

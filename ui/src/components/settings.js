@@ -1,13 +1,13 @@
-// Settings: theme (local to this browser), defaults for new chats, API key.
-import { useState } from 'preact/hooks';
+// Settings: theme (local to this browser), defaults for new chats, model providers.
 import { html, cx } from '../html.js';
 import { t, age } from '../i18n.js';
 import { useStore } from '../store.js';
 import {
   store, setTheme, updateSettings, closeSettings, toggleSidebar, setArchived, deleteSession, setFollowup, setNotify,
 } from '../state.js';
-import { IconChevronLeft, IconCheck, IconKey, IconSidebar, IconArchive } from '../icons.js';
+import { IconChevronLeft, IconSidebar, IconArchive } from '../icons.js';
 import { workspaceName } from './composer.js';
+import { ModelsSection, ModelSelect } from './models.js';
 
 function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
@@ -21,34 +21,6 @@ function Field({ label, hint, children }) {
     <div class="field-text"><div class="field-label">${label}</div>${hint ? html`<div class="field-hint">${hint}</div>` : null}</div>
     <div class="field-control">${children}</div>
   </div>`;
-}
-
-function ApiKey({ configured }) {
-  const [editing, setEditing] = useState(!configured);
-  const [value, setValue] = useState('');
-  const [saved, setSaved] = useState(false);
-  const save = async (e) => {
-    e.preventDefault();
-    if (!value.trim()) return;
-    if (await updateSettings({ apiKey: value.trim() })) {
-      setValue('');
-      setEditing(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }
-  };
-  if (!editing) {
-    return html`<div class="key-row">
-      <span class="key-state"><${IconCheck} size=${14} />${saved ? t.saved : t.apiKeySet}</span>
-      <button type="button" class="btn btn-small" onClick=${() => setEditing(true)}>${t.replace}</button>
-    </div>`;
-  }
-  return html`<form class="key-row" onSubmit=${save}>
-    <input class="input mono" type="password" autocomplete="off" spellcheck="false" value=${value}
-      placeholder=${t.apiKeyPlaceholder} aria-label=${t.apiKey} onInput=${(e) => setValue(e.currentTarget.value)} />
-    ${configured ? html`<button type="button" class="btn btn-small" onClick=${() => { setEditing(false); setValue(''); }}>${t.cancel}</button>` : null}
-    <button type="submit" class="btn btn-small btn-primary" disabled=${!value.trim()}>${t.save}</button>
-  </form>`;
 }
 
 function Archived() {
@@ -88,19 +60,12 @@ export function Settings() {
     <div class="scroll"><div class="settings">
       <h1 class="settings-title">${t.settings}</h1>
 
-      <section class="card">
-        <h2 class="card-title"><${IconKey} size=${14} />${t.account}</h2>
-        <${Field} label=${t.apiKey} hint=${info?.apiKeyConfigured ? t.apiKeyHint : t.apiKeyMissing}>
-          <${ApiKey} configured=${!!info?.apiKeyConfigured} />
-        </${Field}>
-      </section>
+      <${ModelsSection} />
 
       <section class="card">
         <h2 class="card-title">${t.defaults}</h2>
         <${Field} label=${t.model}>
-          <select class="select" value=${s.model} aria-label=${t.model} onChange=${(e) => updateSettings({ model: e.currentTarget.value })}>
-            ${models.map((m) => html`<option key=${m.id} value=${m.id}>${m.name ?? m.id}</option>`)}
-          </select>
+          <${ModelSelect} value=${s.model} onChange=${(model) => updateSettings({ model })} />
         </${Field}>
         ${efforts.length ? html`<${Field} label=${t.effort}>
           <${Segmented} label=${t.effort} value=${s.effort ?? model?.defaultReasoningEffort} onChange=${(v) => updateSettings({ effort: v })}

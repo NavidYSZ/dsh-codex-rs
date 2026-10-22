@@ -113,6 +113,13 @@ class HttpApi {
   mcpToken(name, token) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/token`, { token }); }
   connectors() { return this.req('GET', '/api/connectors'); }
 
+  // Models page: providers, keys (write only) and provider model lists.
+  providers() { return this.req('GET', '/api/providers'); }
+  saveProvider(id, body) { return this.req('PUT', `/api/providers/${enc(id)}`, body); }
+  deleteProvider(id) { return this.req('DELETE', `/api/providers/${enc(id)}`); }
+  setProviderKey(id, key) { return this.req('PUT', `/api/providers/${enc(id)}/key`, { key }); }
+  fetchProviderModels(id, probe) { return this.req('POST', `/api/providers/${enc(id)}/models/fetch`, probe ?? {}); }
+
   // Goals, schedules and Agent Teams.
   goal(id) { return this.req('GET', `/api/sessions/${enc(id)}/goal`); }
   goalCommand(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/goal`, body); }
@@ -187,10 +194,18 @@ const DEFAULT_INFO = {
   locale: 'en',
   models: [
     { id: 'deepseek-flash', name: 'deepseek-flash', contextWindow: 1000000, inputModalities: ['text', 'image'],
-      reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high' },
+      reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high',
+      provider: 'deepseek-official', providerName: 'DeepSeek', model: 'deepseek-flash', available: true },
     { id: 'deepseek-v4-pro', name: 'deepseek-v4-pro', contextWindow: 1000000, inputModalities: ['text'],
-      reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high' },
+      reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high',
+      provider: 'deepseek-official', providerName: 'DeepSeek', model: 'deepseek-v4-pro', available: true },
+    ...[['claude-opus-5-5', 'Claude Opus 5.5', 4, 20], ['claude-sonnet-5-5', 'Claude Sonnet 5.5', 2, 10]].map(([model, name, input, output]) => ({
+      id: `anthropic/${model}`, name, contextWindow: 1000000, maxTokens: 128000, inputModalities: ['text', 'image'],
+      reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultReasoningEffort: 'high',
+      provider: 'anthropic', providerName: 'Anthropic', model, available: true, cost: { input, output, cacheRead: input / 20, cacheWrite: input * 1.25 },
+    })),
   ],
+  providers: [{ id: 'deepseek-official', name: 'DeepSeek', available: true }, { id: 'anthropic', name: 'Anthropic', available: true }],
   settings: { model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask' },
   apiKeyConfigured: true,
   tools: { browser: true, app: true, computer: true },
@@ -198,6 +213,37 @@ const DEFAULT_INFO = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clone = (v) => JSON.parse(JSON.stringify(v));
+
+/** The Models page of a fixture: built-in DeepSeek and Anthropic from the catalog. */
+function fixtureProviders() {
+  const claude = (id, name, input, output, efforts) => ({
+    id, ref: `anthropic/${id}`, name, contextWindow: 1000000, maxTokens: 128000, input: ['text', 'image'],
+    reasoningEfforts: efforts, defaultReasoningEffort: 'high', thinking: 'adaptive',
+    cost: { input, output, cacheRead: input / 20, cacheWrite: input * 1.25 },
+  });
+  const full = ['low', 'medium', 'high', 'xhigh', 'max'];
+  return [
+    {
+      id: 'deepseek-official', name: 'DeepSeek', api: 'anthropic-messages', baseUrl: 'https://api.deepseek.com/anthropic',
+      defaultBaseUrl: 'https://api.deepseek.com/anthropic', apiKeyEnv: 'DEEPSEEK_API_KEY', builtin: true, catalog: true,
+      modelsEditable: false, key: { configured: true, source: 'stored', locked: false, required: true }, headers: [],
+      models: DEFAULT_INFO.models.filter((m) => m.provider === 'deepseek-official')
+        .map((m) => ({ id: m.id, ref: m.id, name: m.name, contextWindow: m.contextWindow, input: m.inputModalities, reasoningEfforts: m.reasoningEfforts })),
+    },
+    {
+      id: 'anthropic', name: 'Anthropic', api: 'anthropic-messages', baseUrl: 'https://api.anthropic.com',
+      defaultBaseUrl: 'https://api.anthropic.com', apiKeyEnv: 'ANTHROPIC_API_KEY', builtin: false, catalog: true,
+      modelsEditable: true, modelsCustomized: false, titleModel: 'claude-haiku-5-5', headers: [],
+      key: { configured: false, source: null, locked: false, env: 'ANTHROPIC_API_KEY', required: true },
+      models: [
+        claude('claude-opus-5-5', 'Claude Opus 5.5', 4, 20, full),
+        claude('claude-sonnet-5-5', 'Claude Sonnet 5.5', 2, 10, full),
+        claude('claude-haiku-5-5', 'Claude Haiku 5.5', 0.1, 0.5, ['off', ...full]),
+        claude('claude-fable-5-1', 'Claude Fable 5.1', 10, 50, full),
+      ],
+    },
+  ];
+}
 
 /**
  * Replays ui/fixtures/<name>.json. Events before `live` are history; the rest
@@ -465,6 +511,56 @@ class FixtureApi {
   async goal() { return { goal: null }; }
   async team() { throw new ApiError(404, 'team'); }
   assetUrl(url) { return url; }
+
+  // Models page: DeepSeek plus an Anthropic route, kept in memory.
+  async providers() {
+    await this.ready;
+    this.providerRows ??= fixtureProviders();
+    const added = new Set(this.providerRows.map((p) => p.id));
+    return clone({
+      providers: this.providerRows,
+      catalog: [
+        { id: 'deepseek-official', name: 'DeepSeek', api: 'anthropic-messages', models: 2, added: true },
+        { id: 'anthropic', name: 'Anthropic', api: 'anthropic-messages', baseUrl: 'https://api.anthropic.com', apiKeyEnv: 'ANTHROPIC_API_KEY', models: 4, added: added.has('anthropic') },
+      ],
+    });
+  }
+
+  async saveProvider(id, body) {
+    await this.providers();
+    const rows = this.providerRows;
+    const old = rows.find((p) => p.id === id);
+    const models = (body.models ?? old?.models ?? []).map((m) => ({ ...m, ref: `${id}/${m.id}`, name: m.name ?? m.id }));
+    const row = {
+      ...(old ?? { id, builtin: false, catalog: id === 'anthropic', modelsEditable: true, headers: [] }),
+      name: body.displayName || old?.name || (id === 'anthropic' ? 'Anthropic' : id),
+      api: body.api ?? old?.api ?? 'anthropic-messages',
+      baseUrl: body.baseUrl ?? old?.baseUrl ?? 'https://api.anthropic.com',
+      models: id === 'deepseek-official' ? old.models : models,
+      modelsCustomized: !!body.models,
+      key: body.apiKey ? { configured: true, source: 'stored', locked: false, required: true } : old?.key ?? { configured: false, required: id === 'anthropic' },
+    };
+    this.providerRows = old ? rows.map((p) => (p.id === id ? row : p)) : [...rows, row];
+    return clone(row);
+  }
+
+  async deleteProvider(id) {
+    await this.providers();
+    this.providerRows = this.providerRows.filter((p) => p.id !== id);
+    return null;
+  }
+
+  async setProviderKey(id, key) {
+    await this.providers();
+    const row = this.providerRows.find((p) => p.id === id);
+    row.key = { ...row.key, configured: !!key, source: key ? 'stored' : null };
+    return clone(row);
+  }
+
+  async fetchProviderModels() {
+    await this.wait(600);
+    return { models: ['glm-5.3', 'glm-5.3-flash', 'kimi-k3', 'deepseek-v4.1-flash'].map((id) => ({ id, contextWindow: 1000000 })) };
+  }
 
   async files(_id, dir) {
     await this.ready;

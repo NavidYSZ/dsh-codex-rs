@@ -27,9 +27,10 @@ fn unsupported() -> anyhow::Error {
 pub trait Providers: Send + Sync + 'static {
     /// `{providers: [Provider], catalog: [CatalogEntry]}`.
     async fn list(&self) -> anyhow::Result<Value>;
-    /// Creates or replaces a provider from `{displayName?, api?, baseUrl?,
-    /// apiKeyEnv?, titleModel?, headers?, models?, compat?, apiKey?}` →
-    /// `Provider`. `deepseek-official` takes only `baseUrl`.
+    /// Creates or updates a provider from `{displayName?, api?, baseUrl?,
+    /// apiKeyEnv?, titleModel?, headers?, models?, compat?, apiKey?}`: the
+    /// fields sent replace (`null` clears one), the others stay →
+    /// `Provider`. `deepseek-official` takes only `baseUrl` and `apiKey`.
     async fn save(&self, id: &str, body: Value) -> anyhow::Result<Value> {
         let _ = (id, body);
         Err(unsupported())

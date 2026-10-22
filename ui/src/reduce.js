@@ -6,6 +6,9 @@
 
 export const CODEX_TOOLS = new Set(['computer', 'app', 'browser']);
 
+/** The picker's model reference: bare DeepSeek ids, `provider/model` otherwise. */
+export const modelRef = (provider, model) => (provider && provider !== 'deepseek-official' ? `${provider}/${model}` : model);
+
 export function parseArgs(raw) {
   if (raw && typeof raw === 'object') return raw;
   if (typeof raw !== 'string' || !raw) return {};
@@ -133,7 +136,7 @@ export function buildTranscript(events) {
           }
         });
         if (d.interrupted) t.items.push({ kind: 'notice', key: `i:${e.seq}`, tone: 'muted', code: 'stopped' });
-        if (msg.source?.model) out.model = msg.source.model;
+        if (msg.source?.model) out.model = modelRef(msg.source.provider, msg.source.model);
         if (d.usage) {
           const input = inputTotal(d.usage);
           out.usage.input += input;
@@ -223,18 +226,18 @@ export function buildTranscript(events) {
         if (d.title) out.title = d.title;
         break;
       case 'model/selection':
-        out.model = d.model ?? out.model;
+        out.model = d.model ? modelRef(d.provider, d.model) : out.model;
         out.effort = d.reasoningEffort;
         break;
       case 'request/header': {
         const c = d.header?.config;
-        if (c?.model) out.model = c.model;
+        if (c?.model) out.model = modelRef(c.provider, c.model);
         if (c && 'reasoningEffort' in c) out.effort = c.reasoningEffort;
         break;
       }
       case 'request/context':
         if (d.contextWindow) out.contextWindow = d.contextWindow;
-        if (d.model) out.model = d.model;
+        if (d.model) out.model = modelRef(d.provider, d.model);
         break;
       case 'sandbox/mode':
         out.sandbox = d.mode ?? out.sandbox;

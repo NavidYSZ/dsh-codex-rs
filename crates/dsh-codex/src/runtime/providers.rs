@@ -336,6 +336,34 @@ fn spec_json(spec: &ProviderSpec, key: Value) -> Value {
     })
 }
 
+/// `[providers.<id>]` after a page edit: the fields `body` names replace
+/// the old ones (`null` clears one), the rest keep their value. Header
+/// values never reach the page, so they only change when sent.
+fn patched(existing: Option<&ProviderConfig>, body: &Value) -> anyhow::Result<ProviderConfig> {
+    let mut merged = serde_json::to_value(existing.cloned().unwrap_or_default())?;
+    let fields = merged
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("provider table is not an object"))?;
+    for (key, value) in body.as_object().into_iter().flatten() {
+        let field = match key.as_str() {
+            "api" => "api",
+            "baseUrl" | "baseURL" | "base_url" => "base_url",
+            "apiKeyEnv" | "api_key_env" => "api_key_env",
+            "displayName" | "display_name" => "display_name",
+            "titleModel" | "title_model" => "title_model",
+            "headers" | "models" | "compat" => key.as_str(),
+            // `apiKey` goes to the credentials file, anything else is ignored.
+            _ => continue,
+        };
+        if value.is_null() {
+            fields.remove(field);
+        } else {
+            fields.insert(field.to_owned(), value.clone());
+        }
+    }
+    serde_json::from_value(without_nulls(merged)).context("invalid provider settings")
+}
+
 /// Drops `null` members (a cleared field), at the top and one level down.
 fn without_nulls(mut value: Value) -> Value {
     if let Some(map) = value.as_object_mut() {
@@ -366,8 +394,9 @@ impl RuntimeProviders {
     }
 
     fn save_deepseek(&self, body: &Value) -> anyhow::Result<Value> {
-        if let Some(url) = body.get("baseUrl").and_then(Value::as_str) {
-            let url = url.trim();
+        // A cleared field (`null` or empty) is the public endpoint again.
+        if let Some(url) = body.get("baseUrl") {
+            let url = url.as_str().unwrap_or_default().trim();
             let url = if url.is_empty() {
                 dshx_llm::PUBLIC_BASE_URL
             } else {
@@ -455,17 +484,7 @@ impl Providers for RuntimeProviders {
             return self.save_deepseek(&body);
         }
         let config = self.rt.config();
-        let existing = config.providers.get(id).cloned();
-        let body = without_nulls(body);
-        let mut table: ProviderConfig =
-            serde_json::from_value(body.clone()).context("invalid provider settings")?;
-        // Header values are never sent to the page; without new ones keep the old.
-        if body.get("headers").is_none() {
-            table.headers = existing
-                .as_ref()
-                .map(|e| e.headers.clone())
-                .unwrap_or_default();
-        }
+        let mut table = patched(config.providers.get(id), &body)?;
         // The catalog's own models stay inherited, so its updates arrive.
         if let Some(entry) = catalog_entry(id)
             && !table.models.is_empty()
@@ -614,6 +633,29 @@ mod tests {
         assert_eq!(body, json!({"compat": {}, "baseUrl": "x"}));
         let table: ProviderConfig = serde_json::from_value(body).unwrap();
         assert_eq!(table.base_url.as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn edits_patch_the_table() {
+        let old = ProviderConfig {
+            api: Some("openai-completions".into()),
+            base_url: Some("https://a.example/v1".into()),
+            title_model: Some("small".into()),
+            headers: [("X-Org".to_string(), "acme".to_string())].into(),
+            ..Default::default()
+        };
+        let new = patched(
+            Some(&old),
+            &json!({"baseUrl": "https://b.example/v1", "titleModel": null, "apiKey": "sk", "models": [{"id": "m"}]}),
+        )
+        .unwrap();
+        assert_eq!(new.api, old.api);
+        assert_eq!(new.base_url.as_deref(), Some("https://b.example/v1"));
+        assert_eq!(new.title_model, None);
+        assert_eq!(new.headers, old.headers);
+        assert_eq!(new.models[0].id, "m");
+        let cleared = patched(Some(&new), &json!({"models": null})).unwrap();
+        assert!(cleared.models.is_empty());
     }
 
     #[test]
