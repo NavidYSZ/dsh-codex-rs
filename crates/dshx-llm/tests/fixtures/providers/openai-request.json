@@ -1,0 +1,116 @@
+{
+  "model": "glm-5.3",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are terse."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Look at this"
+        },
+        {
+          "type": "text",
+          "text": "Image \"pixel.png\" (sha256:21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3); request preview 1x1px. Normalized copy (read-only; may be resized or re-encoded): \"/root/.dsh/attachments/v1/objects/21/21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3\" (1x1px, image/png). Source dimensions, format, and byte size may differ. Copy to a writable path ending in .png before editing."
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAE0lEQVR4nGP4z8DAAMZAwIDMAQCJkAv1Bw2D+gAAAABJRU5ErkJggg=="
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Reading it.",
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"file_path\":\"a.rs\"}"
+          }
+        }
+      ],
+      "reasoning_content": "plan"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "fn main() {}\n\nImage \"pixel.png\" (sha256:21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3); request preview 1x1px. Normalized copy (read-only; may be resized or re-encoded): \"/root/.dsh/attachments/v1/objects/21/21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3\" (1x1px, image/png). Source dimensions, format, and byte size may differ. Copy to a writable path ending in .png before editing."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Images from the tool results above:"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAE0lEQVR4nGP4z8DAAMZAwIDMAQCJkAv1Bw2D+gAAAABJRU5ErkJggg=="
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Also check the tests."
+    },
+    {
+      "role": "assistant",
+      "content": "Done."
+    },
+    {
+      "role": "user",
+      "content": "Thanks. Summarize."
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "read",
+        "description": "Read a file.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "file_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "file_path"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "bash",
+        "description": "Run a command.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "stream": true,
+  "stream_options": {
+    "include_usage": true
+  },
+  "max_tokens": 131072,
+  "reasoning_effort": "high"
+}

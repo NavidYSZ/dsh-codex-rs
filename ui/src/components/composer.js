@@ -14,6 +14,7 @@ import { Menu, MenuItem, ActionItem, Thumb } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
 import { ModeChip, useChatMode } from './modes.js';
 import { ProjectMenu } from './folders.js';
+import { ModelChip } from './models.js';
 import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 import { UsageBar } from './usage.js';
@@ -36,29 +37,6 @@ export function useSelection(tx) {
   if (modelInfo?.reasoningEfforts?.length && effort && !modelInfo.reasoningEfforts.includes(effort)) effort = modelInfo.defaultReasoningEffort ?? null;
   const sandbox = pick.sandbox ?? tx?.sandbox ?? d.sandbox ?? 'workspace-write';
   return { model, effort, sandbox, modelInfo, models: info?.models ?? [] };
-}
-
-function ModelChip({ sel }) {
-  const [open, setOpen] = useState(false);
-  const anchor = useRef(null);
-  const efforts = sel.modelInfo?.reasoningEfforts ?? [];
-  return html`<span class="chip-wrap">
-    <button type="button" ref=${anchor} class="chip chip-model" aria-haspopup="menu" aria-expanded=${open}
-      onClick=${() => setOpen((v) => !v)}>
-      <span class="chip-label">${sel.model}</span>
-      ${sel.effort ? html`<span class="chip-effort">${t.efforts[sel.effort] ?? sel.effort}</span>` : null}
-      <span class="chip-chev"><${IconChevronDown} size=${12} /></span>
-    </button>
-    <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor}>
-      <div class="menu-head">${t.model}</div>
-      ${sel.models.map((m) => html`<${MenuItem} key=${m.id} checked=${m.id === sel.model}
-        hint=${m.inputModalities?.includes('image') ? 'text · image' : 'text'}
-        onClick=${() => { setComposer({ model: m.id }); }}>${m.name ?? m.id}</${MenuItem}>`)}
-      ${efforts.length ? html`<div class="menu-sep" /><div class="menu-head">${t.effort}</div>
-        ${efforts.map((e) => html`<${MenuItem} key=${e} checked=${e === sel.effort}
-          onClick=${() => { setComposer({ effort: e }); setOpen(false); }}>${t.efforts[e] ?? e}</${MenuItem}>`)}` : null}
-    </${Menu}>
-  </span>`;
 }
 
 function AccessChip({ sel, side = 'top', align = 'start', plain }) {

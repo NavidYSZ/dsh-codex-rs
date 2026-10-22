@@ -569,14 +569,24 @@ async fn summarize_and_commit(
                 .unwrap_or(c.compaction.headroom_tokens.min(u32::MAX as u64) as u32),
         )
     };
-    let model = configured_model
-        .or_else(|| {
-            header
-                .as_ref()
-                .and_then(|h| h["config"]["model"].as_str().map(str::to_owned))
-        })
-        .unwrap_or_else(|| inner.config.lock().unwrap().model.clone());
-    let provider = inner.llm.provider().to_owned();
+    // The summarizer runs on the route of the model it names: the last
+    // request's route, unless a summarization model is configured.
+    let current = || {
+        let c = inner.config.lock().unwrap();
+        (c.model.clone(), c.provider.clone())
+    };
+    let (model, route) = match configured_model {
+        Some(model) => (model, current().1),
+        None => header
+            .as_ref()
+            .and_then(|h| {
+                let model = h["config"]["model"].as_str()?.to_owned();
+                Some((model, h["config"]["provider"].as_str().map(str::to_owned)))
+            })
+            .unwrap_or_else(current),
+    };
+    let llm = inner.client_for(route.as_deref());
+    let provider = llm.provider().to_owned();
     let (raw, usage) = loop {
         let mut messages = summary_input(inner, &shadowed);
         messages.push(Message::user_text(INSTRUCTION));
@@ -589,7 +599,7 @@ async fn summarize_and_commit(
             temperature: None,
             session_id: Some(inner.journal.id()),
         };
-        let mut stream = inner.llm.stream(request, cancel.child_token()).await;
+        let mut stream = llm.stream(request, cancel.child_token()).await;
         let mut asm = BlockAssembler::default();
         loop {
             tokio::select! {

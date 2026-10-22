@@ -58,6 +58,22 @@
   crossfades, showing the target's last snapshot meanwhile. Progress line,
   inline error banner, page-colored window background, status dots, unread
   counts and ⌃1–⌃9 in the switcher.
+- **Model providers** besides DeepSeek: Anthropic from the built-in catalog
+  and custom APIs speaking Anthropic Messages or OpenAI Chat Completions
+  (`[providers.<id>]` in `config.toml`, keys per provider in
+  `credentials.toml`, an environment variable wins). Models are referenced
+  as `provider/model`; bare DeepSeek ids keep working and the DeepSeek wire
+  stays byte for byte. Anthropic requests use `cache_control` breakpoints,
+  adaptive thinking with effort, and replay thinking signatures only on the
+  route that produced them; titles, compaction and subagents follow the
+  chat's provider (Anthropic titles use Claude Haiku 5.5). Routes
+  `/api/providers…`, `tools/dev/mock_openai.py` for offline tests.
+- **Settings → Models:** provider cards with key status, "Add model
+  provider" (catalog or custom API), "Fetch available models", model rows
+  with context window, output cap, input types, reasoning levels and
+  prices. The composer's model picker groups by provider, searches,
+  lists recently used models first and shows context, image support and
+  price; ⌃⇧M opens it.
 
 ### Changed
 

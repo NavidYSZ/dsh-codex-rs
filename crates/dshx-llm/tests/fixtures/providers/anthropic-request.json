@@ -1,0 +1,150 @@
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 128000,
+  "stream": true,
+  "system": [
+    {
+      "type": "text",
+      "text": "You are terse.",
+      "cache_control": {
+        "type": "ephemeral"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Look at this"
+        },
+        {
+          "type": "text",
+          "text": "Image \"pixel.png\" (sha256:21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3); request preview 1x1px. Normalized copy (read-only; may be resized or re-encoded): \"/root/.dsh/attachments/v1/objects/21/21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3\" (1x1px, image/png). Source dimensions, format, and byte size may differ. Copy to a writable path ending in .png before editing."
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAE0lEQVR4nGP4z8DAAMZAwIDMAQCJkAv1Bw2D+gAAAABJRU5ErkJggg=="
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "signature": "sig-plan"
+        },
+        {
+          "type": "text",
+          "text": "Reading it."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_1",
+          "name": "read",
+          "input": {
+            "file_path": "a.rs"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_1",
+          "content": [
+            {
+              "type": "text",
+              "text": "fn main() {}"
+            },
+            {
+              "type": "text",
+              "text": "Image \"pixel.png\" (sha256:21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3); request preview 1x1px. Normalized copy (read-only; may be resized or re-encoded): \"/root/.dsh/attachments/v1/objects/21/21f3b2a077613d783e48f3ed20841820cd61ea1031afe87bbb22bcdf115d08d3\" (1x1px, image/png). Source dimensions, format, and byte size may differ. Copy to a writable path ending in .png before editing."
+            },
+            {
+              "type": "image",
+              "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAE0lEQVR4nGP4z8DAAMZAwIDMAQCJkAv1Bw2D+gAAAABJRU5ErkJggg=="
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Also check the tests."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Done."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Thanks. Summarize.",
+          "cache_control": {
+            "type": "ephemeral"
+          }
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "read",
+      "description": "Read a file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      }
+    },
+    {
+      "name": "bash",
+      "description": "Run a command.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        }
+      },
+      "cache_control": {
+        "type": "ephemeral"
+      }
+    }
+  ],
+  "thinking": {
+    "type": "adaptive",
+    "display": "summarized"
+  },
+  "output_config": {
+    "effort": "max"
+  }
+}

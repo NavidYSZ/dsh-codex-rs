@@ -24,8 +24,10 @@ use tokio::sync::broadcast;
 
 mod extensions;
 mod folders;
+mod providers;
 
 pub use extensions::{Extensions, OAuthCallback};
+pub use providers::Providers;
 
 /// Live messages pushed to UI clients over the WebSocket.
 #[derive(Debug, Clone, Serialize)]
@@ -197,6 +199,11 @@ pub trait Backend: Send + Sync + 'static {
     fn extensions(&self) -> Option<Arc<dyn Extensions>> {
         None
     }
+    /// Model providers and their keys (Models settings page); `None` = those
+    /// routes answer 404.
+    fn providers(&self) -> Option<Arc<dyn Providers>> {
+        None
+    }
 
     // Automation (goals, schedules, Agent Teams); unsupported by default.
 
@@ -348,6 +355,7 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/stream", get(stream))
         .merge(extensions::routes())
         .merge(folders::routes())
+        .merge(providers::routes())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_token,

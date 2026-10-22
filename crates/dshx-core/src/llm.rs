@@ -159,4 +159,10 @@ pub trait LlmClient: Send + Sync {
         request: GenerateRequest,
         cancel: CancellationToken,
     ) -> BoxStream<'static, StreamChunk>;
+    /// The client serving another provider route, for a client that routes
+    /// to several providers; `None` = this client serves every request.
+    fn for_provider(&self, provider: &str) -> Option<std::sync::Arc<dyn LlmClient>> {
+        let _ = provider;
+        None
+    }
 }

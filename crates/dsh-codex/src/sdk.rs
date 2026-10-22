@@ -94,12 +94,12 @@ impl SdkServer {
             .canonicalize()
             .map_err(|e| invalid(format!("{}: {e}", cwd.display())))?;
         let provider = str_param(&params, "provider")?;
-        if provider != "deepseek-official" {
+        if provider != dshx_llm::PROVIDER && self.runtime.router.route(provider).is_none() {
             return Err(invalid(format!(
                 "no adapter registered for provider \"{provider}\""
             )));
         }
-        let model = str_param(&params, "model")?.to_owned();
+        let model = dshx_llm::model_ref(provider, str_param(&params, "model")?);
         let effort = match params.get("reasoningEffort") {
             None | Some(Value::Null) => None,
             Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),

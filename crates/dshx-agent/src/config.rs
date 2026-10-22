@@ -279,6 +279,8 @@ pub struct TitleConfig {
     pub max_input_bytes: usize,
     pub max_output_tokens: u32,
     pub timeout: Duration,
+    /// Title model of the chat's provider; `None` = the chat's model.
+    pub model: Option<String>,
 }
 
 impl Default for TitleConfig {
@@ -294,6 +296,7 @@ impl Default for TitleConfig {
             max_input_bytes: 4096,
             max_output_tokens: 64,
             timeout: Duration::from_secs(60),
+            model: None,
         }
     }
 }
@@ -322,6 +325,10 @@ pub struct AgentConfig {
     /// The composition this agent was built for; see [`AgentConfig::apply_preset`].
     pub preset: Preset,
     pub model: String,
+    /// Provider route of `model` (`deepseek-official`, `anthropic`, …);
+    /// `None` = the client's own provider. Picked through
+    /// [`dshx_core::LlmClient::for_provider`].
+    pub provider: Option<String>,
     /// Reasoning effort; `None` = adapter default (recorded as `adapterDefaults`).
     pub effort: Option<String>,
     /// Output cap; `None` = adapter default (recorded as `adapterDefaults`).
@@ -350,6 +357,7 @@ impl AgentConfig {
         AgentConfig {
             preset: Preset::Standard,
             model: model.into(),
+            provider: None,
             effort: None,
             max_tokens: None,
             sandbox: SandboxMode::WorkspaceWrite,
@@ -401,6 +409,16 @@ impl AgentConfig {
         self.instructions.enabled = false;
         self.compaction.auto = false;
         self.pruner.enabled = false;
+    }
+
+    /// Takes the model choice of `other`: model, provider, effort, route and
+    /// title model (the composer's pickers apply to a running chat).
+    pub fn adopt_route(&mut self, other: &AgentConfig) {
+        self.model = other.model.clone();
+        self.provider = other.provider.clone();
+        self.effort = other.effort.clone();
+        self.route = other.route.clone();
+        self.title.model = other.title.model.clone();
     }
 
     pub(crate) fn route(&self) -> RouteCapabilities {

@@ -100,6 +100,10 @@ pub struct ResolvedModel {
     pub system_prompt_update: Option<SystemPromptUpdate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_update: Option<ToolUpdate>,
+    /// List prices in USD per million tokens, when known (DeepSeek's
+    /// time-of-day prices live with the cost display, not here).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<dshx_core::config::ModelCost>,
 }
 
 /// Selector metadata for one catalog entry (dsh `catalogModelInfo` + `modelInfo`).
@@ -142,5 +146,6 @@ pub(crate) fn resolve(
         default_max_tokens: catalog.and_then(|m| m.max_tokens).unwrap_or(max_tokens),
         system_prompt_update: catalog.and_then(|m| m.system_prompt_update),
         tool_update: catalog.and_then(|m| m.tool_update),
+        cost: None,
     }
 }

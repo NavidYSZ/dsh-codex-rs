@@ -78,9 +78,12 @@ impl RecordedRequest {
             .filter(|b| b["type"] == "tool_result")
             .count()
     }
-    /// Whether this is a Messages call (`POST …/messages`).
+    /// Whether this is a model call: `POST …/messages`, or `POST
+    /// …/chat/completions` for OpenAI-compatible routes.
     pub fn is_messages(&self) -> bool {
-        self.method == "POST" && self.path.trim_end_matches('/').ends_with("/messages")
+        let path = self.path.trim_end_matches('/');
+        self.method == "POST"
+            && (path.ends_with("/messages") || path.ends_with("/chat/completions"))
     }
 }
 
@@ -450,6 +453,8 @@ struct Shared {
     responder: Mutex<Option<Arc<Responder>>>,
     requests: Mutex<Vec<RecordedRequest>>,
     arrived: Notify,
+    /// Body of `GET …/models` (default `{"data":[]}`).
+    models: Mutex<Option<String>>,
 }
 
 /// The mock server. Dropping it stops the listener and every connection.
@@ -541,6 +546,11 @@ impl MockDeepSeek {
             .unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(responder));
     }
 
+    /// What `GET …/models` answers (Anthropic `/v1/models`, OpenAI `/models`).
+    pub fn set_models(&self, body: Value) {
+        *self.shared.models.lock().unwrap_or_else(|e| e.into_inner()) = Some(body.to_string());
+    }
+
     /// Messages requests received so far, in arrival order.
     pub fn requests(&self) -> Vec<RecordedRequest> {
         self.all_requests()
@@ -595,10 +605,21 @@ async fn serve(socket: TcpStream, shared: Arc<Shared>, mut stop: watch::Receiver
         };
         let reply = if !request.is_messages() {
             if request.method == "GET" {
+                let path = request.path.split('?').next().unwrap_or_default();
+                let models = path
+                    .ends_with("/models")
+                    .then(|| {
+                        shared
+                            .models
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .clone()
+                    })
+                    .flatten();
                 Reply::Http {
                     status: 200,
                     headers: vec![],
-                    body: r#"{"data":[]}"#.into(),
+                    body: models.unwrap_or_else(|| r#"{"data":[]}"#.into()),
                 }
             } else {
                 Reply::error(404, "not_found_error", "mock DeepSeek: unknown path")

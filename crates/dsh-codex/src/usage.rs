@@ -163,10 +163,32 @@ impl PriceBook {
     }
 }
 
-/// The prices for the current settings. Providers with a configured `cost`
-/// hook in here with [`PriceBook::with_override`].
-pub fn price_book(_config: &dshx_core::config::Config) -> PriceBook {
-    PriceBook::deepseek()
+/// The prices for the current settings: DeepSeek's built-in ones plus the
+/// flat `cost` of every model of the configured providers (catalog prices
+/// for catalog providers such as `anthropic`).
+pub fn price_book(config: &dshx_core::config::Config) -> PriceBook {
+    let mut book = PriceBook::deepseek();
+    for (id, provider) in &config.providers {
+        // A broken table is reported where it is used; it simply has no prices.
+        let Ok(spec) = dshx_llm::provider::ProviderSpec::resolve(id, provider) else {
+            continue;
+        };
+        for model in &spec.models {
+            if let Some(cost) = model.cost {
+                book = book.with_override(
+                    &spec.id,
+                    &model.id,
+                    Price {
+                        input: cost.input,
+                        output: cost.output,
+                        cache_read: cost.cache_read,
+                        cache_write: cost.cache_write,
+                    },
+                );
+            }
+        }
+    }
+    book
 }
 
 /// Inclusive `((month, day), (month, day))` range of one year.
@@ -1317,6 +1339,39 @@ mod tests {
         t.add(&usage(10, 20, 0, 5), None);
         assert_eq!((t.requests, t.unpriced_requests, t.tokens()), (1, 1, 35));
         assert_eq!(t.cost_usd, 0.0);
+    }
+
+    #[test]
+    fn configured_providers_bring_their_prices() {
+        let mut config = dshx_core::config::Config::default();
+        config
+            .providers
+            .insert("anthropic".into(), Default::default());
+        let mut custom = dshx_core::config::ProviderConfig {
+            api: Some("openai-completions".into()),
+            base_url: Some("http://127.0.0.1:9/v1".into()),
+            ..Default::default()
+        };
+        custom.models.push(dshx_core::config::ProviderModelConfig {
+            id: "local-model".into(),
+            cost: Some(dshx_core::config::ModelCost {
+                input: 1.0,
+                output: 2.0,
+                cache_read: 0.5,
+                cache_write: 1.0,
+            }),
+            ..Default::default()
+        });
+        config.providers.insert("lab".into(), custom);
+        let book = price_book(&config);
+        let when = at(2026, 10, 19, 12, 0);
+        assert!(book.quote("anthropic", "claude-sonnet-5-5", when).is_some());
+        let lab = book.quote("lab", "local-model", when).unwrap();
+        assert_eq!((lab.price.input, lab.price.output), (1.0, 2.0));
+        assert!(
+            book.quote("deepseek-official", "deepseek-flash", when)
+                .is_some()
+        );
     }
 
     #[test]
