@@ -2,11 +2,11 @@
 // a short result line, prompts queued behind the running turn (dsh
 // `queue.*`, ⌘↩ steers them all) and the MCP servers this chat activated
 // ("Active: [Linear ✕]").
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { createStore, useStore } from '../store.js';
-import { store, api, fail, openPlugins, restoreFocus } from '../state.js';
+import { store, api, fail, openPlugins, restoreFocus, setDraft } from '../state.js';
 import { IconPencil, IconX, IconArrowUp } from '../icons.js';
 import { openGoalForm } from './goal.js';
 import { setUiPref } from './worklog.js';
@@ -139,6 +139,20 @@ export async function steerQueued() {
 
 function QueueItem({ item }) {
   const [edit, setEdit] = useState(null);
+  // The prompt may start while it is being edited: the change goes into
+  // the composer with a word, not nowhere.
+  const editing = useRef(null);
+  editing.current = edit;
+  useEffect(() => {
+    const chat = store.get().activeId;
+    return () => {
+      const text = editing.current;
+      if (text == null || store.get().activeId !== chat) return;
+      if (!text.trim() || text.trim() === textOf(item).trim()) return;
+      setDraft(text);
+      notify(t.ciQueueStartedWhileEditing);
+    };
+  }, []);
   const text = textOf(item);
   const textOnly = (item.content ?? []).every((b) => b.type === 'text');
   const save = async () => {
