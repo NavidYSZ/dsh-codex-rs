@@ -273,6 +273,10 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?}` → `/api/info` shape |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
+| GET | `/api/fs/dirs?path=&hidden=` | → `{path, parent, root, home, roots, git, entries:[{name, path, git, hidden}], truncated}`: subfolders only, sorted by name, at most 500; `path` empty = home (or the first root), `~/…` allowed; `hidden=1` adds dot folders (and Finder-hidden ones on macOS). Only inside `Backend::folder_roots` (home, `[folders] roots`, the parent of every project except `/`); outside → 403 `outside-roots`, missing → 404 `not-found`, unreadable → 403 `permission-denied`, no roots → 404 `unsupported` (errors are `{error, code}`) |
+| GET | `/api/fs/suggestions` | → `{repos:[{name, path}]}`: up to 12 repositories (folders with `.git`) at most three levels below the roots, most recently changed first; skips dot folders, build output and, on macOS, the privacy-protected home folders |
+| POST | `/api/fs/mkdir` | `{path, name}` → 201 `{path}`; `name` is one plain folder name; exists → 409 `exists` |
+| POST | `/api/fs/pick` | `{prompt?, defaultPath?}` → `{path \| null}` (`null` = cancelled) from `osascript` "choose folder"; only on macOS when the server was not started from an SSH session, else 501 `unsupported` (the UI then shows its folder browser); a second dialog → 409 `busy` |
 | GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread}]` (newest first) |
 | POST | `/api/sessions` | `{cwd?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`) |
 | GET | `/api/sessions/:id` | → `{header, events:[SessionEvent], status}` |

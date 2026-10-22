@@ -23,6 +23,7 @@ use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
 mod extensions;
+mod folders;
 
 pub use extensions::{Extensions, OAuthCallback};
 
@@ -219,6 +220,11 @@ pub trait Backend: Send + Sync + 'static {
         let _ = id;
         Err(NotFound("team".into()).into())
     }
+    /// Folders the project folder browser (`/api/fs/…`) may list; nested and
+    /// missing ones are dropped by the server. Default: none (404).
+    async fn folder_roots(&self) -> anyhow::Result<Vec<PathBuf>> {
+        Err(NotFound("folders".into()).into())
+    }
 }
 
 /// Error for unknown sessions, attachments or approvals (→ HTTP 404).
@@ -303,6 +309,7 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/schedules/{id}/history", get(schedule_history))
         .route("/stream", get(stream))
         .merge(extensions::routes())
+        .merge(folders::routes())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_token,
