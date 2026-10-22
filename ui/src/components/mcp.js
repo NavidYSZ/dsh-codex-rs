@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, quote } from '../i18n.js';
-import { api, fail, toast } from '../state.js';
+import { api, fail, toast, ask } from '../state.js';
 import { copyText } from '../markdown.js';
 import { IconPlus, IconRefresh, IconTrash, IconSearch, IconCopy, IconChevronRight, IconAlert, IconKey, IconFile, IconPlug } from '../icons.js';
 import { useLoad, Toggle, Pill } from './page.js';
@@ -63,7 +63,7 @@ function ServerCard({ s, connectors, busy, run, settings, onOpen, onLogin }) {
     s.status === 'needs-login' ? [html`<${IconKey} size=${14} />`, t.mcpSignIn, () => run(s.name, () => onLogin(s.name))] : null,
     s.auth?.login ? [null, t.disconnect, () => run(s.name, () => api.mcpAction(s.name, 'logout'))] : null,
     [html`<${IconFile} size=${14} />`, t.mcpShowLog, () => onOpen(s.name, 'log')],
-    plugin ? null : [html`<${IconTrash} size=${14} />`, t.remove, () => { if (confirm(t.confirmRemoveServer(s.name))) run(s.name, () => api.removeMcpServer(s.name)); }, 'danger'],
+    plugin ? null : [html`<${IconTrash} size=${14} />`, t.remove, async () => { if (await ask({ title: t.confirmRemoveServer(s.name), action: t.remove })) run(s.name, () => api.removeMcpServer(s.name)); }, 'danger'],
   ];
   return html`<div class=${cx('plug-card mcp-card', !s.enabled && 'is-off')}>
     <button type="button" class="mcp-card-main" onClick=${() => onOpen(s.name)} aria-label=${`${s.name}: ${t.mcpDetails}`}>
@@ -318,8 +318,8 @@ export function ServerDrawer({ name, tab: first, connectors, onClose, onChanged,
     <${MoreMenu} items=${[
     s.auth?.login ? [null, t.disconnect, () => run(s.name, () => api.mcpAction(s.name, 'logout'))] : null,
     [html`<${IconCopy} size=${14} />`, t.mcpCopyName, () => copyText(s.name).then(() => toast(t.copied))],
-    s.origin === 'plugin' ? null : [html`<${IconTrash} size=${14} />`, t.remove, () => {
-      if (confirm(t.confirmRemoveServer(s.name))) run(s.name, async () => { await api.removeMcpServer(s.name); onClose(); });
+    s.origin === 'plugin' ? null : [html`<${IconTrash} size=${14} />`, t.remove, async () => {
+      if (await ask({ title: t.confirmRemoveServer(s.name), action: t.remove })) run(s.name, async () => { await api.removeMcpServer(s.name); onClose(); });
     }, 'danger'],
   ]} />`;
   return html`<${Drawer} label=${s.name} head=${head} actions=${actions} tabs=${tabs} tab=${tabs[tab] ? tab : 'tools'} onTab=${setTab} onClose=${onClose}>

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, lang, age } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, api, loadSchedules, openSession, newChat, setDraft, fail } from '../state.js';
+import { store, api, loadSchedules, openSession, newChat, setDraft, fail, ask } from '../state.js';
 import { IconJob, IconChevronRight, IconPlus, IconTrash } from '../icons.js';
 import { PageShell, Tabs, Pill } from './page.js';
 
@@ -66,7 +66,7 @@ function Row({ r, chat }) {
     } catch (err) { fail(err); }
   };
   const remove = async () => {
-    if (!confirm(t.confirmDeleteSchedule)) return;
+    if (!(await ask({ title: t.confirmDeleteSchedule, action: t.deleteSchedule }))) return;
     try { await api.deleteSchedule(r.id); loadSchedules(); } catch (err) { fail(err); }
   };
   const overdue = active && r.state === 'overdue';

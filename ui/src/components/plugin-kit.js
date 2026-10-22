@@ -53,7 +53,7 @@ export function MoreMenu({ items, label }) {
     </button>
     <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} fixed side="bottom" align="end" class="menu-actions">
       ${items.filter(Boolean).map(([icon, text, fn, tone, disabled]) => html`<${ActionItem} key=${text} icon=${icon} tone=${tone}
-        disabled=${disabled} onClick=${(e) => { e.stopPropagation(); fn(); }}>${text}</${ActionItem}>`)}
+        disabled=${disabled} onClick=${(e) => { e.stopPropagation(); setOpen(false); fn(); }}>${text}</${ActionItem}>`)}
     </${Menu}>
   </span>`;
 }

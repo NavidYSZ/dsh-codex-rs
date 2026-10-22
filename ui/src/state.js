@@ -479,8 +479,32 @@ export function markAllRead() {
   for (const x of store.get().sessions) if (x.unread) patchSession(x.id, { seen: true });
 }
 
+// ---- questions -------------------------------------------------------------
+
+let answerAsked = null;
+
+/**
+ * An in-app "Are you sure?" (instead of window.confirm, which looks foreign
+ * in a browser): `{title, text?, action, danger?}`; resolves true on the
+ * action, false on Cancel or Esc. A new question cancels an open one.
+ */
+export function ask(question) {
+  answerAsked?.(false);
+  return new Promise((resolve) => {
+    answerAsked = resolve;
+    store.set({ ask: { danger: true, ...question } });
+  });
+}
+
+export function answerAsk(ok) {
+  const resolve = answerAsked;
+  answerAsked = null;
+  store.set({ ask: null });
+  resolve?.(ok);
+}
+
 export async function deleteSession(id) {
-  if (!confirm(t.confirmDelete)) return;
+  if (!(await ask({ title: t.confirmDelete, action: t.deleteChat }))) return;
   try {
     await api.deleteSession(id);
     store.set((s) => ({ sessions: s.sessions.filter((x) => x.id !== id) }));

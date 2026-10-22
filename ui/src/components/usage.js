@@ -29,6 +29,24 @@ export function usd(value, approximate = false) {
   return approximate ? `≈ ${s}` : s;
 }
 
+/**
+ * Display names of a logged `(provider, model)`: "DeepSeek-V4.1-Flash" and
+ * "DeepSeek" as the model picker shows them; unknown routes keep their ids.
+ */
+export function modelNames(provider, model) {
+  const info = store.get().info;
+  const m = info?.models?.find((x) => (x.provider ?? 'deepseek-official') === provider && (x.model ?? x.id) === model);
+  const p = info?.providers?.find((x) => x.id === provider);
+  return { model: m?.name ?? model, provider: m?.providerName ?? p?.name ?? provider };
+}
+
+/** A `provider/model` route of the stats as "Model (Provider)". */
+const routeName = (route) => {
+  const at = route.indexOf('/');
+  const names = at < 0 ? modelNames('', route) : modelNames(route.slice(0, at), route.slice(at + 1));
+  return `${names.model} (${names.provider})`;
+};
+
 export const percent = (ratio, precise = false) => (precise ? PERCENT1 : PERCENT).format(Math.max(0, ratio || 0));
 export const tokens = (n) => INT.format(n ?? 0);
 /** Exact below 100k (grouped), then "1.2M" / "1,2 Mio.". */
@@ -340,7 +358,7 @@ export function TurnCost({ turn }) {
   return html`<${Pop} hover label=${t.turnUsage} class="ub-turn" trigger=${html`<span>${label}</span>`}>
     <${PopHead} icon=${html`<${CoinIcon} />`} title=${t.turnUsage} value=${t.tokensCount(tokens(allTokens(u)))} />
     <${Rows} rows=${[
-    u.routes?.length && [t.providerModel, html`<span class="ub-route">${u.routes.join(', ')}</span>`],
+    u.routes?.length && [t.providerModel, html`<span class="ub-route">${u.routes.map(routeName).join(', ')}</span>`],
     hitRate(u) !== null && [t.cacheHit, percent(hitRate(u), true)],
     [t.uncachedInput, t.tokensCount(tokens(u.inputTokens))],
     [t.cachedInput, t.tokensCount(tokens(u.cacheReadTokens))],
@@ -395,7 +413,7 @@ function DayBars({ report }) {
         </div>`;
   })}
     </div>
-    ${series.length > 1 || other ? html`<div class="uv-legend">${series.map((key, k) => html`<span><i class=${`uv-swatch uv-s${k + 1}`} />${key.split('/').pop()}</span>`)}
+    ${series.length > 1 || other ? html`<div class="uv-legend">${report.models.slice(0, SERIES).map((m, k) => html`<span key=${k}><i class=${`uv-swatch uv-s${k + 1}`} />${modelNames(m.provider, m.model).model}</span>`)}
       ${other ? html`<span><i class="uv-swatch uv-other" />${t.usageOther}</span>` : null}</div>` : null}
   </div>`;
 }
@@ -439,7 +457,7 @@ export function UsageCard({ titled = true }) {
               <span class="uv-num" role="columnheader">${t.cache}</span><span class="uv-num" role="columnheader">${t.cost}</span>
             </div>
             ${r.models.map((m, k) => html`<div class="uv-row" role="row" key=${`${m.provider}/${m.model}`}>
-              <span class="uv-name" role="cell"><i class=${`uv-swatch ${k < SERIES ? `uv-s${k + 1}` : 'uv-other'}`} />${m.model}<span class="uv-dim">${m.provider}</span></span>
+              <span class="uv-name" role="cell"><i class=${`uv-swatch ${k < SERIES ? `uv-s${k + 1}` : 'uv-other'}`} />${modelNames(m.provider, m.model).model}<span class="uv-dim">${modelNames(m.provider, m.model).provider}</span></span>
               <span class="uv-num" role="cell">${t.tokensCount(shortTokens(allTokens(m)))}</span>
               <span class="uv-num" role="cell">${hitRate(m) === null ? '–' : percent(hitRate(m))}</span>
               <span class="uv-num uv-strong" role="cell">${m.priced ? costLabel(m) : t.noPrice}</span>

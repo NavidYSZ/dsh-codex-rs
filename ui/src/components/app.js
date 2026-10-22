@@ -19,7 +19,7 @@ import { PluginsPage } from './plugins.js';
 import { AutomationsPage } from './automations.js';
 import { ModeLabel, ModeGuide } from './modes.js';
 import { ShortcutsDialog } from './shortcuts.js';
-import { FullAccessConfirm } from './confirm.js';
+import { FullAccessConfirm, AskDialog } from './confirm.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
@@ -138,5 +138,6 @@ export function App() {
     <${ModeGuide} />
     <${ShortcutsDialog} />
     <${FullAccessConfirm} />
+    <${AskDialog} />
   </div>`;
 }

@@ -197,6 +197,14 @@
   while the repository is cloned and errors in plain words (already added,
   no catalog, repository not found or private). The Plugins tab gets the
   button in its toolbar, and empty marketplaces say so.
+- One term per concept in the copy: German says "Tools" (no more
+  "Werkzeuge"), "Ziel" for goals, "Denkstufe" for the reasoning level and
+  "entfernen" for providers like plugins and servers; English says "chat",
+  never "conversation". Settings switches read "On"/"Off". Usage shows
+  model and provider names (DeepSeek-V4.1-Flash · DeepSeek) instead of ids.
+- Removing a chat, plugin, marketplace, MCP server, goal or automation asks
+  in an in-app dialog (Cancel focused, Esc cancels) instead of the browser's
+  `confirm()`; "…" menus close when an item runs.
 
 ### Fixed
 

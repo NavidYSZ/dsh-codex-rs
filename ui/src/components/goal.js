@@ -4,7 +4,7 @@ import { useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, goalCommand } from '../state.js';
+import { store, goalCommand, ask } from '../state.js';
 import { IconX } from '../icons.js';
 
 const IconTarget = ({ size = 14 }) => html`<svg class="icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true">
@@ -68,7 +68,7 @@ export function GoalBar() {
     : html`<button type="button" class="link-btn" onClick=${() => goalCommand({ action: 'pause' })}>${t.goalPause}</button>`}
       <button type="button" class="link-btn" onClick=${() => store.set({ goalForm: true })}>${t.goalEdit}</button>
       <button type="button" class="icon-btn" aria-label=${t.goalClear} title=${t.goalClear}
-        onClick=${() => { if (confirm(t.confirmClearGoal)) goalCommand({ action: 'clear' }); }}><${IconX} size=${13} /></button>
+        onClick=${async () => { if (await ask({ title: t.confirmClearGoal, action: t.goalClear })) goalCommand({ action: 'clear' }); }}><${IconX} size=${13} /></button>
     </div>
     <button type="button" class=${cx('goal-objective', open && 'is-open')} onClick=${() => setOpen((v) => !v)}>${goal.objective}</button>
     ${goal.blockedReason?.message ? html`<div class="goal-blocked">${goal.blockedReason.message}</div>` : null}

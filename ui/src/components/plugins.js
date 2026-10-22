@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, api, openPlugins, toast } from '../state.js';
+import { store, api, openPlugins, toast, ask } from '../state.js';
 import { IconRefresh, IconTrash, IconPlus } from '../icons.js';
 import { PageShell, Tabs, useLoad, Toggle, Pill } from './page.js';
 import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast, usePluginFocus } from './plugin-kit.js';
@@ -35,7 +35,7 @@ function PluginCard({ p, busy, run, focused }) {
         onChange=${(on) => run(p.id, () => api.pluginAction(p.id, on ? 'enable' : 'disable'))} />
       <${MoreMenu} items=${[
         [html`<${IconRefresh} size=${14} />`, t.update, () => run(p.id, () => api.pluginAction(p.id, 'update'))],
-        [html`<${IconTrash} size=${14} />`, t.remove, () => { if (confirm(t.confirmRemovePlugin(name))) run(p.id, () => api.removePlugin(p.id)); }, 'danger'],
+        [html`<${IconTrash} size=${14} />`, t.remove, async () => { if (await ask({ title: t.confirmRemovePlugin(name), action: t.remove })) run(p.id, () => api.removePlugin(p.id)); }, 'danger'],
       ]} />
     </div>
   </div>`;
@@ -180,7 +180,7 @@ function PluginsTab() {
         <h2 class="section-title"><span class="section-name">${m.displayName || m.name}</span><span class="plug-meta" title=${m.url || m.source}>${m.url || m.source}</span></h2>
         <${MoreMenu} items=${[
           [html`<${IconRefresh} size=${14} />`, t.update, () => run('market', () => api.updateMarketplace(m.name))],
-          [html`<${IconTrash} size=${14} />`, t.remove, () => { if (confirm(t.confirmRemoveMarket(m.name))) run('market', () => api.removeMarketplace(m.name)); }, 'danger'],
+          [html`<${IconTrash} size=${14} />`, t.remove, async () => { if (await ask({ title: t.confirmRemoveMarket(m.displayName || m.name), action: t.remove })) run('market', () => api.removeMarketplace(m.name)); }, 'danger'],
         ]} />
       </div>
       ${m.error ? html`<div class="plug-warn">${m.error}</div>` : null}

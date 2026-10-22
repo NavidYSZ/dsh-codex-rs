@@ -49,7 +49,7 @@ function General() {
     </${Field}>
     ${desktop ? null : html`<${Field} label=${t.notifications} hint=${t.notificationsHint}>
       <${Segmented} label=${t.notifications} value=${notify ? 'on' : 'off'} onChange=${(v) => setNotify(v === 'on')}
-        options=${[['on', t.on], ['off', t.off]]} />
+        options=${[['on', t.enabled], ['off', t.disabledLabel]]} />
     </${Field}>`}
     <${Field} label=${t.language}><span class="field-value">${t.languageValue}</span></${Field}>
   </section>`;
