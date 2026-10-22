@@ -28,8 +28,9 @@ function UserBubble({ text, images, pending }) {
   </div>`;
 }
 
+/** The verbose view's reasoning: the whole text, open while and after it streams; a click folds it. */
 function Reasoning({ text, ms, live }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const show = live || open;
   const label = live ? t.thinking : ms != null && ms >= 500 ? t.thoughtFor(duration(ms)) : t.thought;
   return html`<div class=${cx('reasoning', show && 'is-open')}>
