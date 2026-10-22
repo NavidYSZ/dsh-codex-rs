@@ -18,6 +18,7 @@ use tokio::process::{ChildStdin, Command};
 use tokio::sync::{Mutex, mpsc, watch};
 
 use crate::error::McpError;
+use crate::log::ServerLog;
 use crate::peer::{Incoming, Transport};
 
 /// How long a server may take to exit after its stdin closed, and after SIGTERM.
@@ -57,6 +58,7 @@ impl StdioTransport {
         env: &BTreeMap<String, String>,
         cwd: Option<&PathBuf>,
         label: &str,
+        log: Arc<ServerLog>,
     ) -> Result<(Arc<StdioTransport>, mpsc::UnboundedReceiver<Incoming>), McpError> {
         let mut cmd = Command::new(command);
         cmd.args(args)
@@ -116,6 +118,7 @@ impl StdioTransport {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 tracing::debug!("{err_label} stderr: {line}");
+                log.push("stderr", line);
             }
         });
 

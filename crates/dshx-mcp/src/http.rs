@@ -20,6 +20,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::McpError;
+use crate::log::ServerLog;
 use crate::oauth::{AuthChallenge, TokenProvider, parse_www_authenticate};
 use crate::peer::{Incoming, Transport};
 
@@ -39,6 +40,8 @@ pub(crate) struct HttpTransport {
     auth: Option<Arc<dyn TokenProvider>>,
     /// The last authorization challenge (shared with the supervisor).
     challenge: Arc<Mutex<Option<AuthChallenge>>>,
+    /// Failed requests end up in the server's log.
+    log: Arc<ServerLog>,
 }
 
 fn challenge_of(response: &reqwest::Response) -> AuthChallenge {
@@ -59,6 +62,7 @@ impl HttpTransport {
         label: &str,
         auth: Option<Arc<dyn TokenProvider>>,
         challenge: Arc<Mutex<Option<AuthChallenge>>>,
+        log: Arc<ServerLog>,
     ) -> Result<(Arc<HttpTransport>, mpsc::UnboundedReceiver<Incoming>), McpError> {
         let mut map = HeaderMap::new();
         for (k, v) in headers {
@@ -86,6 +90,7 @@ impl HttpTransport {
                 label: label.to_owned(),
                 auth,
                 challenge,
+                log,
             }),
             rx,
         ))
@@ -120,6 +125,7 @@ impl HttpTransport {
         let inbox = self.inbox.clone();
         let label = self.label.clone();
         let stop = self.stop.clone();
+        let log = self.log.clone();
         tokio::spawn(async move {
             let mut parser = SseParser::default();
             let mut body = response.bytes_stream();
@@ -133,6 +139,7 @@ impl HttpTransport {
                     Ok(chunk) => chunk,
                     Err(e) => {
                         tracing::debug!("{label}: SSE stream failed: {e}");
+                        log.error(format!("SSE stream failed: {e}"));
                         return;
                     }
                 };
@@ -177,6 +184,32 @@ fn is_sse(response: &reqwest::Response) -> bool {
 #[async_trait]
 impl Transport for HttpTransport {
     async fn send(&self, message: Value) -> Result<(), McpError> {
+        let method = message
+            .get("method")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let sent = self.deliver(message).await;
+        if let Err(e) = &sent
+            && !matches!(e, McpError::Closed)
+        {
+            let what = method.as_deref().unwrap_or("reply");
+            self.log.error(format!("{what}: {e}"));
+        }
+        sent
+    }
+
+    fn initialized(&self, protocol_version: &str) {
+        *self.version.lock().unwrap() = Some(protocol_version.to_owned());
+    }
+
+    async fn close(&self) -> bool {
+        self.close_session().await
+    }
+}
+
+impl HttpTransport {
+    /// One POST and the handling of its answer.
+    async fn deliver(&self, message: Value) -> Result<(), McpError> {
         let is_initialize = message.get("method").and_then(Value::as_str) == Some("initialize");
         let had_session = self.session.lock().unwrap().is_some();
         let body = serde_json::to_vec(&message).map_err(|e| McpError::Protocol(e.to_string()))?;
@@ -245,11 +278,7 @@ impl Transport for HttpTransport {
         Ok(())
     }
 
-    fn initialized(&self, protocol_version: &str) {
-        *self.version.lock().unwrap() = Some(protocol_version.to_owned());
-    }
-
-    async fn close(&self) -> bool {
+    async fn close_session(&self) -> bool {
         self.stop.cancel();
         if self.session.lock().unwrap().is_some() {
             let token = self.token().await;
@@ -268,9 +297,7 @@ impl Transport for HttpTransport {
             .send(Incoming::Closed("connection closed by the client".into()));
         true
     }
-}
 
-impl HttpTransport {
     async fn post(&self, body: &[u8], token: Option<&str>) -> Result<reqwest::Response, McpError> {
         self.request(reqwest::Method::POST, token)
             .header(ACCEPT, "application/json, text/event-stream")

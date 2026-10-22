@@ -1,5 +1,6 @@
 //! stdio servers inherit the parent environment without credential-like
-//! names (dsh `scrubbedParentEnv`); configured `env` entries always pass.
+//! names (dsh `scrubbedParentEnv`); configured `env` entries and the names
+//! in `env_vars` always pass.
 mod common;
 
 use common::*;
@@ -18,6 +19,13 @@ fn credentials_stay_out_of_stdio_servers() {
         let config = config(vec![
             ("plain", stdio_server(&[("MCP_TEST_VAR", "v")])),
             ("explicit", stdio_server(&[("FAKE_API_KEY", "configured")])),
+            (
+                "passthrough",
+                dshx_core::config::McpServerConfig {
+                    env_vars: vec!["FAKE_API_KEY".into(), "UNSET_PROBE".into()],
+                    ..stdio_server(&[])
+                },
+            ),
         ]);
         let (tools, mcp) = dshx_mcp::mcp_tools(&config).await.unwrap();
         let env = |name: &'static str| {
@@ -33,6 +41,9 @@ fn credentials_stay_out_of_stdio_servers() {
         assert_eq!(plain["MCP_TEST_VAR"], "v");
         let explicit = env("mcp__explicit__info").await;
         assert_eq!(explicit["FAKE_API_KEY"], "configured");
+        // `env_vars` lets a credential-like name through on purpose.
+        let passed = env("mcp__passthrough__info").await;
+        assert_eq!(passed["FAKE_API_KEY"], "secret");
         mcp.shutdown().await;
     });
 }
