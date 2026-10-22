@@ -136,10 +136,75 @@ pub fn server_of<'a>(tool: &str, servers: impl IntoIterator<Item = &'a String>) 
         .cloned()
 }
 
+/// Which characters of `chars` are code: inside a fenced block (``` or ~~~
+/// lines) or an inline code span (a backtick run up to the next run of the
+/// same length, as in CommonMark).
+fn code_mask(chars: &[char]) -> Vec<bool> {
+    let mut mask = vec![false; chars.len()];
+    let mut fence: Option<(char, usize)> = None;
+    let mut start = 0;
+    while start < chars.len() {
+        let end = chars[start..]
+            .iter()
+            .position(|c| *c == '\n')
+            .map_or(chars.len(), |i| start + i + 1);
+        let line = &chars[start..end];
+        let trimmed: Vec<char> = line.iter().copied().skip_while(|c| *c == ' ').collect();
+        let marker = trimmed.first().copied().filter(|c| *c == '`' || *c == '~');
+        let run = marker.map_or(0, |m| trimmed.iter().take_while(|c| **c == m).count());
+        match fence {
+            Some((m, n)) => {
+                mask[start..end].iter_mut().for_each(|x| *x = true);
+                if marker == Some(m) && run >= n {
+                    fence = None;
+                }
+            }
+            None if run >= 3 => {
+                mask[start..end].iter_mut().for_each(|x| *x = true);
+                fence = marker.map(|m| (m, run));
+            }
+            None => {
+                let mut i = start;
+                while i < end {
+                    if chars[i] != '`' {
+                        i += 1;
+                        continue;
+                    }
+                    let n = chars[i..end].iter().take_while(|c| **c == '`').count();
+                    let mut j = i + n;
+                    let close = loop {
+                        if j >= end {
+                            break None;
+                        }
+                        if chars[j] == '`' {
+                            let m = chars[j..end].iter().take_while(|c| **c == '`').count();
+                            if m == n {
+                                break Some(j + m);
+                            }
+                            j += m;
+                        } else {
+                            j += 1;
+                        }
+                    };
+                    match close {
+                        Some(stop) => {
+                            mask[i..stop].iter_mut().for_each(|x| *x = true);
+                            i = stop;
+                        }
+                        None => i += n,
+                    }
+                }
+            }
+        }
+        start = end;
+    }
+    mask
+}
+
 /// `@name` tokens of the user's own text in `claimed`, in first-seen order:
 /// `@` at the start or after whitespace or punctuation (never inside an
-/// e-mail address), followed by a server-name token that does not continue
-/// as a path (`@src/x`, `@main.rs`).
+/// e-mail address or code), followed by a server-name token that does not
+/// continue as a path (`@src/x`, `@main.rs`).
 pub fn mentions(claimed: &[Message]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for message in claimed.iter().filter(|m| m.source.is_user()) {
@@ -148,8 +213,9 @@ pub fn mentions(claimed: &[Message]) -> Vec<String> {
                 continue;
             };
             let chars: Vec<char> = text.chars().collect();
+            let code = code_mask(&chars);
             for (i, c) in chars.iter().enumerate() {
-                if *c != '@' {
+                if *c != '@' || code[i] {
                     continue;
                 }
                 let boundary = i == 0
@@ -518,6 +584,10 @@ mod tests {
         let m =
             Message::user_text("@linear and (@GitHub), a@b.com @src/main.rs @x.rs @end. @linear");
         assert_eq!(mentions(&[m]), ["linear", "GitHub", "end"]);
+        let code = Message::user_text(
+            "run `npm i @linear/sdk` or `@github`\n```\n@notion\n```\n``a `@x` b`` then @sentry",
+        );
+        assert_eq!(mentions(&[code]), ["sentry"]);
         let mut injected = Message::user_text("@linear");
         injected.source = MessageSource::Other(json!({"kind": "runtime-context"}));
         assert!(mentions(&[injected]).is_empty());
