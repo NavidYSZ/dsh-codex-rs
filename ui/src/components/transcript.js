@@ -5,12 +5,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { html, cx } from '../html.js';
 import { t, duration } from '../i18n.js';
 import { renderMarkdown, onMarkdownClick } from '../markdown.js';
-import { IconAlert, IconArrowDown, IconChevronRight, IconFile } from '../icons.js';
+import { IconArrowDown, IconChevronRight, IconFile } from '../icons.js';
 import { Shimmer, Thumb } from './common.js';
-import { openSettings, openPanel, openFile } from '../state.js';
+import { openPanel, openFile } from '../state.js';
 import { collectChanges, Counts } from './panel.js';
 import { staysVisible } from '../worklog.js';
 import { WorkGroup, WorkItem, ReasoningLine, ThinkingRow, TurnLine, useWorkPolicy } from './worklog.js';
+import { useChatActions, UserActions, AnswerActions, FailureNotice, MaxTokensNotice, CompactionNotice } from './messages.js';
+import { useTurnWindow, LoadOlder, TurnRail } from './turnnav.js';
+import { FindBar, firstMatch } from './find.js';
 
 export function Markdown({ text, class: klass }) {
   const htmlText = useMemo(() => renderMarkdown(text), [text]);
@@ -37,25 +40,14 @@ function Reasoning({ text, ms, live }) {
   </div>`;
 }
 
+/** Goal, reminder and Team lines, "Stopped" and "Interrupted"; failures live in messages.js. */
 function Notice({ item }) {
-  if (item.code === 'error') {
-    const f = item.failure ?? {};
-    const auth = f.code === 'AUTH';
-    return html`<div class="notice notice-error" role="alert">
-      <span class="notice-icon"><${IconAlert} size=${16} /></span>
-      <div class="notice-body">
-        <div class="notice-title">${t.turnFailed}</div>
-        <div class="notice-text">${f.message || ''}${f.code ? html` <span class="notice-code">${f.code}${f.status ? ` · ${f.status}` : ''}</span>` : null}</div>
-        ${auth ? html`<button type="button" class="btn btn-small" onClick=${openSettings}>${t.openSettings}</button>` : null}
-      </div>
-    </div>`;
-  }
   if (item.code === 'goal' || item.code === 'schedule' || item.code === 'team-message') {
     const [label, detail] = item.code === 'goal' ? [t.goal, t.goalRounds(item.round ?? '?', item.max ?? '∞')]
       : item.code === 'schedule' ? [t.automations, item.prompt] : [t.teamMessageFrom(item.sender), item.text];
     return html`<div class="source-line"><span class="source-label">${label}</span>${detail ? html`<span class="source-detail">${detail}</span>` : null}</div>`;
   }
-  const text = item.code === 'maxTokens' ? t.maxTokens : item.code === 'interrupted' ? t.interrupted : t.stopped;
+  const text = item.code === 'interrupted' ? t.interrupted : t.stopped;
   return html`<div class=${cx('notice-line', `tone-${item.tone}`)}>${text}</div>`;
 }
 
@@ -134,7 +126,7 @@ function liveSegments(turn, deltas) {
  * One turn in the current work-details view (dsh `POLICIES`): work groups
  * behind status lines, and once it is done, folded under one turn line.
  */
-function Turn({ turn, live, deltas, cwd, policy }) {
+function Turn({ turn, live, deltas, cwd, policy, acts }) {
   const [unfolded, setUnfolded] = useState(false);
   const work = turn.work;
   const ended = !live && turn.end != null;
@@ -150,10 +142,22 @@ function Turn({ turn, live, deltas, cwd, policy }) {
 
   const render = (x) => {
     switch (x.kind) {
-      case 'user': return html`<${UserBubble} key=${x.key} text=${x.text} images=${x.images} />`;
-      case 'text': return html`<${Markdown} key=${x.key} text=${x.text} />`;
-      case 'notice': return html`<${Notice} key=${x.key} item=${x} />`;
-      case 'divider': return html`<div key=${x.key} class="divider"><span>${t.compacted}</span></div>`;
+      case 'user': return html`<div key=${x.key} class="msg msg-user">
+        <${UserBubble} text=${x.text} images=${x.images} /><${UserActions} item=${x} turn=${turn} acts=${acts} />
+      </div>`;
+      case 'text':
+        // The turn's answer: copy and branch (dsh puts both under the closing message).
+        if (ended && x.key === work.answerKey) {
+          return html`<div key=${x.key} class="msg msg-answer">
+            <${Markdown} text=${x.text} /><${AnswerActions} item=${x} turn=${turn} acts=${acts} shown=${acts.isLast(turn)} />
+          </div>`;
+        }
+        return html`<${Markdown} key=${x.key} text=${x.text} />`;
+      case 'notice':
+        if (x.code === 'error') return html`<${FailureNotice} key=${x.key} item=${x} turn=${turn} acts=${acts} cwd=${cwd} />`;
+        if (x.code === 'maxTokens') return html`<${MaxTokensNotice} key=${x.key} turn=${turn} acts=${acts} />`;
+        return html`<${Notice} key=${x.key} item=${x} />`;
+      case 'divider': return html`<${CompactionNotice} key=${x.key} item=${x} />`;
       default: return null;
     }
   };
@@ -248,14 +252,25 @@ export function Transcript({ tx, deltas, status, pending, cwd }) {
   const lastTurn = tx.turns[lastIndex];
   const liveTurn = running && lastTurn && lastTurn.end == null ? lastIndex : -1;
   const policy = useWorkPolicy();
+  const acts = useChatActions(tx);
+  // Long chats render their latest turns; older ones load on request.
+  const win = useTurnWindow(tx.turns, scroller, pinned);
+  const onFind = (query) => {
+    const i = firstMatch(tx.turns, query);
+    if (i >= 0) win.reveal(i);
+  };
   return html`<div class="scroll-wrap"><div class="scroll" ref=${scroller} onScroll=${onScroll} onClickCapture=${onClickCapture}>
     <div class="column transcript">
-      ${tx.turns.map((turn, i) => html`<${Turn} key=${turn.turn} turn=${turn} live=${i === liveTurn} deltas=${deltas} cwd=${cwd} policy=${policy} />`)}
+      ${win.from > 0 ? html`<${LoadOlder} count=${win.from} onClick=${win.older} />` : null}
+      ${tx.turns.slice(win.from).map((turn, k) => html`<${Turn} key=${turn.turn} turn=${turn} live=${win.from + k === liveTurn}
+        deltas=${deltas} cwd=${cwd} policy=${policy} acts=${acts} />`)}
       ${pending ? html`<section class="turn"><${UserBubble} text=${pending.text} images=${pending.images} pending />
         ${liveTurn < 0 ? html`<${ThinkingRow} policy=${policy} />` : null}</section>` : null}
       ${running && liveTurn < 0 && !pending ? html`<${ThinkingRow} policy=${policy} />` : null}
     </div>
   </div>
   ${away ? html`<button type="button" class="to-bottom" aria-label=${t.scrollDown} onClick=${toBottom}><${IconArrowDown} size=${16} /></button>` : null}
+  <${TurnRail} turns=${tx.turns} from=${win.from} scroller=${scroller} onJump=${win.jump} />
+  <${FindBar} scroller=${scroller} pinned=${pinned} onQuery=${onFind} />
   </div>`;
 }

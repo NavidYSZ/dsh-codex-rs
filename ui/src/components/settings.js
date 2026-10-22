@@ -12,6 +12,7 @@ import { ModeSetting } from './modes.js';
 import { AppearanceCard } from './worklog.js';
 import { UsageCard } from './usage.js';
 import { ModelsSection, ModelSelect } from './models.js';
+import { confirmFullAccess } from './confirm.js';
 
 export function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
@@ -77,7 +78,10 @@ export function Settings() {
             options=${efforts.map((e) => [e, t.efforts[e] ?? e])} />
         </${Field}>` : null}
         <${Field} label=${t.sandbox} hint=${t.access[s.sandbox]?.[1]}>
-          <${Segmented} label=${t.sandbox} value=${s.sandbox} onChange=${(v) => updateSettings({ sandbox: v })}
+          <${Segmented} label=${t.sandbox} value=${s.sandbox} onChange=${async (v) => {
+            if (v === 'danger-full-access' && s.sandbox !== v && !(await confirmFullAccess('defaults'))) return;
+            updateSettings({ sandbox: v });
+          }}
             options=${Object.entries(t.access).map(([k, v]) => [k, v[0]])} />
         </${Field}>
         <${Field} label=${t.approval}>
@@ -111,7 +115,7 @@ export function Settings() {
         <h2 class="card-title">${t.about}</h2>
         <${Field} label=${t.version}><span class="field-value mono">${info?.version ?? '–'}</span></${Field}>
         <${Field} label=${t.platform}><span class="field-value mono">${info?.platform ?? '–'}</span></${Field}>
-        <${Field} label=${t.tools}><span class="field-value">${Object.entries(t.toolNames)
+        <${Field} label=${t.macTools}><span class="field-value">${Object.entries(t.toolNames)
     .map(([k, v]) => `${v} ${tools[k] ? t.on : t.off}`).join(' · ')}</span></${Field}>
       </section>
     </div></div>

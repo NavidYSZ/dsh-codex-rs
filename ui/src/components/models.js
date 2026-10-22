@@ -209,7 +209,7 @@ export function ModelSelect({ value, onChange }) {
 const openDialogs = [];
 
 /** Modal sheet: Esc and the scrim close the topmost one; focus returns to the opener. */
-function Dialog({ title, description, onClose, footer, children, class: klass }) {
+export function Dialog({ title, description, onClose, footer, children, class: klass }) {
   const box = useRef(null);
   const id = useRef(Symbol('dialog'));
   useEffect(() => {
@@ -631,6 +631,12 @@ function ProviderRow({ p, onEdit, onDelete }) {
   </div>`;
 }
 
+/** Settings → Models with one provider's editor open (failure notices link here). */
+export function editProvider(id) {
+  store.set({ editProvider: id || DEEPSEEK });
+  openSettings();
+}
+
 /** Settings → Models: the providers with their keys and models. */
 export function ModelsSection() {
   const { data, loading, error, reload } = useLoad(() => api.providers());
@@ -639,6 +645,14 @@ export function ModelsSection() {
   const timer = useRef(0);
   useEffect(() => () => clearTimeout(timer.current), []);
   const providers = data?.providers ?? [];
+  const wanted = useStore(store, (s) => s.editProvider);
+  useEffect(() => {
+    if (!wanted || !data) return;
+    store.set({ editProvider: null });
+    document.getElementById('mo-title')?.scrollIntoView({ block: 'start' });
+    const p = providers.find((x) => x.id === wanted);
+    if (p) setDialog({ kind: 'edit', provider: p });
+  }, [wanted, data]);
   const done = async (message) => {
     setDialog(null);
     reload();

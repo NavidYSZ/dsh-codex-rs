@@ -88,7 +88,7 @@ const EN = {
   account: 'Provider', apiKey: 'DeepSeek API key', apiKeySet: 'Saved', apiKeyMissing: 'Not set yet',
   apiKeyHint: 'Kept on this computer, never shown again',
   apiKeyPlaceholder: 'sk-…', save: 'Save', saved: 'Saved', replace: 'Replace key', cancel: 'Cancel',
-  about: 'About', version: 'Version', platform: 'Platform', tools: 'Mac tools',
+  about: 'About', version: 'Version', platform: 'Platform', macTools: 'Mac tools',
   toolNames: { browser: 'Browser', app: 'Apps', computer: 'Computer' },
   on: 'on', off: 'off', back: 'Back',
   justNow: 'now',
@@ -345,6 +345,57 @@ const EN = {
   pickerSearch: 'Search models…', pickerRecent: 'Recently used', pickerEmpty: 'No matching models.', pickerNoKey: 'API key missing',
   pickerManage: 'Manage models…', pickerContext: (n) => `${n} context`, pickerImage: 'image', pickerPrice: (i, o) => `${i} / ${o} per 1M`,
   pickerEffort: 'Reasoning', pickerLabel: (m) => `Model: ${m}`,
+  // ---- package F ----
+  // message actions (dsh message.branch*, Codex)
+  resend: 'Send again', editResend: 'Edit and send again', editResendHint: 'Opens the prompt in a new chat that branches off right before it',
+  branch: 'Branch into a new conversation', branchUnavailable: 'Available only on the last message of a completed turn',
+  branchTitle: (s) => `${s} (branch)`, branchSuffixes: [' (branch)', ' (Abzweig)'], forkFailed: 'Could not branch the conversation. Try again.',
+  // failures with the action that helps (dsh message.failure.*)
+  failure: {
+    AUTH: ['API key is invalid', 'The provider rejected the key. Check it in the provider’s settings.'],
+    QUOTA: ['Request quota exhausted.', 'Top up your balance with the provider, then send again.'],
+    RATE_LIMIT: ['Too many requests', 'The provider is limiting requests right now. Wait a moment and send again.'],
+    CONTEXT_WINDOW_EXCEEDED: ['The context is full', 'The conversation no longer fits the model’s context window. Compact it with /compact or continue in a new chat.'],
+    TRANSPORT: ['Couldn’t reach the provider', 'Check your internet connection, proxy or VPN, then send again.'],
+    TIMEOUT: ['The provider took too long to answer', 'Check your connection and send again.'],
+    SERVER: ['The provider had a problem', 'This is usually temporary. Try again in a moment.'],
+    REFUSAL: ['The model declined to answer', 'Rephrase the request or pick another model.'],
+  },
+  checkKey: 'Check API key', topUp: 'Top up balance', providerSettings: 'Provider settings', newChatAction: 'New chat',
+  // output limit (dsh message.maxTokens*)
+  maxTokensTitle: 'Output token limit reached',
+  maxTokensHint: 'The reply was cut off; earlier output is preserved in the conversation. Send “continue” to let the model resume.',
+  continueAction: 'Continue', continueWord: 'continue',
+  // compaction (dsh message.compaction.*)
+  compaction: 'Context compacted', compactionRunning: 'Compacting context…', compactionFailed: 'Compaction failed',
+  compactionDone: (n, tokens) => `Compacted ${n} history ${n === 1 ? 'item' : 'items'} (~${tokens} tokens)`,
+  compactionExpand: 'View compaction summary', compactionUnavailable: 'Compaction summary unavailable',
+  // long chats (dsh chat.turnNavigation.*, chat.loadOlder)
+  turnNav: 'Turn navigation', turnJump: (n) => `Jump to turn ${n}`, turnJumpLoad: (n) => `Load and jump to turn ${n}`, turnN: (n) => `Turn ${n}`,
+  loadOlder: 'Load earlier', olderTurns: (n) => `${n} earlier ${n === 1 ? 'turn' : 'turns'}`,
+  // find in chat (Codex ⌘F)
+  findInChat: 'Find in chat', findCount: (i, n) => `${i} of ${n}`, findNone: 'No results',
+  findPrev: 'Previous match', findNext: 'Next match', findClose: 'Close search',
+  // Full access (dsh permission-presets confirm.*)
+  fullAccessTitle: 'Enable Full access?',
+  fullAccessText: 'Full access reduces confirmation steps and lets the agent perform more actions directly, including sensitive operations, file changes, or external commands. Only use it when you trust the current task.',
+  fullAccessTextDefaults: 'Full access lets new chats reduce confirmation steps and perform more actions directly, including sensitive operations, file changes, or external commands. Only use it when you trust the tasks ahead.',
+  fullAccessAck: 'I understand the risks and want to continue', fullAccessDontAsk: 'Don’t ask again', fullAccessEnable: 'Enable Full access',
+  // sidebar view options (dsh viewOptions.*, groupBy.*, orderBy.*)
+  viewOptions: 'View options', groupBy: 'Group by', groupProjects: 'Project', groupFlat: 'In one list',
+  orderBy: 'Order by', orderActivity: 'Last activity', orderCreated: 'Created',
+  archivedFilter: 'Archived chats', archivedHide: 'Hide archived', archivedShow: 'Show archived', archivedOnly: 'Archived only',
+  archivedTag: 'Archived',
+  // keyboard shortcuts (Codex)
+  shortcuts: 'Keyboard shortcuts', shortcutGroups: { general: 'General', chats: 'Chats', chat: 'In a chat' },
+  sc: {
+    palette: 'Search chats and actions', newChat: 'New chat', openProject: 'Open project', sidebar: 'Show or hide the sidebar',
+    shortcuts: 'Keyboard shortcuts', nthChat: 'Open chat 1–9 of the sidebar', prevChat: 'Previous chat', nextChat: 'Next chat',
+    attention: 'Next chat that needs you', allRead: 'Mark all as read', archive: 'Archive chat', pin: 'Pin or unpin chat',
+    rename: 'Rename chat', find: 'Find in chat', send: 'Send', newline: 'New line', other: 'While it works: queue instead (or add now)',
+    close: 'Close menu, dialog or search',
+  },
+  nothingWaiting: 'No chat needs you right now', noChatOpen: 'Open a chat first',
 };
 
 const DE = {
@@ -427,7 +478,7 @@ const DE = {
   account: 'Anbieter', apiKey: 'DeepSeek-API-Schlüssel', apiKeySet: 'Gespeichert', apiKeyMissing: 'Noch nicht hinterlegt',
   apiKeyHint: 'Bleibt auf diesem Computer und wird nie wieder angezeigt',
   save: 'Speichern', saved: 'Gespeichert', replace: 'Schlüssel ersetzen', cancel: 'Abbrechen',
-  about: 'Über', version: 'Version', platform: 'Plattform', tools: 'Mac-Werkzeuge',
+  about: 'Über', version: 'Version', platform: 'Plattform', macTools: 'Mac-Werkzeuge',
   toolNames: { browser: 'Browser', app: 'Apps', computer: 'Computer' },
   on: 'an', off: 'aus', back: 'Zurück',
   justNow: 'jetzt',
@@ -668,6 +719,48 @@ const DE = {
   pickerSearch: 'Modelle suchen …', pickerRecent: 'Zuletzt benutzt', pickerEmpty: 'Keine passenden Modelle.', pickerNoKey: 'API-Schlüssel fehlt',
   pickerManage: 'Modelle verwalten …', pickerContext: (n) => `${n} Kontext`, pickerImage: 'Bild', pickerPrice: (i, o) => `${i} / ${o} je 1 Mio.`,
   pickerEffort: 'Denkstufe', pickerLabel: (m) => `Modell: ${m}`,
+  // ---- package F ----
+  resend: 'Erneut senden', editResend: 'Bearbeiten und neu senden', editResendHint: 'Öffnet den Prompt in einem neuen Chat, der direkt davor abzweigt',
+  branch: 'Ab hier abzweigen', branchUnavailable: 'Nur bei der letzten Nachricht eines abgeschlossenen Turns möglich',
+  branchTitle: (s) => `${s} (Abzweig)`, forkFailed: 'Der Chat ließ sich nicht abzweigen. Versuch es noch einmal.',
+  failure: {
+    AUTH: ['API-Schlüssel ungültig', 'Der Anbieter hat den Schlüssel abgelehnt. Prüfe ihn in den Einstellungen des Anbieters.'],
+    QUOTA: ['Guthaben aufgebraucht', 'Lade dein Guthaben beim Anbieter auf und sende die Nachricht dann erneut.'],
+    RATE_LIMIT: ['Zu viele Anfragen', 'Der Anbieter drosselt gerade die Anfragen. Warte einen Moment und sende erneut.'],
+    CONTEXT_WINDOW_EXCEEDED: ['Der Kontext ist voll', 'Der Verlauf passt nicht mehr ins Kontextfenster des Modells. Komprimiere ihn mit /compact oder arbeite in einem neuen Chat weiter.'],
+    TRANSPORT: ['Anbieter nicht erreichbar', 'Prüfe deine Internetverbindung, deinen Proxy oder dein VPN und sende erneut.'],
+    TIMEOUT: ['Der Anbieter hat zu lange gebraucht', 'Prüfe deine Verbindung und sende erneut.'],
+    SERVER: ['Störung beim Anbieter', 'Das ist meist vorübergehend. Versuch es gleich noch einmal.'],
+    REFUSAL: ['Das Modell hat die Antwort abgelehnt', 'Formuliere die Anfrage um oder wähle ein anderes Modell.'],
+  },
+  checkKey: 'Schlüssel prüfen', topUp: 'Guthaben aufladen', providerSettings: 'Anbieter-Einstellungen', newChatAction: 'Neuer Chat',
+  maxTokensTitle: 'Ausgabelimit erreicht',
+  maxTokensHint: 'Die Antwort wurde abgeschnitten, die bisherige Ausgabe bleibt im Verlauf. Sende „weiter“, damit das Modell fortsetzt.',
+  continueAction: 'Weiter', continueWord: 'weiter',
+  compaction: 'Kontext komprimiert', compactionRunning: 'Komprimiert den Kontext …', compactionFailed: 'Komprimierung fehlgeschlagen',
+  compactionDone: (n, tokens) => `${n} ${n === 1 ? 'Eintrag' : 'Einträge'} komprimiert (~${tokens} Tokens)`,
+  compactionExpand: 'Zusammenfassung ansehen', compactionUnavailable: 'Keine Zusammenfassung verfügbar',
+  turnNav: 'Turn-Navigation', turnJump: (n) => `Zu Turn ${n} springen`, turnJumpLoad: (n) => `Turn ${n} laden und hinspringen`, turnN: (n) => `Turn ${n}`,
+  loadOlder: 'Frühere laden', olderTurns: (n) => `${n} frühere ${n === 1 ? 'Turn' : 'Turns'}`,
+  findInChat: 'Im Chat suchen', findCount: (i, n) => `${i} von ${n}`, findNone: 'Keine Treffer',
+  findPrev: 'Vorheriger Treffer', findNext: 'Nächster Treffer', findClose: 'Suche schließen',
+  fullAccessTitle: 'Vollen Zugriff einschalten?',
+  fullAccessText: 'Mit vollem Zugriff fragt der Agent seltener nach und führt mehr Aktionen direkt aus – auch heikle Vorgänge, Dateiänderungen und externe Befehle. Schalte ihn nur ein, wenn du der aktuellen Aufgabe vertraust.',
+  fullAccessTextDefaults: 'Mit vollem Zugriff fragen neue Chats seltener nach und führen mehr Aktionen direkt aus – auch heikle Vorgänge, Dateiänderungen und externe Befehle. Schalte ihn nur ein, wenn du den kommenden Aufgaben vertraust.',
+  fullAccessAck: 'Ich verstehe das Risiko', fullAccessDontAsk: 'Nicht mehr fragen', fullAccessEnable: 'Vollen Zugriff einschalten',
+  viewOptions: 'Ansicht', groupBy: 'Gruppieren', groupProjects: 'Nach Projekt', groupFlat: 'Eine Liste',
+  orderBy: 'Sortieren', orderActivity: 'Letzte Aktivität', orderCreated: 'Erstellt',
+  archivedFilter: 'Archivierte Chats', archivedHide: 'Ausblenden', archivedShow: 'Einblenden', archivedOnly: 'Nur archivierte',
+  archivedTag: 'Archiviert',
+  shortcuts: 'Tastenkürzel', shortcutGroups: { general: 'Allgemein', chats: 'Chats', chat: 'Im Chat' },
+  sc: {
+    palette: 'Chats und Aktionen suchen', newChat: 'Neuer Chat', openProject: 'Projekt öffnen', sidebar: 'Seitenleiste ein- oder ausblenden',
+    shortcuts: 'Tastenkürzel', nthChat: 'Chat 1–9 der Seitenleiste öffnen', prevChat: 'Vorheriger Chat', nextChat: 'Nächster Chat',
+    attention: 'Nächster Chat, der dich braucht', allRead: 'Alle als gelesen markieren', archive: 'Chat archivieren', pin: 'Chat anpinnen oder lösen',
+    rename: 'Chat umbenennen', find: 'Im Chat suchen', send: 'Senden', newline: 'Neue Zeile', other: 'Während er arbeitet: einreihen (bzw. sofort einbringen)',
+    close: 'Menü, Dialog oder Suche schließen',
+  },
+  nothingWaiting: 'Gerade braucht dich kein Chat', noChatOpen: 'Öffne zuerst einen Chat',
 };
 
 export const t = de ? DE : EN;

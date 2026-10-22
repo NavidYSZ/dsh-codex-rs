@@ -99,6 +99,8 @@ class HttpApi {
   updateSession(id, patch) { return this.req('PATCH', `/api/sessions/${enc(id)}`, patch); }
   prompt(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/prompt`, body); }
   cancel(id) { return this.req('POST', `/api/sessions/${enc(id)}/cancel`); }
+  /** `{turn, title?}` → `{id}`: a new chat with this one's log through `turn` (0 = none of it). */
+  forkSession(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/fork`, body); }
   /** `{base, root}`: `base` serves the chat's folder read-only for previews. */
   preview(id) { return this.req('POST', `/api/sessions/${enc(id)}/preview`); }
   files(id, dir) { return this.req('GET', `/api/sessions/${enc(id)}/files?dir=${enc(dir ?? '')}`); }
@@ -229,6 +231,23 @@ const DEFAULT_INFO = {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
+/**
+ * A long fixture chat without a long file: `count` copies of `events`, where
+ * "{n}" is the turn number and "{p}" cycles through `prompts`.
+ */
+function repeatTurns(log, { count, events, prompts = [''] }) {
+  const fill = (v, n) => {
+    if (typeof v === 'string') return v === '{n}' ? n : v.replaceAll('{n}', String(n)).replaceAll('{p}', prompts[(n - 1) % prompts.length]);
+    if (Array.isArray(v)) return v.map((x) => fill(x, n));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x, n)]));
+    return v;
+  };
+  let time = log.length ? log[log.length - 1].time : Date.now() - count * 60_000;
+  for (let n = 1; n <= count; n++) {
+    for (const e of events) log.push({ ...fill(e, n), seq: log.length, time: (time += 1500) });
+  }
+}
+
 /** The Models page of a fixture: built-in DeepSeek and Anthropic from the catalog. */
 function fixtureProviders() {
   const claude = (id, name, input, output, efforts) => ({
@@ -290,6 +309,7 @@ class FixtureApi {
     const view = new URLSearchParams(location.search).get('view');
     if (view) this.infoData.ui = { ...this.infoData.ui, workDetails: view };
     const s = fx.session;
+    if (s && fx.repeat) repeatTurns(s.events, fx.repeat);
     this.sessionData = s ? { header: s.header, events: s.events } : null;
     const live = this.speed === 0 ? s?.events.length ?? 0 : fx.live ?? s?.events.length ?? 0;
     this.history = s ? s.events.slice(0, live) : [];
@@ -371,6 +391,29 @@ class FixtureApi {
     this.status = 'idle';
     this.created = { id, title: '', cwd, scratch, createdAt: Date.now(), updatedAt: Date.now(), status: 'idle', preset: agentPreset };
     return { id };
+  }
+
+  /** Like the server: the log through the turn's end, the inherited cut, the same folder and mode. */
+  async forkSession(id, { turn, title }) {
+    await this.ready;
+    if (this.sessionData?.header.id !== id) throw new ApiError(404, 'session not found');
+    const end = turn === 0 ? -1 : this.history.findIndex((e) => e.type === 'turn/end' && e.data?.turn === turn);
+    if (end < 0 && turn !== 0) throw new ApiError(400, `turn ${turn} has not ended, so it cannot be branched`);
+    const source = this.sessionData.header;
+    const row = (this.shared.sessions ?? []).find((s) => s.id === id) ?? this.created ?? {};
+    const child = `session-fixture-${Date.now().toString(36)}`;
+    const seed = this.history.slice(0, end + 1);
+    seed.push({ type: 'session/end-seed', seq: seed.length, time: seed.length ? seed[seed.length - 1].time : Date.now(), data: { inherited: true } });
+    const { agentPreset } = source;
+    this.sessionData = { header: { ...source, id: child, createdAt: Date.now(), isSeeded: true, parentSession: id }, events: seed };
+    this.history = clone(seed);
+    this.pendingLive = [];
+    this.seq = seed.length - 1;
+    this.status = 'idle';
+    this.fx = { ...this.fx, approval: null, stats: null };
+    this.created = { id: child, title: title || `${row.title || ''} (1)`, cwd: source.cwd, scratch: !!row.scratch,
+      createdAt: Date.now(), updatedAt: Date.now(), status: 'idle', ...(agentPreset ? { preset: agentPreset } : {}) };
+    return { id: child };
   }
 
   async session(id) {
