@@ -231,6 +231,9 @@
   then ran its next command), while the commands it started still get
   SIGTERM and the grace period. The bash tool's kill tests are no longer
   flaky.
+- Changing a setting in the UI (skills, MCP switches, servers, providers,
+  defaults) edits only the affected keys of `config.toml`: comments, order
+  and formatting stay, and defaults that were left out are not written.
 
 ## 0.2.0 – 2026-10-17
 

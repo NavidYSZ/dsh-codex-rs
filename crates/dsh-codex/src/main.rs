@@ -1,6 +1,7 @@
 //! `dsh-codex` command line: headless runs, the web UI and the dsh SDK protocol.
 mod automation;
 mod chats;
+mod config_file;
 mod fork;
 mod headless;
 mod jsonrpc;

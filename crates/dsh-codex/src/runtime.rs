@@ -260,14 +260,22 @@ impl Runtime {
         self.config.read().unwrap().clone()
     }
 
-    /// Applies a change, writes `config.toml` and returns the new config.
-    /// Open agents pick up skill and MCP settings before their next turn.
+    /// Applies a change, writes it into `config.toml` (only the keys it
+    /// touched; comments and everything else stay) and returns the new
+    /// config. Open agents pick up skill and MCP settings before their next
+    /// turn.
     pub fn update_config(&self, f: impl FnOnce(&mut Config)) -> anyhow::Result<Config> {
         let mut config = self.config.write().unwrap();
+        let before = config.clone();
         f(&mut config);
         std::fs::create_dir_all(&self.home)?;
-        let text = toml::to_string_pretty(&*config)?;
         let path = self.home.join("config.toml");
+        let old = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => return Err(e.into()),
+        };
+        let text = crate::config_file::render(&old, &before, &config)?;
         let tmp = path.with_extension("toml.tmp");
         std::fs::write(&tmp, text)?;
         std::fs::rename(&tmp, &path)?;
