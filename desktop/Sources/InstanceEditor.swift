@@ -10,6 +10,7 @@ final class InstanceEditor: NSObject {
 
     private let name = NSTextField()
     private let kind = NSPopUpButton()
+    private let atLaunch = NSButton(checkboxWithTitle: "Beim Start verbinden", target: nil, action: nil)
     // local
     private let binary = NSTextField()
     private let workingDirectory = NSTextField()
@@ -100,6 +101,8 @@ final class InstanceEditor: NSObject {
         let common = grid([
             [label("Name:"), name],
             [label("Typ:"), kind],
+            [NSGridCell.emptyContentView, atLaunch],
+            [NSGridCell.emptyContentView, hint("Verbindet die Instanz schon beim App-Start im Hintergrund, damit der Wechsel sofort da ist.")],
         ])
 
         let local = grid([
@@ -185,6 +188,7 @@ final class InstanceEditor: NSObject {
     private func fill(_ instance: Instance) {
         name.stringValue = instance.name
         kind.selectItem(at: InstanceKind.allCases.firstIndex(of: instance.kind) ?? 0)
+        atLaunch.state = instance.connectsAtLaunch ? .on : .off
         binary.stringValue = instance.binary ?? ""
         workingDirectory.stringValue = instance.workingDirectory ?? ""
         dataDirectory.stringValue = instance.dataDirectory ?? ""
@@ -239,6 +243,7 @@ final class InstanceEditor: NSObject {
     @objc private func saveClicked() {
         guard let name = trimmed(name) else { return fail("Bitte einen Namen angeben.") }
         var instance = Instance(id: original?.id ?? Instance.newID(), name: name, kind: selectedKind)
+        instance.connectAtLaunch = atLaunch.state == .on ? nil : false
         var newToken: String?? = nil
         switch selectedKind {
         case .local:
@@ -424,7 +429,7 @@ final class InstancesWindowController: NSWindowController, NSTableViewDataSource
         let instance = manager.instances[row]
         let text: String
         switch tableColumn?.identifier.rawValue {
-        case "key": text = row < 9 ? "⌘\(row + 1)" : ""
+        case "key": text = row < 9 ? "⌃\(row + 1)" : ""
         case "name": text = instance.name + (instance.id == manager.currentID ? "  ✓" : "")
         case "kind": text = instance.kind.label
         default:

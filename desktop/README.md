@@ -91,7 +91,7 @@ der Datei (App vorher beenden).
       "host": "oracle-vps-02", "remotePort": 3080, "localPort": 3082,
       "tokenCommand": "sudo -n journalctl -u deepseek-harness -b -o cat --no-pager | grep -E '^dsh(-codex)? web: http://127\\.0\\.0\\.1:3080/\\?token=' | tail -n 1"
     },
-    { "id": "…", "name": "Labor", "kind": "url", "url": "http://127.0.0.1:3090/" }
+    { "id": "…", "name": "Labor", "kind": "url", "url": "http://127.0.0.1:3090/", "connectAtLaunch": false }
   ]
 }
 ```
@@ -104,30 +104,78 @@ der Datei (App vorher beenden).
 
 `current` ist die zuletzt gewählte Instanz, `editor` eine Bundle-ID oder ein
 App-Pfad (leer: VS Code, Cursor, Zed, Sublime Text, Nova, BBEdit, TextEdit – die
-erste installierte). Die Reihenfolge der Liste bestimmt ⌘1 … ⌘9.
+erste installierte). Die Reihenfolge der Liste bestimmt ⌃1 … ⌃9.
+`connectAtLaunch` („Beim Start verbinden“ im Editor, fehlt = `true`): Die
+Instanz wird beim App-Start im Hintergrund verbunden, siehe
+[Instanzwechsel](#instanzwechsel).
 
 ### SSH-Tunnel
 
-- Tunnel: `/usr/bin/ssh -F <sshConfig> -o BatchMode=yes -o ConnectTimeout=15
-  -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3
-  -o ControlMaster=yes -o ControlPath=~/Library/Caches/dsh-codex/ssh/<id>.sock
-  -o ControlPersist=no -N -L 127.0.0.1:<lokal>:127.0.0.1:<remote> <host>` als
-  überwachter Kindprozess. Host-Schlüssel werden genau wie in der
-  SSH-Konfiguration geprüft (dort `StrictHostKeyChecking yes`); die App schaltet
-  das nie ab und fragt nie interaktiv (`BatchMode`).
-- Token: `ssh … -o ControlPath=<socket> <host> <tokenCommand>` über die
-  bestehende Verbindung. Die Ausgabe darf der Startlink (`…?token=…`, letzte
-  passende Zeile zählt) oder das nackte Token sein. Ausgabe und Token werden
-  weder protokolliert noch angezeigt.
+- Tunnel: ein SSH-Master im Hintergrund, `/usr/bin/ssh -F <sshConfig>
+  -o BatchMode=yes -o ConnectTimeout=15 -o ExitOnForwardFailure=yes
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ControlMaster=yes
+  -o ControlPath=~/Library/Caches/dsh-codex/ssh/<id>.sock -o ControlPersist=10m
+  -E ~/Library/Logs/dsh-codex/ssh-<id>.log -N -L 127.0.0.1:<lokal>:127.0.0.1:<remote> <host>`.
+  Mit `ControlPersist` geht `ssh` nach Anmeldung und Weiterleitung selbst in den
+  Hintergrund; die App merkt sich die PID aus `ssh -O check` und prüft sie alle
+  5 s. Host-Schlüssel werden genau wie in der SSH-Konfiguration geprüft (dort
+  `StrictHostKeyChecking yes`); die App schaltet das nie ab und fragt nie
+  interaktiv (`BatchMode`).
+- Wiederverwendung: Läuft beim Start schon ein Master auf dem Socket (z. B. vom
+  letzten App-Lauf), wird er übernommen, eine fehlende Weiterleitung per
+  `ssh -O forward` neu angefordert. Beim Beenden der App bleibt der Master
+  stehen und endet von selbst 10 min nach der letzten Verbindung über ihn; ein
+  Neustart der App ist so ohne neuen SSH-Handshake verbunden. „Neu verbinden“,
+  Bearbeiten und Entfernen einer Instanz schließen ihn (`ssh -O exit`).
+- Token: `ssh … -o ControlPath=<socket> <host> <tokenCommand>` über den Master.
+  Die Ausgabe darf der Startlink (`…?token=…`, letzte passende Zeile zählt) oder
+  das nackte Token sein. Ausgabe und Token werden weder protokolliert noch
+  angezeigt. Das Token bleibt im Speicher und wird bei jedem Neuaufbau erst
+  gegen `GET /api/info` geprüft; nur bei `401` läuft der Token-Befehl erneut.
+  Schneller geht es, wenn der Dienst auf dem VPS mit `--ready-file <pfad>`
+  startet: Dann reicht als Token-Befehl `cat <pfad>` statt `journalctl`
+  (noch nicht so eingerichtet).
 - Lauscht auf dem lokalen Port bereits ein dsh-codex (z. B. vom Starter
-  `open-deepseek-vps-02.command`), wird dieser Tunnel mitbenutzt statt eines
-  zweiten; fällt er weg, baut die App einen eigenen auf. Ein fremder Dienst auf
-  dem Port ergibt eine Fehlermeldung.
-- Abbruch: Endet `ssh`, baut die App den Tunnel mit Backoff (2, 4, 8 … max.
-  30 s) neu auf und holt das Token neu. Alle 15 s prüft sie `GET /api/info`:
-  `401` → Server wurde neu gestartet, Token neu holen und Seite neu laden;
-  keine Antwort → Tunnel neu aufbauen.
-- `ssh`-Fehlermeldungen (ohne Token) stehen in `~/Library/Logs/dsh-codex/ssh-<id>.log`.
+  `open-deepseek-vps-02.command`) und es gibt keinen eigenen Master, wird dieser
+  Tunnel mitbenutzt; fällt er weg, baut die App einen eigenen auf. Ein fremder
+  Dienst auf dem Port ergibt eine Fehlermeldung.
+- Abbruch: Endet der Master, baut die App ihn sofort neu auf. Schlägt der
+  Aufbau fehl, zeigt sie den Grund (letzte Zeile aus dem ssh-Protokoll) und
+  versucht es mit Backoff (2, 4, 8 … max. 30 s) erneut. Alle 15 s prüft sie
+  `GET /api/info`: `401` → Server wurde neu gestartet, Token neu holen und Seite
+  neu laden; keine Antwort → Fehler, beim nächsten Mal Master neu aufbauen.
+- `ssh`-Meldungen (ohne Token) stehen in `~/Library/Logs/dsh-codex/ssh-<id>.log`.
+
+## Instanzwechsel
+
+Ziel: nie ein leerer oder grauer Zwischenzustand.
+
+- **Vorwärmen:** Beim Start verbindet die App zuerst die gezeigte Instanz, 2 s
+  später alle anderen mit `connectAtLaunch` (Tunnel, Token und Seite). Jede
+  verbundene Instanz hat ein eigenes `WKWebView`, das unsichtbar (Deckkraft 0,
+  aber gerendert) im Fenster liegt. Die Web-UI kann beim Überfahren eines
+  Eintrags im Wechsler `prewarm(id)` aufrufen.
+- **Bereit:** Eine Seite gilt als bereit, wenn die Web-UI nach dem ersten
+  vollständigen Render `dshxDesktop.ready()` meldet. Ältere UIs ohne diesen
+  Aufruf (sie melden auch kein `setAppearance`) gelten 0,8 s nach `didFinish`
+  als bereit, neuere spätestens nach 6 s.
+- **Wechsel:** Ist die Zielseite bereit, blendet das Fenster in 150 ms über
+  (bei „Bewegung reduzieren“ sofort). Sonst bleibt die bisherige Seite stehen;
+  die 2 pt hohe Fortschrittslinie unter der Titelleiste läuft, und der Wechsler
+  der Web-UI zeigt einen Spinner neben dem Zielnamen. War die Zielinstanz schon
+  einmal sichtbar, erscheint sofort ihr letzter Schnappschuss
+  (`WKWebView.takeSnapshot`, aufgenommen beim Verlassen oder vor dem Neuladen),
+  leicht abgeblendet, mit der Pille „Verbinde mit VPS 2 …“.
+- **Neu laden** (neues Token, ⌘R, abgestürzter Web-Prozess): Schnappschuss statt
+  weißer Seite, dann Überblendung.
+- **Hintergrund:** Fenster und Seitenfläche haben die Farbe, die die Seite per
+  `setAppearance` meldet (`#FFFFFF`/`#181818` in den Standardthemen); die App
+  merkt sie sich je Instanz für den nächsten Start und passt das Fenster an
+  helles oder dunkles Theme an.
+- **Fehler:** Über Schnappschuss oder eigener Seite erscheint oben ein Banner mit
+  Grund, „Erneut versuchen“ und „Instanzen bearbeiten …“. Das vollflächige
+  Statusbild gibt es nur noch, wenn eine Instanz noch nie sichtbar war und der
+  Aufbau fehlschlägt.
 
 ## JavaScript-Brücke `window.dshxDesktop`
 
@@ -144,8 +192,8 @@ dem Hauptframe mit genau dem Origin der eigenen Instanz.
 | `version` | `string` | Version der App (`CFBundleShortVersionString`). |
 | `platform` | `"macos"` | |
 | `current` | `string` | ID der Instanz, **zu der diese Seite gehört**. Solange die Seite sichtbar ist, ist das auch die aktive Instanz. |
-| `instances` | `Array<{id, name, kind, active, status}>` | Alle Instanzen in Menüreihenfolge (Kopie). `kind`: `"local"`, `"ssh"`, `"url"`. `active`: wird gerade im Fenster gezeigt. `status`: `"idle"` (nicht gestartet), `"starting"`, `"ready"`, `"error"`. |
-| `capabilities` | `{revealInFinder: boolean, openInEditor: boolean}` | Nur bei lokalen Instanzen `true` (Pfade entfernter Server gibt es auf dem Mac nicht). |
+| `instances` | `Array<{id, name, kind, active, status, unread, connectedAt?}>` | Alle Instanzen in Menüreihenfolge (Kopie). `kind`: `"local"`, `"ssh"`, `"url"`. `active`: wird gerade im Fenster gezeigt oder ist das Ziel eines laufenden Wechsels. `status`: `"idle"` (nicht gestartet), `"starting"`, `"ready"`, `"error"`. `unread`: zuletzt per `setBadge` gemeldete Zahl dieser Instanz. `connectedAt`: Zeitpunkt (ms) der letzten erfolgreichen Verbindung. |
+| `capabilities` | `{revealInFinder, openInEditor, pickFolder: boolean}` | Nur bei lokalen Instanzen `true` (Pfade entfernter Server gibt es auf dem Mac nicht). |
 | `titlebar` | `{height, trafficLightsWidth, fullScreen}` | Fensterrahmen in CSS-Pixeln, siehe unten. |
 
 ### Methoden (alle geben ein `Promise` zurück)
@@ -159,13 +207,19 @@ dem Hauptframe mit genau dem Origin der eigenen Instanz.
 | `setBadge(n)` | `undefined` | Zahl auf dem Dock-Symbol für diese Instanz; die App zeigt die Summe aller Instanzen. `0` entfernt den Beitrag. |
 | `revealInFinder(path)` | `boolean` | Zeigt die Datei im Finder. Nur lokale Instanzen, nur absolute existierende Pfade (`/…`, `~/…`, `file://…`). |
 | `openInEditor(path)` | `boolean` | Öffnet Datei oder Ordner im Editor aus `instances.json`. Gleiche Einschränkungen; Programme werden nie direkt ausgeführt. |
+| `pickFolder({title, prompt, defaultPath})` | `string \| null` | Ordnerauswahl (`NSOpenPanel`) als Sheet: nur Ordner, „Neuer Ordner“ möglich, eine Auswahl, Knopf `prompt` (Vorgabe „Projekt öffnen“), `title` als Hinweis. Startet in `defaultPath`, sonst im Ordner der letzten Auswahl, sonst `~`. `null` bei Abbruch und bei entfernten Instanzen. |
+| `ready()` | `undefined` | Die Seite hat zum ersten Mal vollständig gerendert (Sidebar und Chat); erst dann blendet das Fenster zu ihr über. Einmal je Seitenladen. |
+| `setAppearance({background, theme})` | `undefined` | Hintergrundfarbe (`#rrggbb`) und `"light"`/`"dark"`. Wer das meldet, ruft auch `ready()` auf. |
+| `prewarm(id)` | `undefined` | Verbindet Instanz `id` im Hintergrund, falls sie noch nicht läuft (Hover im Wechsler). |
 
 ### Ereignisse (auf `window`)
 
 | Ereignis | `detail` | Wann |
 |---|---|---|
 | `dshx-desktop-change` | `{current, instances}` | Liste, Namen, Status oder aktive Instanz haben sich geändert (auch Vollbild/Titelleiste). |
-| `dshx-desktop-command` | `{command}` | Menübefehl der App: `"new-chat"` (⌘N), `"settings"` (⌘,). Das Ereignis ist `cancelable`: Ruft die UI `event.preventDefault()` auf, gilt der Befehl als erledigt. Sonst klickt die App als Rückfall das erste Element aus `[data-dshx-command="<befehl>"]`, dann `.sb-nav .nav-item` bzw. `.topbar-new` (neuer Chat) oder `.sb-foot .nav-item` (Einstellungen). |
+| `dshx-desktop-command` | `{command}` | Menübefehl der App: `"new-chat"` (⌘N), `"settings"` (⌘,), `"open-project"` (⌘O). Das Ereignis ist `cancelable`: Ruft die UI `event.preventDefault()` auf, gilt der Befehl als erledigt. Sonst klickt die App als Rückfall das erste Element aus `[data-dshx-command="<befehl>"]`, dann `.sb-nav .nav-item` bzw. `.topbar-new` (neuer Chat) oder `.sb-foot .nav-item` (Einstellungen). |
+| `dshx-desktop-drag` | `{active}` | Ein Ordner aus dem Finder wird über eine lokale Instanzseite gezogen (`true`) oder verlässt sie (`false`). |
+| `dshx-desktop-drop` | `{paths}` | Ordner (nur Ordner, keine Pakete) wurden auf einer lokalen Instanzseite abgelegt; die UI fügt sie als Projekte hinzu. WKWebView liefert der Seite selbst keine Pfade, darum nimmt die App den Drop an. |
 | `dshx-desktop-notification` | `{tag}` | Der Nutzer hat eine Mitteilung dieser Instanz angeklickt; die App hat Fenster und Instanz bereits nach vorn geholt. |
 
 ### Fensterrahmen, CSS und Ziehen
@@ -211,7 +265,9 @@ window.addEventListener('dshx-desktop-command', (e) => {
 ```
 
 Statuspunkte: `ready` grün, `starting` grau/animiert, `error` rot, `idle`
-ohne Punkt. ⌘1 … ⌘9 schalten bereits nativ um.
+ohne Punkt. ⌃1 … ⌃9 schalten bereits nativ um. Die Web-UI setzt das in
+`ui/src/components/instances.js` um (dazu Spinner beim Wechsel, Zahl ungelesener
+Chats, `prewarm` beim Überfahren, `ready` und `setAppearance`).
 
 ## Menüs und Tastenkürzel
 
@@ -220,10 +276,11 @@ ohne Punkt. ⌘1 … ⌘9 schalten bereits nativ um.
 | dsh-codex | Einstellungen … (Befehl `settings` an die Seite) | ⌘, |
 | dsh-codex / Instanz | Instanzen bearbeiten … | ⌥⌘, |
 | Ablage | Neuer Chat (Befehl `new-chat`) | ⌘N |
+| Ablage | Projekt öffnen … (Befehl `open-project`) | ⌘O |
 | Ablage | Fenster schließen (App läuft weiter, Dock-Symbol öffnet wieder) | ⌘W |
 | Bearbeiten | Widerrufen, Ausschneiden, Kopieren, Einsetzen, Alles auswählen, Suchen | Standard |
 | Darstellung | Neu laden / Originalgröße / Vergrößern / Verkleinern / Vollbild | ⌘R / ⌘0 / ⌘+ / ⌘- / ⌃⌘F |
-| Instanz | eine Zeile je Instanz (Häkchen = aktiv, Plakette bei Fehler/Verbinden) | ⌘1 … ⌘9 |
+| Instanz | eine Zeile je Instanz (Häkchen = aktiv, Plakette bei Fehler/Verbinden) | ⌃1 … ⌃9 (⌘1 … ⌘9 bleiben für Chats frei, wie in Codex) |
 | Instanz | Neu verbinden | ⇧⌘R |
 | Instanz | Instanz hinzufügen … | |
 | Hilfe | Protokolle anzeigen, instances.json im Finder zeigen, Computer-Use-Helfer installieren …, Mitteilungen testen | |
@@ -244,6 +301,14 @@ der Web-Inspektor von Safari ist für die Seiten freigeschaltet
 | `~/Library/Logs/dsh-codex/desktop.log` | Ablauf der App (Status, Laden, Beenden) |
 | `~/Library/Logs/dsh-codex/local-<id>.log`, `ssh-<id>.log` | Server- bzw. ssh-Ausgabe, Tokens maskiert |
 | Schlüsselbund, Dienst `de.yousufzai.dsh-codex.instance` | Tokens von `url`-Instanzen |
+| Benutzereinstellungen der App (`background.<id>`, `theme.<id>`, `lastProjectParent`) | Seitenfarbe und Theme je Instanz, Startordner der Ordnerauswahl |
+
+`DSHX_DESKTOP_SUPPORT_DIR=<ordner>` legt Instanzen, `run/`, `logs/` und `ssh/`
+(Sockets; Pfad kurz halten, max. 104 Byte) in diesen Ordner, und der
+Computer-Use-Helfer wird nicht nach `~/Applications` kopiert. So läuft eine
+zweite Kopie (z. B. ein Testbuild) neben der installierten App, ohne deren
+Daten anzufassen. Benutzereinstellungen und Website-Daten hängen an der
+Bundle-ID; eine Testkopie bekommt darum besser eine eigene.
 
 ## Bekannte Grenzen
 

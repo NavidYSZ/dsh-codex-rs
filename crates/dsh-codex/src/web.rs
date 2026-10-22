@@ -751,6 +751,26 @@ impl Backend for WebBackend {
         }
         Ok(report)
     }
+
+    /// Home, `[folders] roots` and the parent of every project (never `/`).
+    async fn folder_roots(&self) -> anyhow::Result<Vec<PathBuf>> {
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let mut roots: Vec<PathBuf> = home.clone().into_iter().collect();
+        for root in self.runtime.config().folders.roots {
+            match (root.strip_prefix("~"), &home) {
+                (Ok(rest), Some(home)) => roots.push(home.join(rest)),
+                _ => roots.push(root),
+            }
+        }
+        if let Value::Array(rows) = self.workspaces().await? {
+            let parents = rows
+                .iter()
+                .filter_map(|w| Path::new(w["path"].as_str()?).parent())
+                .filter(|p| p.parent().is_some());
+            roots.extend(parents.map(Path::to_path_buf));
+        }
+        Ok(roots)
+    }
 }
 
 /// Opens a session for reminder delivery like a prompt would.

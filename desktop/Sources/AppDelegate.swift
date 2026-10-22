@@ -10,8 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Paths.ensurePrivateDirectory(Paths.support)
+        let isolated = Paths.isolated != nil
         DispatchQueue.global(qos: .utility).async {
-            HelperInstaller.installIfMissing()
+            // A second copy with its own support folder leaves ~/Applications alone.
+            if !isolated { HelperInstaller.installIfMissing() }
             _ = ShellEnvironment.resolved()
         }
         manager = InstanceManager()
@@ -24,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.mainMenu = buildMenu()
         main.showWindow(nil)
         manager.activate(manager.currentID)
+        manager.prewarmAtLaunch(after: 2)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -62,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc private func newChat(_ sender: Any?) { main.sendCommand("new-chat") }
+    @objc private func openProject(_ sender: Any?) { main.sendCommand("open-project") }
     @objc private func openSettings(_ sender: Any?) { main.sendCommand("settings") }
 
     @objc private func switchInstance(_ sender: NSMenuItem) {
@@ -128,7 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
         case #selector(installHelper(_:)): return HelperInstaller.bundled != nil
-        case #selector(reloadPage(_:)), #selector(zoomIn(_:)), #selector(zoomOut(_:)), #selector(zoomReset(_:)):
+        case #selector(reloadPage(_:)), #selector(zoomIn(_:)), #selector(zoomOut(_:)), #selector(zoomReset(_:)),
+             #selector(openProject(_:)):
             return main?.currentWebView != nil
         default: return true
         }
@@ -142,8 +147,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func rebuildInstanceMenu() {
         instanceMenu.removeAllItems()
         for (index, instance) in manager.instances.enumerated() {
+            // ⌃1 … ⌃9 like Codex's areas; ⌘1 … ⌘9 belong to the chats.
             let item = NSMenuItem(title: instance.name, action: #selector(switchInstance(_:)),
                                   keyEquivalent: index < 9 ? String(index + 1) : "")
+            item.keyEquivalentModifierMask = .control
             item.representedObject = instance.id
             item.state = instance.id == manager.currentID ? .on : .off
             item.target = self
@@ -192,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         let file = NSMenu(title: "Ablage")
         file.addItem(item("Neuer Chat", #selector(newChat(_:)), "n"))
+        file.addItem(item("Projekt öffnen …", #selector(openProject(_:)), "o"))
         file.addItem(.separator())
         file.addItem(item("Fenster schließen", #selector(NSWindow.performClose(_:)), "w"))
 

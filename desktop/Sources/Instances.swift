@@ -3,18 +3,23 @@ import Security
 
 /// Where the desktop shell keeps its files. `Application Support/dsh-codex` is
 /// shared with the computer-use helper (its `cua.sock` lives there too).
+/// `DSHX_DESKTOP_SUPPORT_DIR` moves instances, run files, logs and sockets
+/// into one folder, for a second copy of the app next to the installed one.
 enum Paths {
-    static let support: URL = FileManager.default
+    /// The `DSHX_DESKTOP_SUPPORT_DIR` override, if set.
+    static let isolated: URL? = ProcessInfo.processInfo.environment["DSHX_DESKTOP_SUPPORT_DIR"]
+        .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
+    static let support: URL = isolated ?? FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("dsh-codex", isDirectory: true)
     static let instancesFile = support.appendingPathComponent("instances.json")
     /// Ready files and pid files of the local servers (0700).
     static let run = support.appendingPathComponent("run", isDirectory: true)
-    static let logs: URL = FileManager.default
+    static let logs: URL = isolated?.appendingPathComponent("logs", isDirectory: true) ?? FileManager.default
         .urls(for: .libraryDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Logs/dsh-codex", isDirectory: true)
     /// SSH control sockets. Short on purpose: Unix socket paths are limited to 104 bytes.
-    static let sockets: URL = FileManager.default
+    static let sockets: URL = isolated?.appendingPathComponent("ssh", isDirectory: true) ?? FileManager.default
         .urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("dsh-codex/ssh", isDirectory: true)
 
@@ -48,6 +53,8 @@ struct Instance: Codable, Equatable, Identifiable {
     var id: String
     var name: String
     var kind: InstanceKind
+    /// "Beim Start verbinden": warm the connection up at launch (nil = yes).
+    var connectAtLaunch: Bool?
 
     // local
     /// Path to a `dsh-codex` binary; default: the one inside the app bundle.
@@ -69,6 +76,8 @@ struct Instance: Codable, Equatable, Identifiable {
     var url: String?
 
     static func newID() -> String { UUID().uuidString.lowercased() }
+
+    var connectsAtLaunch: Bool { connectAtLaunch ?? true }
 }
 
 /// The whole `instances.json`.

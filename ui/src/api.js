@@ -3,6 +3,7 @@
 // Both implementations expose the same methods, so the rest of the UI never
 // knows whether it talks to dshx-server or replays ui/fixtures/<name>.json.
 import { t } from './i18n.js';
+import { fixtureFs } from './fixture-fs.js';
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -67,11 +68,13 @@ class HttpApi {
     }
     if (!res.ok) {
       let message = '';
+      let code;
       try {
         const j = await res.json();
         message = typeof j.error === 'string' ? j.error : j.error?.message ?? j.message ?? '';
+        code = j.code;
       } catch { /* not JSON */ }
-      throw new ApiError(res.status, message || res.statusText);
+      throw Object.assign(new ApiError(res.status, message || res.statusText), code ? { code } : {});
     }
     if (res.status === 202 || res.status === 204) return null;
     const type = res.headers.get('content-type') || '';
@@ -82,6 +85,11 @@ class HttpApi {
   updateSettings(patch) { return this.req('PUT', '/api/settings', patch); }
   workspaces() { return this.req('GET', '/api/workspaces'); }
   addWorkspace(path) { return this.req('POST', '/api/workspaces', { path }); }
+  // Project folder picker: listing, suggestions, new folder, the Mac's own dialog.
+  fsDirs(path, hidden) { return this.req('GET', `/api/fs/dirs?path=${enc(path ?? '')}${hidden ? '&hidden=1' : ''}`); }
+  fsSuggestions() { return this.req('GET', '/api/fs/suggestions'); }
+  fsMkdir(path, name) { return this.req('POST', '/api/fs/mkdir', { path, name }); }
+  fsPick(body) { return this.req('POST', '/api/fs/pick', body ?? {}); }
   sessions() { return this.req('GET', '/api/sessions'); }
   /** An empty `cwd` starts a chat without a project (the server gives it its own folder);
    * `preset` is the chat's mode (default: the server's). */
@@ -277,6 +285,11 @@ class FixtureApi {
     this.shared.workspaces = [ws, ...(this.shared.workspaces ?? []).filter((w) => w.path !== path)];
     return ws;
   }
+
+  fsDirs(path, hidden) { return fixtureFs.dirs(path, hidden); }
+  fsSuggestions() { return fixtureFs.suggestions(); }
+  fsMkdir(path, name) { return fixtureFs.mkdir(path, name); }
+  fsPick() { return fixtureFs.pick(); }
 
   async sessions() {
     await this.ready;

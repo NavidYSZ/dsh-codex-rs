@@ -6,6 +6,7 @@
 //! `team`) with dsh 0.2.0-rc.2's defaults.
 //! `[mcp_servers.<name>]` tables configure MCP servers (dsh `mcp-client`),
 //! `[plugins."<name>@<marketplace>"]` tables switch installed plugins on.
+//! `[folders]` widens what the web UI's folder browser may list.
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -35,6 +36,9 @@ pub struct Config {
     /// contribute skills and MCP servers.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub plugins: BTreeMap<String, PluginConfig>,
+    /// Extra roots of the project folder browser (`/api/fs/dirs`).
+    #[serde(skip_serializing_if = "FoldersConfig::is_empty")]
+    pub folders: FoldersConfig,
 }
 
 impl Default for Config {
@@ -50,7 +54,23 @@ impl Default for Config {
             codex: CodexConfig::default(),
             mcp_servers: BTreeMap::new(),
             plugins: BTreeMap::new(),
+            folders: FoldersConfig::default(),
         }
+    }
+}
+
+/// `[folders]`: where the web UI's folder browser may look besides the home
+/// folder and the parents of known projects, e.g. `roots =
+/// ["/srv/deepseek-workspaces"]` on a server. `~/` is the home folder.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct FoldersConfig {
+    pub roots: Vec<PathBuf>,
+}
+
+impl FoldersConfig {
+    fn is_empty(&self) -> bool {
+        self.roots.is_empty()
     }
 }
 
@@ -497,9 +517,28 @@ mod tests {
         // Unset optional tables stay out of a rewritten config.toml.
         let text = toml::to_string(&Config::default()).unwrap();
         assert!(
-            !text.contains("plugins") && !text.contains("oauth"),
+            !text.contains("plugins") && !text.contains("oauth") && !text.contains("folders"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn folders_table() {
+        let config: Config = toml::from_str(
+            r#"
+            [folders]
+            roots = ["/srv/deepseek-workspaces", "~/code"]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.folders.roots,
+            [
+                PathBuf::from("/srv/deepseek-workspaces"),
+                PathBuf::from("~/code")
+            ]
+        );
+        assert!(Config::default().folders.roots.is_empty());
     }
 
     #[test]

@@ -8,15 +8,17 @@ import { useStore } from '../store.js';
 import {
   store, newChat, openSettings, deleteSession, toggleSidebar, setSidebarMode, setActivityFilter, toggleFolded,
   openPalette, setPinned, setArchived, setUnread, startRename, stopRename, renameSession, markAllRead,
-  switchInstance, toast, openPlugins, openAutomations,
+  toast, openPlugins, openAutomations,
 } from '../state.js';
 import {
   IconCompose, IconGear, IconSidebar, IconTrash, IconFolder, IconSearch, IconBell, IconPin, IconArchive, IconMore,
-  IconPencil, IconUnread, IconCopy, IconPlus, IconChevronDown, IconFolderPlus, IconChat, IconChevronLeft, IconJob, IconPlug,
+  IconPencil, IconUnread, IconCopy, IconChevronDown, IconFolderPlus, IconChat, IconChevronLeft, IconJob, IconPlug,
 } from '../icons.js';
-import { Menu, MenuItem, ActionItem } from './common.js';
-import { WorkspaceMenu, workspaceName } from './composer.js';
+import { Menu, ActionItem } from './common.js';
+import { workspaceName } from './composer.js';
 import { ViewModeItems } from './worklog.js';
+import { openProject } from './folders.js';
+import { InstanceSwitcher } from './instances.js';
 
 const PREVIEW = 5; // chats per project before "Show more"
 const enc = encodeURIComponent;
@@ -157,14 +159,10 @@ function useProjects(sessions, workspaces) {
   }, [sessions, workspaces]);
 }
 
+/** Straight to the folder dialog; the projects are listed right below anyway. */
 function AddProject() {
-  const [open, setOpen] = useState(false);
-  const anchor = useRef(null);
-  return html`<span class="chip-wrap">
-    <button type="button" ref=${anchor} class="sb-more is-shown" aria-label=${t.addProject} title=${t.addProject}
-      onClick=${() => setOpen((v) => !v)}><${IconFolderPlus} size=${14} /></button>
-    <${WorkspaceMenu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} side="bottom" align="end" />
-  </span>`;
+  return html`<button type="button" class="sb-more is-shown" data-dshx-command="open-project" aria-label=${t.addProject}
+    title=${`${t.addProject} (⌘O)`} onClick=${openProject}><${IconFolderPlus} size=${14} /></button>`;
 }
 
 function ProjectsView({ sessions, workspaces, activeId, now }) {
@@ -213,30 +211,6 @@ function ActivityView({ sessions, activeId, now }) {
     ? html`<${Rows} list=${list} activeId=${activeId} now=${now} project=${(s) => (s.scratch ? '' : workspaceName(s.cwd))} />`
     : html`<div class="sb-empty">${t.nothingHere}</div>`}
   </div>`;
-}
-
-/** Brand in a browser; in the Mac app the current instance, with a switcher. */
-function InstanceSwitcher() {
-  const desktop = useStore(store, (s) => s.desktop);
-  const [open, setOpen] = useState(false);
-  const anchor = useRef(null);
-  const list = desktop?.instances ?? [];
-  if (!list.length) return html`<span class="brand">${t.brand}</span>`;
-  const current = list.find((i) => i.id === desktop.current) ?? list.find((i) => i.active) ?? list[0];
-  return html`<span class="chip-wrap sb-instance-wrap">
-    <button type="button" ref=${anchor} class="sb-instance" aria-haspopup="menu" aria-expanded=${open} onClick=${() => setOpen((v) => !v)}>
-      <span class="brand">${current.name}</span><${IconChevronDown} size=${12} />
-    </button>
-    <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} fixed side="bottom" align="start" class="menu-wide">
-      <div class="menu-head">${t.instances}</div>
-      ${list.map((i, n) => html`<${MenuItem} key=${i.id} checked=${i.id === current.id} hint=${i.status || i.kind}
-        onClick=${() => { setOpen(false); if (i.id !== current.id) switchInstance(i.id); }}>
-        ${i.name}${n < 9 ? html`<kbd class="kbd kbd-inline">⌘${n + 1}</kbd>` : null}</${MenuItem}>`)}
-      <div class="menu-sep" />
-      <${ActionItem} icon=${html`<${IconPlus} size=${14} />`} onClick=${() => window.dshxDesktop?.addInstance?.()}>${t.addInstance}</${ActionItem}>
-      <${ActionItem} icon=${html`<${IconGear} size=${14} />`} onClick=${() => window.dshxDesktop?.editInstances?.()}>${t.manageInstances}</${ActionItem}>
-    </${Menu}>
-  </span>`;
 }
 
 export function Sidebar() {
