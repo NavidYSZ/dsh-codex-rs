@@ -9,7 +9,7 @@ import { t } from '../i18n.js';
 import { useStore } from '../store.js';
 import { store, api, openPlugins } from '../state.js';
 import { IconFile, IconFolder, IconPlug, IconShield, IconList, IconArrowDown, IconChevronRight } from '../icons.js';
-import { detectTrigger, highlight, known, learn, pills, segments, typedCommand } from '../suggest.js';
+import { detectTrigger, highlight, known, learn, pills, rank, segments, typedCommand } from '../suggest.js';
 import { COMMANDS, openDetails, runCommand, steerQueued, useQueue } from './composer-extras.js';
 import { VIEW_MODES } from '../worklog.js';
 
@@ -111,6 +111,17 @@ function Popup({ state, query, cursor, setCursor, onPick, onRetry, list }) {
   </div>`;
 }
 
+/** Whether a row of an older answer still fits `query`. */
+function stillMatches(item, query) {
+  if (item.type === 'file' || item.type === 'folder') {
+    const at = query.lastIndexOf('/');
+    if (at >= 0 && !item.path.startsWith(query.slice(0, at + 1))) return false;
+    const q = query.slice(at + 1);
+    return rank(q, item.name) != null || (at < 0 && rank(q, item.path) != null);
+  }
+  return rank(query, item.name) != null || rank(query, item.title ?? '') != null;
+}
+
 /** Replaces `start…end` of the textarea with `text`, keeping the undo stack. */
 function replaceRange(el, start, end, text) {
   el.focus();
@@ -192,7 +203,7 @@ export function ComposerInput({ areaRef, value, onValue, placeholder, onKeyDown,
       try {
         const data = await api.suggest({ kind, q: live.query, ...scope, ...(model ? { model } : {}) });
         learn(data);
-        setAnswer((a) => (a.key === queryKey ? { loading: false, error: null, data, key: queryKey } : a));
+        setAnswer((a) => (a.key === queryKey ? { loading: false, error: null, data, key: queryKey, dataKey: queryKey } : a));
       } catch (error) {
         setAnswer((a) => (a.key === queryKey ? { ...a, loading: false, error } : a));
       }
@@ -204,8 +215,11 @@ export function ComposerInput({ areaRef, value, onValue, placeholder, onKeyDown,
 
   const list = useMemo(() => {
     if (options) return { kind: 'slash', sections: [{ id: 'view', items: options }], flat: options };
-    const data = answer.data && answer.key === queryKey ? answer.data : answer.data;
+    const data = answer.data;
     let sections = (data?.sections ?? []).map((s) => ({ ...s, items: s.items ?? [] }));
+    // An older answer while the new one loads: only what still matches the
+    // query stays, so ↩ never picks a row of an earlier query.
+    if (live && answer.dataKey !== queryKey) sections = sections.map((s) => ({ ...s, items: s.items.filter((x) => stillMatches(x, live.query)) }));
     if (live?.trigger === '$') sections = sections.filter((s) => s.id === 'skills');
     if (live && kind === 'mention' && live.query.includes('/')) {
       sections = sections.map((s) => (s.id === 'files' ? { ...s, crumb: live.query.slice(0, live.query.lastIndexOf('/') + 1) } : s));

@@ -47,7 +47,9 @@ export async function compactChat() {
     const r = await api.compact(id);
     notify(r?.compacted ? t.ciCompacted(r.items ?? 0, r.tokens ?? 0) : t.ciNothingToCompact);
   } catch (e) {
-    notify(e?.message || String(e), 'error');
+    // dsh /compact's texts: busy, or no useful summary (the attempt stays in the log).
+    const why = e?.message ?? '';
+    notify(/unavailable|not idle/i.test(why) ? t.ciCompactBusy : e?.status ? t.ciCompactFailed : why || String(e), 'error');
   } finally {
     compacting = false;
   }

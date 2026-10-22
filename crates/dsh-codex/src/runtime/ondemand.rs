@@ -51,6 +51,8 @@ pub struct McpHistory {
     pub choices: BTreeMap<String, Choice>,
     /// Every tool name a request of this session declared.
     pub declared: HashSet<String>,
+    /// `seq` of each server's latest activation note.
+    pub notes: BTreeMap<String, u64>,
 }
 
 fn header_tools(event: &SessionEvent) -> Vec<String> {
@@ -108,6 +110,9 @@ impl McpHistory {
                     };
                     if let Some(server) = source["server"].as_str() {
                         history.choices.insert(server.to_owned(), choice);
+                        if choice == Choice::On {
+                            history.notes.insert(server.to_owned(), event.seq);
+                        }
                     }
                 }
                 _ => {}
@@ -424,8 +429,17 @@ impl PreStepHook for McpHook {
             return Ok(());
         };
         let names = rt.mcp_server_names();
-        let logged = step
-            .read_history(|events, _| McpHistory::from_events(events, |t| server_of(t, &names)));
+        let (logged, compacted) = step.read_history(|events, visible| {
+            let history = McpHistory::from_events(events, |t| server_of(t, &names));
+            // Activation notes a compaction folded away: their instructions are gone.
+            let compacted: BTreeSet<String> = history
+                .notes
+                .iter()
+                .filter(|(_, seq)| !visible(**seq))
+                .map(|(server, _)| server.clone())
+                .collect();
+            (history, compacted)
+        });
         let mut choices = logged.choices.clone();
         let pending = rt.mcp_pending.lock().unwrap().remove(&self.session);
         for (server, on) in pending.into_iter().flatten() {
@@ -461,22 +475,24 @@ impl PreStepHook for McpHook {
             step.update_tools(|registry| Runtime::swap_mcp_tools(registry, tools));
         }
         for server in &names {
-            match (before.offered(server), after.offered(server)) {
-                (false, true) => {
-                    let tool_names: Vec<String> = wanted
-                        .iter()
-                        .filter(|t| server_of(t, &names).as_deref() == Some(server))
-                        .cloned()
-                        .collect();
-                    entering.push(activation_message(
-                        server,
-                        &tool_names,
-                        rt.mcp.has_resources(server),
-                        &rt.mcp.instructions(server),
-                    ));
-                }
-                (true, false) => entering.push(deactivation_message(server)),
-                _ => {}
+            // After a compaction an active server's note comes back once.
+            let renew =
+                compacted.contains(server) && logged.choices.get(server) == Some(&Choice::On);
+            let (was, now) = (before.offered(server), after.offered(server));
+            if now && (!was || renew) {
+                let tool_names: Vec<String> = wanted
+                    .iter()
+                    .filter(|t| server_of(t, &names).as_deref() == Some(server))
+                    .cloned()
+                    .collect();
+                entering.push(activation_message(
+                    server,
+                    &tool_names,
+                    rt.mcp.has_resources(server),
+                    &rt.mcp.instructions(server),
+                ));
+            } else if was && !now {
+                entering.push(deactivation_message(server));
             }
         }
         Ok(())
