@@ -1,8 +1,7 @@
 // The chat's current plan above the composer (dsh TodoPanel in the input
-// dock): the `todo_write` list of the latest turn as one line with the item
-// in progress and "1 of 3 done", unfolding into the checklist. It shows while
-// that turn runs and stays while items are left; a later turn that writes no
-// list, or a finished list after its turn, hides it.
+// dock): the latest `todo_write` list as one line with the item in progress
+// and "1 of 3 done", unfolding into the checklist. Like dsh's projection it
+// stays while items are left; a finished list goes when its turn ends.
 import { useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
@@ -15,11 +14,10 @@ import { TodoList } from './tools.js';
 export function currentPlan(tx, running) {
   const todos = tx?.todos;
   if (!todos?.length) return null;
-  const last = tx.turns[tx.turns.length - 1];
-  if (!last || tx.todosTurn !== last.turn) return null;
   const done = todos.filter((x) => x.status === 'completed').length;
-  if (done === todos.length && !running) return null;
-  return { todos, done };
+  if (done < todos.length) return { todos, done };
+  const last = tx.turns[tx.turns.length - 1];
+  return running && last && tx.todosTurn === last.turn ? { todos, done } : null;
 }
 
 export function PlanBar({ tx }) {

@@ -48,6 +48,9 @@ function Notice({ item }) {
     return html`<div class="source-line"><span class="source-label">${t.ciMcpLabel}</span>
       <span class="source-detail">${on ? t.ciActivated(item.server) : t.ciDeactivated(item.server)}</span></div>`;
   }
+  if (item.code === 'job') {
+    return html`<div class="source-line"><span class="source-label">${t.jobLabel}</span><span class="source-detail" title=${item.text}>${item.text}</span></div>`;
+  }
   if (item.code === 'goal' || item.code === 'schedule' || item.code === 'team-message') {
     const [label, detail] = item.code === 'goal' ? [t.goal, t.goalRounds(item.round ?? '?', item.max ?? '∞')]
       : item.code === 'schedule' ? [t.automations, item.prompt] : [t.teamMessageFrom(item.sender), item.text];
@@ -87,7 +90,7 @@ function ChangesCard({ turn, cwd }) {
   </div>`;
 }
 
-const SOURCES = new Set(['goal', 'schedule', 'team-message', 'mcp-activation', 'mcp-deactivation']);
+const SOURCES = new Set(['goal', 'schedule', 'team-message', 'job', 'mcp-activation', 'mcp-deactivation']);
 
 /**
  * The running turn's segments plus what streams: reasoning and starting tool

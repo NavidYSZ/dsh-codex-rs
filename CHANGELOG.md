@@ -154,8 +154,10 @@
   credential-like parent variables through on purpose.
 - **Plan above the composer** (dsh TodoPanel): while a turn works through a
   `todo_write` list, a bar shows the item in progress and "1 of 3 done" and
-  unfolds into the checklist; it stays while items are left and goes when a
-  later turn writes no list. A finished turn's summary adds "Plan 2/3".
+  unfolds into the checklist; like dsh it stays while items are left, and a
+  finished list goes when its turn ends. A finished turn's summary adds
+  "Plan 2/3". Turns that a finished background job starts show a "Background
+  job" line like goal rounds and reminders.
 
 ### Changed
 

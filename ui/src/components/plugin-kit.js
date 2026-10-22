@@ -68,10 +68,10 @@ export const statusPill = (status) => {
   return html`<${Pill} tone=${tone}>${t[key]}</${Pill}>`;
 };
 
-/** A dot and the status in words ("● Connected"). */
+/** A dot and the status in words ("● Connected"); a failed server that retries is a warning, not an error. */
 export function StatusDot({ status, retrying }) {
   const [tone, key] = STATUS[status] ?? ['off', 'notAdded'];
-  return html`<span class=${`mcp-status is-${tone}`}><span class="mcp-dot" aria-hidden="true" />${retrying ? t.mcpRetrying : t[key]}</span>`;
+  return html`<span class=${`mcp-status is-${retrying ? 'warn' : tone}`}><span class="mcp-dot" aria-hidden="true" />${retrying ? t.mcpRetrying : t[key]}</span>`;
 }
 
 /** Opens a sign-in page; the Mac app hands it to the default browser. */
