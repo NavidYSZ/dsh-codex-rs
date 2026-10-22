@@ -419,7 +419,7 @@ export async function send(text, images, opts) {
   try {
     let id = s.activeId;
     if (!id) {
-      ({ id } = await api.createSession(s.cwd));
+      ({ id } = await api.createSession(s.cwd, s.composer.preset));
       await openSession(id, { fresh: true });
       refreshSessions();
     }

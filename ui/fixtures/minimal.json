@@ -1,0 +1,663 @@
+{
+ "description": "Real dsh-codex log of a Minimal chat (persistent shell only) against the mock model: state carries over between calls (cd src), one failing test run, a fix.",
+ "session": {
+  "header": {
+   "type": "session",
+   "version": 4,
+   "id": "session-3bcd64f1-59f7-4948-bfe8-52a2f86b420f",
+   "createdAt": 1792746840000,
+   "cwd": "/Users/alex/code/calc",
+   "isSeeded": false,
+   "delegationDepth": 0,
+   "agentPreset": "minimal"
+  },
+  "events": [
+   {
+    "type": "permission/preset",
+    "seq": 0,
+    "time": 1792746840004,
+    "data": {
+     "preset": "workspace-write"
+    }
+   },
+   {
+    "type": "sandbox/mode",
+    "seq": 1,
+    "time": 1792746840004,
+    "data": {
+     "mode": "workspace-write"
+    }
+   },
+   {
+    "type": "approval/policy",
+    "seq": 2,
+    "time": 1792746840004,
+    "data": {
+     "policy": "ask"
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 3,
+    "time": 1792746840004,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "inserted": [
+      {
+       "id": "71e85bcb-a330-4990-a5cd-1fb26e89d69b",
+       "role": "user",
+       "content": [
+        {
+         "type": "text",
+         "text": "The calculator tests fail. Find the cause and fix it."
+        }
+       ],
+       "source": {
+        "kind": "user"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "turn/start",
+    "seq": 4,
+    "time": 1792746840004,
+    "data": {
+     "turn": 1
+    }
+   },
+   {
+    "type": "agent/inbox/spliced",
+    "seq": 5,
+    "time": 1792746840004,
+    "data": {
+     "target": "next-turn",
+     "start": 0,
+     "removedCount": 1,
+     "inserted": []
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 6,
+    "time": 1792746840004,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "system/message",
+    "seq": 7,
+    "time": 1792746840005,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "id": "db7e211e-4c58-4055-9719-6b6067fbe369",
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "You are a helpful software engineer assistant."
+       }
+      ],
+      "source": {
+       "kind": "system-prompt"
+      }
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "user/message",
+    "seq": 8,
+    "time": 1792746840005,
+    "data": {
+     "id": "71e85bcb-a330-4990-a5cd-1fb26e89d69b",
+     "role": "user",
+     "content": [
+      {
+       "type": "text",
+       "text": "The calculator tests fail. Find the cause and fix it."
+      }
+     ],
+     "source": {
+      "kind": "user"
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "request/header",
+    "seq": 9,
+    "time": 1792746840005,
+    "data": {
+     "header": {
+      "config": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "maxTokens": 256000,
+       "reasoningEffort": "high"
+      },
+      "adapterDefaults": {
+       "reasoningEffort": true,
+       "maxTokens": true
+      },
+      "tools": [
+       {
+        "name": "bash",
+        "description": "Run commands in a bash shell\n[… trimmed for the fixture …]",
+        "parameters": {
+         "type": "object",
+         "properties": {
+          "command": {
+           "type": "string",
+           "description": "The bash command to run. Relative path is preferred in the command."
+          }
+         },
+         "required": [
+          "command"
+         ]
+        }
+       }
+      ]
+     },
+     "reason": "initial"
+    }
+   },
+   {
+    "type": "request/context",
+    "seq": 10,
+    "time": 1792746840005,
+    "data": {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "contextWindow": 1000000,
+     "systemPromptUpdate": "in-history"
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 11,
+    "time": 1792746840005,
+    "data": {
+     "title": "The calculator tests fail. Find",
+     "messageSeqs": [
+      8
+     ],
+     "source": {
+      "kind": "fallback"
+     }
+    }
+   },
+   {
+    "type": "session/title-llm-request",
+    "seq": 12,
+    "time": 1792746840005,
+    "data": {
+     "titleProvider": "session-title-first-prompt-llm",
+     "messageSeqs": [
+      8
+     ],
+     "route": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash"
+     },
+     "system": "Create a concise title for an AI coding-assistant session from the supplied human messages.\nReturn only the title on one line, **in plain text of natural language**, with no quotes, prefix, explanation, Markdown, XML, or terminal control codes. No code is allowed.\nUse the language of the messages.\nAim for about 5 words in non-CJK languages or 10 CJK characters.",
+     "messages": [
+      {
+       "id": "870b2be2-67c4-4bce-8b80-d74361f9b36f",
+       "role": "user",
+       "content": [
+        {
+         "type": "text",
+         "text": "Generate the session title from this JSON array of human messages:\n[{\"seq\":8,\"text\":\"The calculator tests fail. Find the cause and fix it.\"}]"
+        }
+       ],
+       "source": {
+        "kind": "dsh-session-title-llm"
+       }
+      }
+     ],
+     "maxTokens": 64
+    }
+   },
+   {
+    "type": "session/title",
+    "seq": 13,
+    "time": 1792746840010,
+    "data": {
+     "title": "Fix the calculator tests",
+     "messageSeqs": [
+      8
+     ],
+     "source": {
+      "kind": "provider",
+      "provider": "session-title-first-prompt-llm",
+      "model": {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     }
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 14,
+    "time": 1792746840028,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "id": "4001de53-ecfb-48b4-b477-04411745e670",
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_3e826ca60207",
+        "name": "bash",
+        "arguments": "{\"command\": \"ls; cat README.md\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     },
+     "usage": {
+      "inputTokens": 100,
+      "outputTokens": 20,
+      "totalTokens": 120
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 15,
+    "time": 1792746840028,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "callId": "toolu_3e826ca60207",
+     "name": "bash",
+     "arguments": "{\"command\": \"ls; cat README.md\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 16,
+    "time": 1792746840091,
+    "data": {
+     "turn": 1,
+     "step": 1,
+     "message": {
+      "id": "a3ed7a2f-e8c3-4d58-8af5-fe294405ab77",
+      "role": "tool",
+      "content": [
+       {
+        "type": "text",
+        "text": "README.md\nsrc\ntests\n# calc\n\nTiny calculator.\n[Command finished with exit code 0]"
+       }
+      ],
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_3e826ca60207"
+      },
+      "toolCallId": "toolu_3e826ca60207",
+      "isError": false
+     }
+    },
+    "sourceEventSeqs": [
+     15
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 17,
+    "time": 1792746840091,
+    "data": {
+     "turn": 1,
+     "step": 1
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 18,
+    "time": 1792746840091,
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 19,
+    "time": 1792746840097,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "id": "e3c110fd-cee2-4d13-9e52-6bce1d8f9d9f",
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_46ccaccdfe3a",
+        "name": "bash",
+        "arguments": "{\"command\": \"python3 tests/test_calc.py\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     },
+     "usage": {
+      "inputTokens": 100,
+      "outputTokens": 20,
+      "totalTokens": 120
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 20,
+    "time": 1792746840097,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "callId": "toolu_46ccaccdfe3a",
+     "name": "bash",
+     "arguments": "{\"command\": \"python3 tests/test_calc.py\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 21,
+    "time": 1792746840149,
+    "data": {
+     "turn": 1,
+     "step": 2,
+     "message": {
+      "id": "c7f4e761-27f5-45c1-bcfd-e6d898b45337",
+      "role": "tool",
+      "content": [
+       {
+        "type": "text",
+        "text": "Traceback (most recent call last):\n  File \"/Users/alex/code/calc/tests/test_calc.py\", line 6, in <module>\n    assert add(2, 3) == 5, f\"add(2, 3) == {add(2, 3)}\"\n           ^^^^^^^^^^^^^^\nAssertionError: add(2, 3) == -1\n[Command finished with exit code 1]"
+       }
+      ],
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_46ccaccdfe3a"
+      },
+      "toolCallId": "toolu_46ccaccdfe3a",
+      "isError": false
+     }
+    },
+    "sourceEventSeqs": [
+     20
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 22,
+    "time": 1792746840149,
+    "data": {
+     "turn": 1,
+     "step": 2
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 23,
+    "time": 1792746840149,
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 24,
+    "time": 1792746840160,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "id": "5c810973-d035-46b1-a037-da699646dbd4",
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_51520392906b",
+        "name": "bash",
+        "arguments": "{\"command\": \"cd src && grep -n 'return' calc.py\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     },
+     "usage": {
+      "inputTokens": 100,
+      "outputTokens": 20,
+      "totalTokens": 120
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 25,
+    "time": 1792746840160,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "callId": "toolu_51520392906b",
+     "name": "bash",
+     "arguments": "{\"command\": \"cd src && grep -n 'return' calc.py\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 26,
+    "time": 1792746840177,
+    "data": {
+     "turn": 1,
+     "step": 3,
+     "message": {
+      "id": "7875e9bc-ab47-4f3a-9581-ebdfd7cc6bf3",
+      "role": "tool",
+      "content": [
+       {
+        "type": "text",
+        "text": "2:    return a - b\n6:    return a * b\n[Command finished with exit code 0]"
+       }
+      ],
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_51520392906b"
+      },
+      "toolCallId": "toolu_51520392906b",
+      "isError": false
+     }
+    },
+    "sourceEventSeqs": [
+     25
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 27,
+    "time": 1792746840177,
+    "data": {
+     "turn": 1,
+     "step": 3
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 28,
+    "time": 1792746840178,
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 29,
+    "time": 1792746840185,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "message": {
+      "id": "30ce9bd3-1517-4511-a04d-112870e4f60d",
+      "role": "assistant",
+      "content": [
+       {
+        "type": "tool-call",
+        "id": "toolu_f74404e538a8",
+        "name": "bash",
+        "arguments": "{\"command\": \"perl -pi -e 's/a - b/a + b/' calc.py && cd .. && python3 tests/test_calc.py\"}"
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     },
+     "usage": {
+      "inputTokens": 100,
+      "outputTokens": 20,
+      "totalTokens": 120
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "tool/call",
+    "seq": 30,
+    "time": 1792746840185,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "callId": "toolu_f74404e538a8",
+     "name": "bash",
+     "arguments": "{\"command\": \"perl -pi -e 's/a - b/a + b/' calc.py && cd .. && python3 tests/test_calc.py\"}"
+    }
+   },
+   {
+    "type": "tool/result",
+    "seq": 31,
+    "time": 1792746840233,
+    "data": {
+     "turn": 1,
+     "step": 4,
+     "message": {
+      "id": "59924d32-9ca9-4cc1-a859-c2c40d7f0a9e",
+      "role": "tool",
+      "content": [
+       {
+        "type": "text",
+        "text": "2 tests passed\n[Command finished with exit code 0]"
+       }
+      ],
+      "source": {
+       "kind": "tool",
+       "callId": "toolu_f74404e538a8"
+      },
+      "toolCallId": "toolu_f74404e538a8",
+      "isError": false
+     }
+    },
+    "sourceEventSeqs": [
+     30
+    ],
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 32,
+    "time": 1792746840233,
+    "data": {
+     "turn": 1,
+     "step": 4
+    }
+   },
+   {
+    "type": "step/start",
+    "seq": 33,
+    "time": 1792746840233,
+    "data": {
+     "turn": 1,
+     "step": 5
+    }
+   },
+   {
+    "type": "assistant/message",
+    "seq": 34,
+    "time": 1792746840240,
+    "data": {
+     "turn": 1,
+     "step": 5,
+     "message": {
+      "id": "fc7ebd3d-e4bb-46b1-bf8e-987e6b70c11e",
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "The test failed because `add()` in `src/calc.py` subtracted: `return a - b`. I changed it to `return a + b`; both tests pass now."
+       }
+      ],
+      "source": {
+       "kind": "model",
+       "provider": "deepseek-official",
+       "model": "deepseek-flash"
+      }
+     },
+     "usage": {
+      "inputTokens": 100,
+      "outputTokens": 5,
+      "totalTokens": 105
+     }
+    },
+    "surfaceOp": "append"
+   },
+   {
+    "type": "step/end",
+    "seq": 35,
+    "time": 1792746840240,
+    "data": {
+     "turn": 1,
+     "step": 5
+    }
+   },
+   {
+    "type": "turn/end",
+    "seq": 36,
+    "time": 1792746840240,
+    "data": {
+     "turn": 1,
+     "reason": {
+      "kind": "completed"
+     }
+    }
+   }
+  ]
+ }
+}

@@ -166,6 +166,69 @@ const EN = {
     spawn_teammate: 'Started teammate', send_message: 'Message to', list_agents: 'Looked at the team', wait_agent: 'Waited for the team',
     interrupt_agent: 'Interrupted', team_task_create: 'Created task', team_task_update: 'Updated task', team_task_list: 'Looked at tasks', team_task_get: 'Read task',
   },
+  // ---- package E ----
+  // Agent modes (dsh agent presets); guide copy adapted from dsh's agent-preset guide.
+  mode: 'Mode',
+  modes: {
+    standard: {
+      name: 'Standard',
+      hint: 'Every tool: files, search, terminal, skills, subagents',
+      description: 'Work with code, files, and information. Suitable for most tasks, with search, editing, terminal commands, and other tools available as needed.',
+    },
+    minimal: {
+      name: 'Minimal',
+      hint: 'Only a terminal and a fixed prompt, for comparisons',
+      description: 'The agent works using only a terminal tool. Useful for testing and comparing its basic performance.',
+    },
+  },
+  modeSeat: 'Choose the mode for your new chat',
+  modeOfChat: 'Mode of this chat',
+  modeFixed: 'A chat keeps the mode it started with.',
+  modeWhen: 'When to choose which?',
+  modeNewChat: (name) => `New chat in ${name} mode`,
+  modeUse: (name) => `Use ${name}`,
+  modeMakeDefault: (name) => `Make ${name} the default`,
+  modeGuideTitle: 'Modes',
+  modeHowTo: 'How to use it',
+  modeTry: 'Try it',
+  modeGuides: {
+    standard: {
+      intro: 'Choose Standard mode when starting a new task. Describe what you want to accomplish, point to the relevant files, and explain how to check the result.',
+      sections: [
+        ['How it works', 'The agent calls tools directly to read and edit files, search, and run terminal commands. It includes Skills, planning, goals, subagents, and context compaction, plus the browser, app and computer tools.'],
+        ['When to choose it', 'Start here for everyday coding, file work, and research. Standard mode can also write scripts and process files in batches.'],
+      ],
+      examples: [
+        {
+          title: 'Fix a bug',
+          prompt: 'Find out why submitting the search form twice makes the results disappear. Fix it and run the relevant tests. Explain the cause and what changed.',
+          note: 'Expected output: a code change, the relevant test results, and an explanation of the cause.',
+        },
+        {
+          title: 'Organize project notes',
+          prompt: 'Read the Markdown notes in this project. Summarize the agreed decisions and open questions, with links to the source files.',
+          note: 'Expected output: a summary with references that you can check against the original notes.',
+        },
+      ],
+    },
+    minimal: {
+      intro: 'Choose Minimal mode for a new task. For a comparison, hold the model, permissions, input, and starting workspace state constant across runs.',
+      sections: [
+        ['What is included', 'One persistent shell tool and a fixed system prompt. Minimal mode does not load Skills, planning, context compaction, or the standard runtime context. The browser, app and computer tools, MCP servers, goals and subagents are not available either.'],
+        ['When to choose it', 'Use it as a baseline for experiments and comparisons. It can still read files and execute scripts through shell commands, but offers fewer built-in ways to manage a long task. Fewer tools does not necessarily make it easier for a beginner.'],
+      ],
+      examples: [
+        {
+          title: 'Compare performance on a small bug fix',
+          prompt: 'Run the tests for this project, find the cause of the failure, and make the smallest fix. Run the relevant tests again and report the result.',
+          note: 'Run the same task separately in Standard and Minimal modes from the same starting state. Compare task completion, tool calls, and the resulting changes. Minimal mode performs the work through terminal commands.',
+        },
+      ],
+    },
+  },
+  shellReset: 'Shell reset',
+  shellRestarted: 'Fresh shell',
+  shellTimedOut: (s) => `Timed out after ${s}s · shell reset`,
 };
 
 const DE = {
@@ -316,6 +379,68 @@ const DE = {
     spawn_teammate: 'Teammitglied gestartet', send_message: 'Nachricht an', list_agents: 'Team angesehen', wait_agent: 'Auf das Team gewartet',
     interrupt_agent: 'Unterbrochen', team_task_create: 'Aufgabe angelegt', team_task_update: 'Aufgabe geändert', team_task_list: 'Aufgaben angesehen', team_task_get: 'Aufgabe gelesen',
   },
+  // ---- package E ----
+  mode: 'Modus',
+  modes: {
+    standard: {
+      name: 'Standard',
+      hint: 'Alle Werkzeuge: Dateien, Suche, Terminal, Skills, Subagenten',
+      description: 'Arbeitet mit Code, Dateien und Informationen. Passt für die meisten Aufgaben; Suche, Bearbeiten, Terminalbefehle und weitere Werkzeuge stehen bei Bedarf bereit.',
+    },
+    minimal: {
+      name: 'Minimal',
+      hint: 'Nur ein Terminal und ein fester Prompt – zum Vergleichen',
+      description: 'Der Agent arbeitet nur mit einem Terminal-Werkzeug. Gut, um seine Grundleistung zu testen und zu vergleichen.',
+    },
+  },
+  modeSeat: 'Modus für den neuen Chat wählen',
+  modeOfChat: 'Modus dieses Chats',
+  modeFixed: 'Ein Chat behält den Modus, mit dem er gestartet ist.',
+  modeWhen: 'Wann welchen wählen?',
+  modeNewChat: (name) => `Neuer Chat im Modus ${name}`,
+  modeUse: (name) => `${name} verwenden`,
+  modeMakeDefault: (name) => `${name} als Standard festlegen`,
+  modeGuideTitle: 'Modi',
+  modeHowTo: 'So nutzt du ihn',
+  modeTry: 'Ausprobieren',
+  modeGuides: {
+    standard: {
+      intro: 'Wähle Standard, wenn du eine neue Aufgabe beginnst. Beschreibe, was du erreichen willst, nenne die wichtigen Dateien und sag, wie sich das Ergebnis prüfen lässt.',
+      sections: [
+        ['So funktioniert er', 'Der Agent ruft Werkzeuge direkt auf: Er liest und bearbeitet Dateien, sucht und führt Terminalbefehle aus. Dazu kommen Skills, Planung, Goals, Subagenten und die Kontext-Komprimierung, außerdem die Werkzeuge für Browser, Apps und Computer.'],
+        ['Wann du ihn wählst', 'Der Einstieg für alltägliches Programmieren, die Arbeit mit Dateien und Recherche. Standard kann auch Skripte schreiben und Dateien stapelweise verarbeiten.'],
+      ],
+      examples: [
+        {
+          title: 'Einen Fehler beheben',
+          prompt: 'Finde heraus, warum die Ergebnisse verschwinden, wenn man das Suchformular zweimal abschickt. Behebe den Fehler und führe die passenden Tests aus. Erkläre die Ursache und was du geändert hast.',
+          note: 'Erwartetes Ergebnis: eine Codeänderung, die Ergebnisse der passenden Tests und eine Erklärung der Ursache.',
+        },
+        {
+          title: 'Projektnotizen ordnen',
+          prompt: 'Lies die Markdown-Notizen in diesem Projekt. Fasse die vereinbarten Entscheidungen und die offenen Fragen zusammen, mit Links zu den Quelldateien.',
+          note: 'Erwartetes Ergebnis: eine Zusammenfassung mit Verweisen, die du mit den Originalnotizen abgleichen kannst.',
+        },
+      ],
+    },
+    minimal: {
+      intro: 'Wähle Minimal für eine neue Aufgabe. Für einen Vergleich halte Modell, Zugriffsrechte, Eingabe und den Ausgangszustand des Arbeitsordners über alle Läufe gleich.',
+      sections: [
+        ['Was enthalten ist', 'Ein dauerhaftes Shell-Werkzeug und ein fester System-Prompt. Skills, Planung, Kontext-Komprimierung und der übliche Laufzeitkontext werden nicht geladen. Auch die Werkzeuge für Browser, Apps und Computer, MCP-Server, Goals und Subagenten gibt es hier nicht.'],
+        ['Wann du ihn wählst', 'Als Vergleichsbasis für Experimente. Über Shell-Befehle kann der Agent weiterhin Dateien lesen und Skripte ausführen, er hat aber weniger eingebaute Hilfen für lange Aufgaben. Weniger Werkzeuge heißt nicht automatisch, dass es für Einsteiger einfacher ist.'],
+      ],
+      examples: [
+        {
+          title: 'Leistung bei einer kleinen Fehlerbehebung vergleichen',
+          prompt: 'Führe die Tests dieses Projekts aus, finde die Ursache des Fehlers und behebe ihn mit der kleinsten Änderung. Führe die passenden Tests erneut aus und berichte das Ergebnis.',
+          note: 'Führe dieselbe Aufgabe getrennt in Standard und Minimal aus, jeweils vom selben Ausgangszustand. Vergleiche, ob die Aufgabe gelöst wurde, die Werkzeugaufrufe und die Änderungen. Minimal erledigt die Arbeit über Terminalbefehle.',
+        },
+      ],
+    },
+  },
+  shellReset: 'Shell neu gestartet',
+  shellRestarted: 'Frische Shell',
+  shellTimedOut: (s) => `Nach ${s} s abgebrochen · Shell neu gestartet`,
 };
 
 export const t = de ? DE : EN;

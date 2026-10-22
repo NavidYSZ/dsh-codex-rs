@@ -6,6 +6,7 @@ import { t, clip } from '../i18n.js';
 import { highlight } from '../highlight.js';
 import { diffLines, countChanges } from '../diff.js';
 import { CODEX_TOOLS, splitBashOutput } from '../reduce.js';
+import { splitShellOutput } from '../persistent-shell.js';
 import {
   IconTerminal, IconFile, IconPencil, IconSearch, IconList, IconGlobe, IconImage, IconTool, IconJob, IconChevronRight,
 } from '../icons.js';
@@ -77,20 +78,21 @@ function BashRow({ item }) {
   const { args, result } = item;
   const running = !result && !waiting(item);
   const text = resultText(result);
-  const out = useMemo(() => splitBashOutput(text), [text]);
+  const out = useMemo(() => splitShellOutput(text) ?? splitBashOutput(text), [text]);
   const failed = result?.isError;
   const exit = failed ? null : out.exit;
-  const badge = html`<${ApprovalBadge} item=${item} />${exit ? html`<span class="badge badge-error">${t.exit(exit)}</span>` : null}`;
+  const badge = html`<${ApprovalBadge} item=${item} />${exit ? html`<span class="badge badge-error">${t.exit(exit)}</span>` : null}${out.note && !failed
+    ? html`<span class=${cx('badge', out.noteError && 'badge-error')}>${out.note}</span>` : null}`;
   return html`<${Row} icon=${html`<${IconTerminal} size=${14} />`} title=${running || waiting(item) ? t.running : t.ran}
       summary=${args.command ?? ''} mono running=${running} error=${failed} badge=${badge}
-      open=${open} onToggle=${result ? toggle : undefined} state=${running ? 'running' : failed || exit ? 'error' : 'done'}>
+      open=${open} onToggle=${result ? toggle : undefined} state=${running ? 'running' : failed || exit || out.noteError ? 'error' : 'done'}>
     <div class="shell">
       <div class="shell-cmd"><span class="shell-prompt">$</span>${args.command ?? ''}</div>
       ${failed ? html`<pre class="shell-err">${errorReason(result)}</pre>` : null}
       ${!failed && out.stdout ? html`<${Clamp} lines=${out.stdout.split('\n')} render=${(l) => html`<pre class="shell-out">${l.join('\n')}</pre>`} />` : null}
       ${!failed && out.stderr ? html`<${Clamp} lines=${out.stderr.split('\n')} render=${(l) => html`<pre class="shell-out shell-stderr">${l.join('\n')}</pre>`} />` : null}
       ${!failed && result && !out.stdout && !out.stderr ? html`<div class="shell-none">${t.noOutput}</div>` : null}
-      ${result && !failed ? html`<div class=${cx('shell-exit', exit && 'is-error')}>${t.exit(exit)}</div>` : null}
+      ${result && !failed ? html`<div class=${cx('shell-exit', (exit || out.noteError) && 'is-error')}>${[exit != null ? t.exit(exit) : null, out.note].filter(Boolean).join(' · ')}</div>` : null}
     </div>
   </${Row}>`;
 }

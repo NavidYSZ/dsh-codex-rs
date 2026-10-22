@@ -81,6 +81,16 @@
    "updatedAgo": 259200000,
    "status": "error",
    "fixture": "error"
+  },
+  {
+   "id": "session-3bcd64f1-59f7-4948-bfe8-52a2f86b420f",
+   "title": "Fix the calculator tests",
+   "cwd": "/Users/alex/code/calc",
+   "createdAt": 1792746840000,
+   "updatedAgo": 5400000,
+   "status": "completed",
+   "preset": "minimal",
+   "fixture": "minimal"
   }
  ]
 }

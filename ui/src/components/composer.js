@@ -12,6 +12,7 @@ import {
 } from '../icons.js';
 import { Menu, MenuItem, ActionItem, Thumb } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
+import { ModeChip, useChatMode } from './modes.js';
 import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 
@@ -114,6 +115,7 @@ function HeroTray({ sel }) {
       </button>
       <${WorkspaceMenu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} />
     </span>
+    <${ModeChip} />
     <${AccessChip} sel=${sel} plain />
   </div>`;
 }
@@ -150,7 +152,8 @@ export function Composer({ hero, tx }) {
   }, [draft]);
   const [plus, setPlus] = useState(false);
   const plusAnchor = useRef(null);
-  const goals = !!info?.automation?.goals && !!activeId;
+  const chatMode = useChatMode();
+  const goals = !!info?.automation?.goals && !!activeId && chatMode !== 'minimal';
   useEffect(() => {
     const el = area.current;
     if (!el) return;
