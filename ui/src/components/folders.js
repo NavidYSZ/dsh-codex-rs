@@ -59,7 +59,8 @@ export async function addProject(path) {
     pickWorkspace(ws.path);
     return ws;
   } catch (e) {
-    if (e?.status === 0 || e?.status === 401 || e?.status === 403) fail(e);
+    // A folder error (outside the roots, denied) has a code; 401/403 without one is the session.
+    if (e?.status === 0 || ((e?.status === 401 || e?.status === 403) && !CODES[e?.code])) fail(e);
     else toast(folderError(e));
     return null;
   }
