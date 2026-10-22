@@ -100,6 +100,32 @@
   with "I understand the risks" and "Don't ask again" (`ui-state.json`).
 - **Sidebar view options** (DSH workspace): group by project or one list,
   order by last activity or creation, hide, show or only archived chats.
+- **Skills page:** search, filters (All · Project · Personal · Plugins ·
+  System), readable titles in the system font with `/name` as a hint, the
+  source, "Active" and "Let the model load it" switches (need the per-skill
+  settings route), invalid frontmatter as a warning in the row, and a drawer
+  with the rendered `SKILL.md`, the folder's files, the path, "Show in
+  Finder"/"Open in editor" (Mac app, local instance) and "Use in chat". "New
+  skill" starts a chat with `skill-creator` or creates a blank `SKILL.md` in
+  `~/.agents/skills` or the project (`GET /api/skills/:name`,
+  `POST /api/skills`).
+- **MCP servers page:** cards with type, status, tool count, "Active" and
+  "Always load"; a drawer with Tools (per-tool switches, parameters and JSON
+  schema), Settings, Log (last 200 lines of stderr, failed requests and
+  connection events) and Sign-in (account, scope, expiry, sign in again or
+  out, hand-entered token). The Apps tab (formerly Connectors) opens the same
+  drawer.
+- **Add server dialog** instead of the one-line input: from the catalog, a
+  custom server (Local STDIO: command, arguments, masked environment values,
+  variables to pass through, working folder; Remote HTTP: URL and None /
+  Bearer token / OAuth / custom headers) with **Test connection**
+  (`POST /api/mcp/test`: handshake and `tools/list` in a throwaway client),
+  or pasted JSON from Claude, Cursor, VS Code, Codex or a README (several
+  servers as a checklist). Environment values, header values and bearer
+  tokens are stored in `credentials.toml`, never in `config.toml`; servers
+  can be edited (`PUT /api/mcp/servers/:name`) and their log read
+  (`GET /api/mcp/servers/:name/log`). `[mcp_servers.x] env_vars` passes
+  credential-like parent variables through on purpose.
 
 ### Changed
 

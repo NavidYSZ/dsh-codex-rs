@@ -15,6 +15,7 @@ use tokio_util::sync::CancellationToken;
 use crate::config::{AuthSpec, ServerSpec, TransportSpec};
 use crate::error::McpError;
 use crate::http::HttpTransport;
+use crate::log::ServerLog;
 use crate::names::public_tool_name;
 use crate::oauth::{AuthChallenge, EnvBearer, OAuthManager, TokenProvider};
 use crate::peer::{Peer, PeerEvent, Transport};
@@ -101,6 +102,8 @@ pub(crate) struct Server {
     auth: Option<Arc<dyn TokenProvider>>,
     /// The server's last authorization challenge.
     challenge: Arc<Mutex<Option<AuthChallenge>>>,
+    /// stderr, failed requests and connection events (kept across restarts).
+    pub log: Arc<ServerLog>,
 }
 
 /// One established connection before it is published.
@@ -118,6 +121,7 @@ impl Server {
         spec: ServerSpec,
         changes: Arc<watch::Sender<u64>>,
         oauth: Option<&Arc<OAuthManager>>,
+        log: Arc<ServerLog>,
     ) -> (Arc<Server>, oneshot::Receiver<Result<(), String>>) {
         let (first_tx, first_rx) = oneshot::channel();
         let (stopped_tx, stopped_rx) = oneshot::channel();
@@ -141,6 +145,7 @@ impl Server {
             stopped: Mutex::new(Some(stopped_rx)),
             auth,
             challenge: Arc::new(Mutex::new(None)),
+            log,
         });
         let supervisor = server.clone();
         tokio::spawn(async move {
@@ -234,6 +239,8 @@ impl Server {
                     }
                     *self.challenge.lock().unwrap() = None;
                     self.notify();
+                    self.log
+                        .info(format!("connected, {} tools", self.tools().len()));
                     if let Some(tx) = first.take() {
                         let _ = tx.send(Ok(()));
                     }
@@ -259,6 +266,7 @@ impl Server {
                             }
                             Some(Some(PeerEvent::ToolsChanged)) => {
                                 tracing::info!("{label}: tool list changed, re-syncing");
+                                self.log.info("tool list changed");
                                 let synced = tokio::select! {
                                     biased;
                                     _ = self.disposed.cancelled() => continue,
@@ -269,7 +277,10 @@ impl Server {
                                         self.state.lock().unwrap().tools = tools;
                                         self.notify();
                                     }
-                                    Err(e) => tracing::error!("{label}: tool re-sync failed: {e}"),
+                                    Err(e) => {
+                                        tracing::error!("{label}: tool re-sync failed: {e}");
+                                        self.log.error(format!("tool re-sync failed: {e}"));
+                                    }
                                 }
                                 // A 403 insufficient_scope changes the reported status.
                                 self.notify();
@@ -279,6 +290,7 @@ impl Server {
                         }
                     };
                     tracing::warn!("{label}: connection lost: {lost}");
+                    self.log.error(format!("connection lost: {lost}"));
                     {
                         let mut state = self.state.lock().unwrap();
                         state.peer = None;
@@ -294,6 +306,7 @@ impl Server {
                 }
                 Err(ConnectError::Auth(challenge)) => {
                     tracing::info!("{label}: login required; waiting for a restart after login");
+                    self.log.info("sign-in required");
                     *self.challenge.lock().unwrap() = Some(challenge);
                     {
                         let mut state = self.state.lock().unwrap();
@@ -310,6 +323,7 @@ impl Server {
                 }
                 Err(ConnectError::Other(e)) => {
                     tracing::warn!("{label}: connection attempt failed: {e}");
+                    self.log.error(format!("connection failed: {e}"));
                     self.set_phase(Phase::Retrying { error: e.clone() });
                     if let Some(tx) = first.take() {
                         let _ = tx.send(Err(e));
@@ -326,6 +340,7 @@ impl Server {
                     "connection failed and reconnect is disabled — no tools were registered; restart dsh-codex to connect"
                 };
                 tracing::error!("{label}: {message}");
+                self.log.error(message);
                 let error = match self.phase() {
                     Phase::Retrying { error } => error,
                     _ => message.to_owned(),
@@ -352,6 +367,8 @@ impl Server {
                     "{label}: giving up after {} consecutive failed reconnect attempts — tools unregistered; restart dsh-codex to reconnect",
                     policy.max_attempts
                 );
+                self.log
+                    .error(format!("gave up after {} attempts", policy.max_attempts));
                 return;
             }
             let delay = policy.delay(failed_attempts);
@@ -365,6 +382,11 @@ impl Server {
                 delay.as_millis(),
                 policy.max_attempts
             );
+            self.log.info(format!(
+                "next attempt in {} ms ({failed_attempts}/{})",
+                delay.as_millis(),
+                policy.max_attempts
+            ));
             tokio::select! {
                 _ = self.disposed.cancelled() => return,
                 _ = tokio::time::sleep(delay) => {}
@@ -392,18 +414,28 @@ impl Server {
                     env,
                     cwd,
                 } => {
-                    let (t, inbox) =
-                        StdioTransport::spawn(command, args, env, cwd.as_ref(), &label)
-                            .map_err(|e| e.to_string())?;
+                    self.log
+                        .info(format!("starting {command} {}", args.join(" ")).trim_end());
+                    let (t, inbox) = StdioTransport::spawn(
+                        command,
+                        args,
+                        env,
+                        cwd.as_ref(),
+                        &label,
+                        self.log.clone(),
+                    )
+                    .map_err(|e| e.to_string())?;
                     (t, inbox, None)
                 }
                 TransportSpec::Http { url, headers, .. } => {
+                    self.log.info(format!("connecting to {url}"));
                     let (t, inbox) = HttpTransport::new(
                         url.clone(),
                         headers,
                         &label,
                         self.auth.clone(),
                         self.challenge.clone(),
+                        self.log.clone(),
                     )
                     .map_err(|e| e.to_string())?;
                     (t.clone(), inbox, Some(t))

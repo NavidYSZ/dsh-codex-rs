@@ -189,6 +189,38 @@ impl Credentials {
         self.write_table(&table)
     }
 
+    /// A whole top-level table (e.g. `mcp_servers`, the secrets of MCP
+    /// servers), for callers that keep their own layout in this file.
+    pub fn table(&self, name: &str) -> Result<Option<toml::Table>> {
+        Ok(self
+            .read_table()?
+            .remove(name)
+            .and_then(|v| v.as_table().cloned()))
+    }
+
+    /// Replaces a top-level table; `None` or an empty table removes it, and
+    /// an empty file goes too.
+    pub fn set_table(&self, name: &str, value: Option<toml::Table>) -> Result<()> {
+        let mut table = self.read_table()?;
+        match value.filter(|v| !v.is_empty()) {
+            Some(v) => {
+                table.insert(name.to_owned(), toml::Value::Table(v));
+            }
+            None => {
+                table.remove(name);
+            }
+        }
+        if table.is_empty() {
+            return match std::fs::remove_file(&self.path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    Err(SessionError::io(&self.path, e))
+                }
+                _ => Ok(()),
+            };
+        }
+        self.write_table(&table)
+    }
+
     fn write_table(&self, table: &toml::Table) -> Result<()> {
         let dir = self
             .path

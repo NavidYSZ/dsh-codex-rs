@@ -747,21 +747,9 @@ html.dshx-desktop:not(.dshx-fullscreen) .app.sidebar-collapsed .topbar { padding
 .plug-parts { display: flex; gap: 10px; font-size: 11.5px; color: var(--ink-3); }
 .plug-warn { font-size: 12px; color: var(--warn); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plug-side { flex: none; display: flex; align-items: center; gap: 6px; }
-.conn-token { margin-top: 6px; }
-.skill-list, .mcp-list, .auto-list { display: flex; flex-direction: column; border-radius: 12px; background: var(--bg-1); box-shadow: 0 0 0 .5px var(--line-3); overflow: hidden; }
-.skill-row { padding: 10px 14px; border-top: .5px solid var(--line-2); }
-.skill-row:first-child, .mcp-row:first-child, .auto-row:first-child { border-top: 0; }
-.skill-row.is-off { opacity: .55; }
-.mcp-row { padding: 6px 10px 6px 6px; border-top: .5px solid var(--line-2); }
-.mcp-row.is-off .mcp-toggle { opacity: .6; }
-.mcp-head { display: flex; align-items: center; gap: 8px; min-height: 34px; }
-.mcp-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 0 4px; text-align: left; cursor: pointer; color: var(--ink); }
-.mcp-toggle.is-open .pf-chev, .auto-row.is-open .pf-chev { transform: rotate(90deg); }
-.mcp-where { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; }
-.mcp-tools { padding: 4px 8px 8px 30px; display: flex; flex-direction: column; gap: 4px; }
-.mcp-tool { display: flex; gap: 10px; font-size: 12px; }
-.mcp-tool .mono { flex: none; color: var(--ink); }
-.mcp-name { flex: 0 0 160px !important; }
+.auto-list { display: flex; flex-direction: column; border-radius: 12px; background: var(--bg-1); box-shadow: 0 0 0 .5px var(--line-3); overflow: hidden; }
+.auto-row:first-child { border-top: 0; }
+.auto-row.is-open .pf-chev { transform: rotate(90deg); }
 .auto-row { border-top: .5px solid var(--line-2); }
 .auto-row.is-off .auto-head { opacity: .6; }
 .auto-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 10px; border: 0; background: none; text-align: left; cursor: pointer; color: var(--ink); }
@@ -879,7 +867,6 @@ html.dshx-desktop:not(.dshx-fullscreen) .app.sidebar-collapsed .topbar { padding
   .plug-grid { grid-template-columns: 1fr; }
   .page-form { flex-wrap: wrap; }
   .page-form .input { flex: 1 1 100%; }
-  .mcp-name { flex: 1 1 100% !important; }
   .auto-body { padding-left: 16px; }
   .sidebar, .app.sidebar-collapsed .sidebar {
     display: flex; position: fixed; inset: 0 auto 0 0; z-index: 40; width: min(300px, 86vw);

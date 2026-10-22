@@ -1,0 +1,124 @@
+/* Parts of the Skills and MCP tabs (components/drawer.js, skills.js,
+   mcp.js): the detail drawer (a bottom sheet on a phone), the extra bits
+   of their dialogs, and the shared toolbar, filters and empty states. */
+
+/* ---- toolbar, search, filters, empty states ------------------------------------- */
+
+.xe-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.xe-toolbar > .btn { gap: 5px; flex: none; margin-left: auto; }
+.xe-search {
+  flex: 1; min-width: 0; max-width: 420px; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  border-radius: 9px; background: var(--bg-1); box-shadow: inset 0 0 0 1px var(--line-3); color: var(--ink-3); cursor: text;
+}
+.xe-search:focus-within { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.xe-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--ink); font: inherit; font-size: 13px; }
+.xe-search input::placeholder { color: var(--ink-caption); }
+.xe-search input::-webkit-search-cancel-button { display: none; }
+.xe-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.xe-filter {
+  height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border: 0; border-radius: 999px;
+  background: var(--hover); color: var(--ink-2); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: background .15s, color .15s;
+}
+.xe-filter:hover { background: var(--active); color: var(--ink); }
+.xe-filter.is-on { background: var(--ink); color: var(--ink-fg); }
+.xe-count { font-size: 11.5px; font-variant-numeric: tabular-nums; opacity: .6; }
+.xe-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 24px; line-height: 1.5; }
+.xe-empty p { margin: 0; max-width: 460px; }
+.xe-empty .btn { gap: 5px; margin-top: 4px; }
+.xe-empty-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+:where(.xe-filter, .sk-main, .mcp-card-main, .conn-main, .dr-tab, .xd-seg-item, .mcp-tool-open):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: -2px;
+}
+
+/* Toasts of the Plugins page, above drawers and dialogs. */
+.xe-toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 90; max-width: min(520px, calc(100vw - 32px));
+  padding: 9px 16px; border-radius: 12px; background: var(--tooltip); color: #fff; font-size: 13px; line-height: 1.45;
+  box-shadow: var(--menu-shadow); transform: translateX(-50%); animation: xe-toast .16s ease-out; overflow-wrap: anywhere;
+}
+@keyframes xe-toast { from { opacity: 0; transform: translate(-50%, 6px); } }
+
+/* ---- drawer ------------------------------------------------------------------------ */
+
+.dr-layer { position: fixed; inset: 0; z-index: 60; }
+.dr-scrim { position: absolute; inset: 0; background: #00000024; animation: dr-fade .16s ease-out; }
+@keyframes dr-fade { from { opacity: 0; } }
+@keyframes dr-in { from { opacity: .4; transform: translateX(24px); } }
+@keyframes dr-up { from { opacity: .4; transform: translateY(32px); } }
+.dr-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); display: flex; flex-direction: column;
+  background: var(--bg-1); box-shadow: -0.5px 0 0 var(--line-3), -18px 0 48px -24px #0000004d; outline: 0;
+  animation: dr-in .18s ease-out;
+}
+html.dshx-desktop .dr-panel { padding-top: env(safe-area-inset-top); }
+.dr-grip { display: none; }
+.dr-head { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 16px 12px 12px 20px; }
+.dr-headline { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.dr-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dr-title { margin: 0; font: 600 16px/22px var(--font); letter-spacing: -0.01em; color: var(--ink); overflow-wrap: anywhere; }
+.dr-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--ink-3); }
+.dr-actions { flex: none; display: flex; align-items: center; gap: 2px; }
+.dr-tabs { flex: none; display: flex; gap: 2px; padding: 0 16px; border-bottom: .5px solid var(--line-3); overflow-x: auto; scrollbar-width: none; }
+.dr-tab {
+  position: relative; height: 36px; padding: 0 10px; border: 0; background: none; color: var(--ink-3); font-size: 13px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; border-radius: 6px 6px 0 0;
+}
+.dr-tab:hover { color: var(--ink); }
+.dr-tab.is-on { color: var(--ink); }
+.dr-tab.is-on::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -0.5px; height: 2px; border-radius: 2px; background: var(--ink); }
+.dr-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px 24px; }
+.dr-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: .5px solid var(--line-2); }
+.dr-foot .btn { gap: 5px; }
+.dr-lead { margin: 0 0 14px; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+.dr-section { margin-top: 18px; }
+.dr-section:first-child { margin-top: 0; }
+.dr-h { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-3); }
+.dr-count { font-weight: 500; font-variant-numeric: tabular-nums; }
+.dr-setting { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--bg-module); }
+.dr-setting + .dr-setting { margin-top: 6px; }
+.dr-setting-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dr-setting-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+.dr-setting-hint { font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.dr-loading { display: flex; align-items: center; gap: 8px; padding: 18px 0; color: var(--ink-3); font-size: 13px; }
+.dr-error, .dr-alert {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px; padding: 9px 12px; border-radius: 10px;
+  background: var(--error-bg); color: var(--error); font-size: 12.5px; line-height: 1.45;
+}
+.dr-alert span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.dr-alert .icon { flex: none; margin-top: 1px; }
+.dr-error .link-btn, .dr-alert .link-btn { flex: none; font-size: 12.5px; }
+.dr-empty { padding: 28px 8px; text-align: center; color: var(--ink-3); font-size: 13px; line-height: 1.5; }
+.dr-empty p { margin: 0 0 6px; }
+.dr-note { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+.dr-path { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px; border-radius: 8px; background: var(--bg-module); }
+.dr-path code { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; user-select: all; }
+
+/* ---- dialogs (on top of models.css's .md-*) ----------------------------------------- */
+
+/* Below the folder browser (70), above the drawer (60). */
+.md-scrim.xd-scrim { z-index: 65; }
+/* Switches a server cannot offer yet are off for good, not busy. */
+:where(.mcp-switch, .sk-switch, .dr-setting, .mcp-tool-line) .toggle:disabled { cursor: not-allowed; }
+.xd-back { flex: none; margin-top: 2px; margin-left: -8px; }
+.xd-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: 9px; background: var(--selector); align-self: flex-start; max-width: 100%; }
+.xd-seg-item {
+  height: 28px; padding: 0 12px; border: 0; border-radius: 7px; background: none; color: var(--ink-2); font-size: 12.5px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+}
+.xd-seg-item:hover { color: var(--ink); }
+.xd-seg-item.is-on { background: var(--bg-3); color: var(--ink); box-shadow: 0 1px 2px #0000001f, 0 0 0 .5px var(--line-2); }
+
+@media (max-width: 640px) {
+  .dr-panel {
+    top: auto; left: 0; width: 100%; max-height: 90dvh; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -0.5px 0 var(--line-3), 0 -18px 48px -24px #0000004d; animation-name: dr-up;
+  }
+  .dr-grip { display: block; flex: none; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--line-4); }
+  .dr-head { padding: 10px 8px 10px 16px; }
+  .dr-body { padding: 14px 16px 20px; }
+  .dr-tabs { padding: 0 10px; }
+  .xe-search { max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dr-panel, .dr-scrim, .xe-toast { animation: none; }
+}

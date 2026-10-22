@@ -136,6 +136,45 @@ pub trait Extensions: Send + Sync + 'static {
         let _ = (server, token);
         Err(unsupported())
     }
+    /// One server with its tools' input schemas.
+    async fn mcp_server(&self, name: &str) -> anyhow::Result<Value> {
+        let _ = name;
+        Err(unsupported())
+    }
+    /// `{config, secrets?}` (as for adding) → the changed server.
+    async fn update_mcp_server(&self, name: &str, body: Value) -> anyhow::Result<Value> {
+        let _ = (name, body);
+        Err(unsupported())
+    }
+    /// `{name?, config, secrets?, timeoutMs?}` → `{ok, tools, error?,
+    /// needsLogin, stderr, elapsedMs}` from a throwaway connection.
+    async fn test_mcp_server(&self, body: Value) -> anyhow::Result<Value> {
+        let _ = body;
+        Err(unsupported())
+    }
+    /// `{name, lines: [{time, kind, text}]}`: stderr, failed requests and
+    /// connection events of a server.
+    async fn mcp_server_log(&self, name: &str) -> anyhow::Result<Value> {
+        let _ = name;
+        Err(unsupported())
+    }
+    /// A listed skill with its `SKILL.md` and the files of its folder;
+    /// `path` picks one of several skills of that name.
+    async fn skill(
+        &self,
+        name: &str,
+        cwd: Option<String>,
+        path: Option<String>,
+    ) -> anyhow::Result<Value> {
+        let _ = (name, cwd, path);
+        Err(unsupported())
+    }
+    /// `{name, scope: "personal"|"project", cwd?, description?}` → the new
+    /// skill (a folder with a `SKILL.md` skeleton).
+    async fn create_skill(&self, body: Value) -> anyhow::Result<Value> {
+        let _ = body;
+        Err(unsupported())
+    }
 }
 
 /// Routes under `/api` (behind the token check).
@@ -153,12 +192,17 @@ pub(crate) fn routes() -> Router<AppState> {
             axum::routing::delete(remove_marketplace),
         )
         .route("/marketplaces/{name}/update", post(update_marketplace))
-        .route("/skills", get(skills))
+        .route("/skills", get(skills).post(create_skill))
+        .route("/skills/{name}", get(skill))
+        .route("/mcp/test", post(test_mcp_server))
         .route("/mcp/servers", get(mcp_servers).post(add_mcp_server))
         .route(
             "/mcp/servers/{name}",
-            axum::routing::delete(remove_mcp_server),
+            get(mcp_server)
+                .put(update_mcp_server)
+                .delete(remove_mcp_server),
         )
+        .route("/mcp/servers/{name}/log", get(mcp_server_log))
         .route("/mcp/servers/{name}/enable", post(enable_mcp_server))
         .route("/mcp/servers/{name}/disable", post(disable_mcp_server))
         .route("/mcp/servers/{name}/restart", post(restart_mcp_server))
@@ -309,6 +353,53 @@ struct CwdQuery {
 
 async fn skills(State(s): State<AppState>, Query(q): Query<CwdQuery>) -> ApiResult<Json<Value>> {
     Ok(Json(ext(&s)?.skills(q.cwd).await?))
+}
+
+#[derive(Deserialize)]
+struct SkillQuery {
+    cwd: Option<String>,
+    path: Option<String>,
+}
+
+async fn skill(
+    State(s): State<AppState>,
+    Path(name): Path<String>,
+    Query(q): Query<SkillQuery>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(ext(&s)?.skill(&name, q.cwd, q.path).await?))
+}
+
+async fn create_skill(
+    State(s): State<AppState>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(ext(&s)?.create_skill(body).await?))
+}
+
+async fn mcp_server(State(s): State<AppState>, Path(name): Path<String>) -> ApiResult<Json<Value>> {
+    Ok(Json(ext(&s)?.mcp_server(&name).await?))
+}
+
+async fn update_mcp_server(
+    State(s): State<AppState>,
+    Path(name): Path<String>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(ext(&s)?.update_mcp_server(&name, body).await?))
+}
+
+async fn test_mcp_server(
+    State(s): State<AppState>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(ext(&s)?.test_mcp_server(body).await?))
+}
+
+async fn mcp_server_log(
+    State(s): State<AppState>,
+    Path(name): Path<String>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(ext(&s)?.mcp_server_log(&name).await?))
 }
 
 async fn mcp_servers(State(s): State<AppState>) -> ApiResult<Json<Value>> {

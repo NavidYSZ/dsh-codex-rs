@@ -118,6 +118,17 @@ pub struct SkillDefinition {
     pub content: String,
 }
 
+/// A skill file that discovery skipped, and why (the Skills page shows it
+/// as a warning).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RejectedSkill {
+    /// The instruction file.
+    pub path: PathBuf,
+    /// Root kind, as in [`SkillSummary::source`].
+    pub source: String,
+    pub reason: String,
+}
+
 /// One catalog observation; `complete` is false when a root could not be read.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkillSnapshot {
@@ -211,6 +222,16 @@ impl SkillRegistry {
         // Stable sort keeps discovery order inside one rank (dsh localOrder).
         candidates.sort_by_key(|(rank, _)| *rank);
         (candidates.into_iter().map(|(_, s)| s).collect(), complete)
+    }
+
+    /// Skill files of every root that are not valid skills (bad or missing
+    /// frontmatter, invalid name), in discovery order.
+    pub fn rejected(&self, cwd: &Path) -> Vec<RejectedSkill> {
+        self.roots(cwd)
+            .iter()
+            .filter_map(|root| scan_root(root).ok())
+            .flat_map(|(_, rejected)| rejected)
+            .collect()
     }
 
     /// Winning skills for a workspace, sorted by name.
@@ -338,10 +359,15 @@ fn locale_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn discover_root(root: &Root) -> std::io::Result<Vec<SkillSummary>> {
+    scan_root(root).map(|(skills, _)| skills)
+}
+
+/// The valid skills of a root and the skill files it had to skip.
+fn scan_root(root: &Root) -> std::io::Result<(Vec<SkillSummary>, Vec<RejectedSkill>)> {
     let entries = match std::fs::read_dir(&root.path) {
         Ok(entries) => entries,
         Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), Vec::new()));
         }
         Err(e) => return Err(e),
     };
@@ -351,6 +377,7 @@ fn discover_root(root: &Root) -> std::io::Result<Vec<SkillSummary>> {
         .collect();
     names.sort_by(|a, b| locale_compare(&a.0, &b.0));
     let mut skills = Vec::new();
+    let mut rejected = Vec::new();
     for (name, path) in names {
         if root.skip_system && name == ".system" {
             continue;
@@ -369,13 +396,20 @@ fn discover_root(root: &Root) -> std::io::Result<Vec<SkillSummary>> {
                 continue;
             }
         };
-        if let Some((summary, _)) =
-            parse_skill_file(&file, root.source, ResourceBase::Directory(directory))
-        {
-            skills.push(summary);
+        match check_skill_file(&file, root.source, ResourceBase::Directory(directory)) {
+            Ok(Some((summary, _))) => skills.push(summary),
+            Ok(None) => {}
+            Err(reason) => {
+                tracing::warn!("skill file {} ignored: {reason}", file.display());
+                rejected.push(RejectedSkill {
+                    path: file,
+                    source: root.source.to_owned(),
+                    reason,
+                });
+            }
         }
     }
-    Ok(skills)
+    Ok((skills, rejected))
 }
 
 /// Parses one skill file; `None` (with a warning) when it is not a valid skill.
@@ -384,48 +418,52 @@ fn parse_skill_file(
     source: &str,
     resource_base: ResourceBase,
 ) -> Option<(SkillSummary, String)> {
-    let real = std::fs::canonicalize(path).ok()?;
+    check_skill_file(path, source, resource_base)
+        .inspect_err(|why| tracing::warn!("skill file {} ignored: {why}", path.display()))
+        .ok()
+        .flatten()
+}
+
+/// One skill file: `Ok(None)` when there is none, `Err` with the reason
+/// when it is not a valid skill.
+fn check_skill_file(
+    path: &Path,
+    source: &str,
+    resource_base: ResourceBase,
+) -> Result<Option<(SkillSummary, String)>, String> {
+    let Ok(real) = std::fs::canonicalize(path) else {
+        return Ok(None);
+    };
     if !real.is_file() {
-        return None;
+        return Ok(None);
     }
     let bytes = match std::fs::read(&real) {
         Ok(bytes) => bytes,
         Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
-            return None;
+            return Ok(None);
         }
-        Err(e) => {
-            tracing::warn!("skill file {} ignored: {e}", path.display());
-            return None;
-        }
+        Err(e) => return Err(e.to_string()),
     };
     let Ok(raw) = String::from_utf8(bytes) else {
-        tracing::warn!(
-            "skill file {} ignored: not a UTF-8 text file",
-            path.display()
-        );
-        return None;
-    };
-    let ignored = |why: String| {
-        tracing::warn!("skill file {} ignored: {why}", path.display());
-        None
+        return Err("not a UTF-8 text file".into());
     };
     let (data, body) = match frontmatter::parse(&raw) {
         Ok(Some(parsed)) => parsed,
-        Ok(None) => return ignored("missing YAML frontmatter".into()),
-        Err(e) => return ignored(format!("invalid YAML frontmatter: {e}")),
+        Ok(None) => return Err("missing YAML frontmatter".into()),
+        Err(e) => return Err(format!("invalid YAML frontmatter: {e}")),
     };
     let (Some(name), Some(description)) = (
         frontmatter::string_field(&data, "name"),
         frontmatter::string_field(&data, "description"),
     ) else {
-        return ignored("frontmatter requires name and description".into());
+        return Err("frontmatter requires name and description".into());
     };
     if !is_skill_name(&name) {
-        return ignored(format!("invalid skill name \"{name}\""));
+        return Err(format!("invalid skill name \"{name}\""));
     }
     let (model_invocable, user_invocable) = match frontmatter::invocation(&data) {
         Ok(policy) => policy,
-        Err(e) => return ignored(format!("invalid invocation frontmatter: {e}")),
+        Err(e) => return Err(format!("invalid invocation frontmatter: {e}")),
     };
     let metadata = match data.get("metadata") {
         Some(Value::Object(map)) => Some(map.clone()),
@@ -443,7 +481,16 @@ fn parse_skill_file(
         resource_base,
         metadata,
     };
-    Some((summary, js_trim(body).to_owned()))
+    Ok(Some((summary, js_trim(body).to_owned())))
+}
+
+/// The frontmatter of a skill file's text (`None` when it has none or it is
+/// not valid YAML) and the body after it, for display.
+pub fn split_frontmatter(raw: &str) -> (Option<Map<String, Value>>, &str) {
+    match frontmatter::parse(raw) {
+        Ok(Some((data, body))) => (Some(data), body),
+        _ => (None, raw),
+    }
 }
 
 /// JavaScript whitespace (`\s` and `String.prototype.trim`).
@@ -482,6 +529,62 @@ mod tests {
     #[test]
     fn resolves_paths_like_node() {
         assert_eq!(absolute(Path::new("/a/./b/../c")), PathBuf::from("/a/c"));
+    }
+
+    #[test]
+    fn invalid_skill_files_are_reported_with_the_reason() {
+        let dir = tempfile::tempdir().unwrap();
+        let write = |rel: &str, text: &str| {
+            let path = dir.path().join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write(
+            "good/SKILL.md",
+            "---\nname: good\ndescription: Fine.\n---\nBody\n",
+        );
+        write("plain/SKILL.md", "Just text.\n");
+        write("half/SKILL.md", "---\nname: half\n---\n");
+        write(
+            "Upper/SKILL.md",
+            "---\nname: Upper Case\ndescription: x\n---\n",
+        );
+        write("broken/SKILL.md", "---\nname: [unclosed\n---\n");
+        write("notes.txt", "not a skill");
+        std::fs::create_dir_all(dir.path().join("empty-folder")).unwrap();
+        let registry = SkillRegistry::new(SkillConfig {
+            include_default_roots: false,
+            custom_dirs: vec![dir.path().to_path_buf()],
+            ..SkillConfig::default()
+        });
+        let names: Vec<String> = registry
+            .list(dir.path())
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(names, ["good"]);
+        let rejected = registry.rejected(dir.path());
+        let reasons: Vec<(String, &str)> = rejected
+            .iter()
+            .map(|r| {
+                let folder = r.path.parent().unwrap().file_name().unwrap();
+                (folder.to_string_lossy().into_owned(), r.reason.as_str())
+            })
+            .collect();
+        assert_eq!(reasons.len(), 4, "{reasons:?}");
+        assert!(reasons.contains(&("plain".into(), "missing YAML frontmatter")));
+        assert!(reasons.contains(&("half".into(), "frontmatter requires name and description")));
+        assert!(reasons.contains(&("Upper".into(), "invalid skill name \"Upper Case\"")));
+        assert!(
+            reasons
+                .iter()
+                .any(|(f, r)| f == "broken" && r.starts_with("invalid YAML frontmatter"))
+        );
+        assert!(rejected.iter().all(|r| r.source == "custom"));
+        let (data, body) = split_frontmatter("---\ntitle: Good Things\n---\nBody\n");
+        assert_eq!(data.unwrap()["title"], "Good Things");
+        assert_eq!(body, "Body\n");
+        assert_eq!(split_frontmatter("no frontmatter").0, None);
     }
 
     #[test]
