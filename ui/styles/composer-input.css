@@ -158,4 +158,6 @@
   .ci-pop { left: 4px; width: calc(100% - 8px); }
   .ci-foot { display: none; }
   .ci-trail { max-width: 34%; }
+  /* The placeholder says it there. */
+  .qp-hint { display: none; }
 }
