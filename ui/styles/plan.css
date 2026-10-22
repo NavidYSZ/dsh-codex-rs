@@ -1,0 +1,28 @@
+/* The plan above the composer (plan.js): one line like the goal bar, the
+   checklist below it when unfolded. */
+
+.planbar {
+  margin-bottom: 10px; border-radius: 14px; background: var(--bg-1); font-size: 13px;
+  box-shadow: 0 0 0 .5px var(--line-3), 0 2px 10px -4px #00000014;
+}
+.plan-head {
+  width: 100%; min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 12px;
+  border: 0; border-radius: 14px; background: none; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer;
+}
+.plan-head:focus-visible { outline-offset: -2px; }
+.plan-icon { display: inline-flex; flex: none; color: var(--accent); }
+.plan-title { flex: none; font-weight: 600; color: var(--ink); }
+.plan-now { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-now.is-live { color: var(--ink); }
+.plan-progress { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.plan-chev { display: inline-flex; flex: none; color: var(--ink-3); transform: rotate(180deg); transition: transform .15s; }
+.planbar.is-open .plan-chev { transform: none; }
+.plan-head:hover .plan-chev { color: var(--ink); }
+.todo.plan-list { max-height: 180px; overflow-y: auto; margin: 0 8px 8px; padding: 4px 8px 6px 4px; box-shadow: none; border-top: .5px solid var(--line-2); border-radius: 0; }
+.plan-list .todo-item { font-size: 13px; }
+
+@media (max-width: 480px) {
+  .plan-progress { display: none; }
+}
+/* Unfolded, the list names the current item. */
+.planbar.is-open .plan-now { visibility: hidden; }

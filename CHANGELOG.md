@@ -152,6 +152,10 @@
   can be edited (`PUT /api/mcp/servers/:name`) and their log read
   (`GET /api/mcp/servers/:name/log`). `[mcp_servers.x] env_vars` passes
   credential-like parent variables through on purpose.
+- **Plan above the composer** (dsh TodoPanel): while a turn works through a
+  `todo_write` list, a bar shows the item in progress and "1 of 3 done" and
+  unfolds into the checklist; it stays while items are left and goes when a
+  later turn writes no list. A finished turn's summary adds "Plan 2/3".
 
 ### Changed
 

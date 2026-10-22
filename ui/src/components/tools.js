@@ -202,22 +202,27 @@ function SearchRow({ item, cwd }) {
 
 // ---- todo ------------------------------------------------------------------
 
+/** A to-do list (`todo_write`): a filled check, a ring with a dot for the current item, an empty ring. */
+export function TodoList({ todos, class: klass }) {
+  return html`<ul class=${cx('todo', klass)}>
+    ${todos.map((x) => html`<li key=${x.content} class=${cx('todo-item', `is-${x.status}`)}>
+      <span class="todo-box" role="img" aria-label=${t.todoStatus[x.status] ?? x.status}>${x.status === 'completed'
+    ? html`<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="m4.9 8.2 2.1 2.1 4.1-4.3" fill="none" stroke="var(--bg)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    : x.status === 'in_progress'
+      ? html`<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>`
+      : html`<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`}</span>
+      <span class="todo-text">${x.content}</span>
+    </li>`)}
+  </ul>`;
+}
+
 function TodoCard({ item }) {
   const todos = item.todos ?? item.args.todos ?? [];
   const [open, toggle] = useOpen(!!item.latestTodo);
   const done = todos.filter((x) => x.status === 'completed').length;
   return html`<${Row} icon=${html`<${IconList} size=${14} />`} title=${t.updatedPlan} summary=${t.planDone(done, todos.length)}
       running=${!item.result} open=${open} onToggle=${todos.length ? toggle : undefined}>
-    <ul class="todo">
-      ${todos.map((x) => html`<li class=${cx('todo-item', `is-${x.status}`)}>
-        <span class="todo-box">${x.status === 'completed'
-    ? html`<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="m4.9 8.2 2.1 2.1 4.1-4.3" fill="none" stroke="var(--bg)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-    : x.status === 'in_progress'
-      ? html`<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>`
-      : html`<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`}</span>
-        <span class="todo-text">${x.content}</span>
-      </li>`)}
-    </ul>
+    <${TodoList} todos=${todos} />
   </${Row}>`;
 }
 

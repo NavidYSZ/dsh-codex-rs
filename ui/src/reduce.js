@@ -64,6 +64,8 @@ export function buildTranscript(events) {
     turns: [],
     title: '',
     todos: null,
+    // The turn that wrote the latest to-do list.
+    todosTurn: null,
     model: null,
     effort: undefined,
     sandbox: null,
@@ -176,10 +178,14 @@ export function buildTranscript(events) {
         break;
       }
 
-      case 'todo/write':
+      case 'todo/write': {
         out.todos = d.todos ?? [];
         if (lastTodoCall && !lastTodoCall.todos) lastTodoCall.todos = out.todos;
+        const tn = current(d.turn, e.time);
+        tn.todos = out.todos;
+        out.todosTurn = tn.turn;
         break;
+      }
 
       case 'approval/asked': {
         const a = { id: d.id, toolName: d.toolName, callId: d.callId ?? null, reason: d.reason ?? '', outcome: null, time: e.time };

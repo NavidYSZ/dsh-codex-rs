@@ -187,6 +187,7 @@ export function TurnLine({ turn, folded, foldable, onToggle }) {
   const parts = [label];
   if (work.toolCalls) parts.push(t.toolCalls(work.toolCalls));
   if (work.messages) parts.push(t.messagesN(work.messages));
+  if (turn.todos?.length) parts.push(t.planShort(turn.todos.filter((x) => x.status === 'completed').length, turn.todos.length));
   return html`<div class=${cx('wl-turn', folded && 'is-folded')}>
     <button type="button" class="wl-turn-btn" disabled=${!foldable} aria-expanded=${foldable ? !folded : undefined} onClick=${onToggle}>
       <span class="wl-turn-label">${parts.join(' · ')}</span>

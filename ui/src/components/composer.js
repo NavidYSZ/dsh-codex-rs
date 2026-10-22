@@ -12,6 +12,7 @@ import {
 } from '../icons.js';
 import { Menu, MenuItem, ActionItem } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
+import { PlanBar } from './plan.js';
 import { ModeChip, useChatMode } from './modes.js';
 import { ProjectMenu } from './folders.js';
 import { ModelChip } from './models.js';
@@ -247,6 +248,7 @@ export function ComposerSeat({ hero, tx }) {
       <${Banners} />
       ${approval ? html`<${ApprovalCard} approval=${approval} />` : null}
       ${hero ? null : html`<${GoalBar} />`}
+      ${hero ? null : html`<${PlanBar} tx=${tx} />`}
       <${ComposerExtras} />
       ${hero ? html`<${HeroTray} sel=${sel} />` : null}
       <${Composer} hero=${hero} tx=${tx} />

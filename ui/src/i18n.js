@@ -548,7 +548,8 @@ const EN = {
     usage: 'Cost and tokens of all chats in USD, at the providers’ list prices (DeepSeek with peak and off-peak hours).',
     archived: 'Archived chats leave the sidebar; bring them back here.',
   },
-  noArchivedHint: 'Archive a chat from its … menu or with ⇧⌘A.',  focusMissing: (name) => `${name} is no longer available.`,
+  noArchivedHint: 'Archive a chat from its … menu or with ⇧⌘A.',  focusMissing: (name) => `${name} is no longer available.`,  planAllDone: 'All done', planShort: (d, n) => `plan ${d}/${n}`,
+  todoStatus: { completed: 'Done', in_progress: 'In progress', pending: 'Pending' },
 };
 
 const DE = {
@@ -1066,7 +1067,8 @@ const DE = {
     usage: 'Kosten und Tokens aller Chats in USD, zu den Listenpreisen der Anbieter (DeepSeek mit Spitzen- und Nebenzeit).',
     archived: 'Archivierte Chats verschwinden aus der Seitenleiste; hier holst du sie zurück.',
   },
-  noArchivedHint: 'Archiviere einen Chat über sein …-Menü oder mit ⇧⌘A.',  focusMissing: (name) => `${name} ist nicht mehr verfügbar.`,
+  noArchivedHint: 'Archiviere einen Chat über sein …-Menü oder mit ⇧⌘A.',  focusMissing: (name) => `${name} ist nicht mehr verfügbar.`,  planAllDone: 'Alles erledigt', planShort: (d, n) => `Plan ${d}/${n}`,
+  todoStatus: { completed: 'Erledigt', in_progress: 'In Arbeit', pending: 'Offen' },
 };
 
 export const t = de ? DE : EN;
