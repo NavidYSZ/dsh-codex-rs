@@ -234,6 +234,11 @@ impl AgentObserver for ChildObserver {
             h.on_attempt(turn, step, attempt);
         }
     }
+    fn on_tool_call(&self, turn: u64, step: u64, index: usize, name: &str) {
+        if let Some(h) = &self.host {
+            h.on_tool_call(turn, step, index, name);
+        }
+    }
 }
 
 fn sandbox_from(name: &str) -> Option<SandboxMode> {

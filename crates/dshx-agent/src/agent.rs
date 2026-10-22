@@ -142,6 +142,11 @@ impl AgentObserver for Observers {
             o.on_attempt(turn, step, attempt);
         }
     }
+    fn on_tool_call(&self, turn: u64, step: u64, index: usize, name: &str) {
+        for o in self.all() {
+            o.on_tool_call(turn, step, index, name);
+        }
+    }
 }
 
 /// One coding agent over one session log. Cheap to clone; all clones drive the
@@ -1479,6 +1484,14 @@ impl Inner {
         let (index, kind, text) = match chunk {
             StreamChunk::TextDelta { index, text } => (*index, DeltaKind::Text, text),
             StreamChunk::ReasoningDelta { index, text } => (*index, DeltaKind::Reasoning, text),
+            StreamChunk::ToolCallDelta {
+                index,
+                name: Some(name),
+                ..
+            } if !name.is_empty() => {
+                self.observer.on_tool_call(turn, step, *index, name);
+                return;
+            }
             _ => return,
         };
         self.observer.on_delta(&StreamDelta {

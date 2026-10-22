@@ -113,6 +113,17 @@ pub struct PromptRequest {
     pub time_zone: Option<String>,
 }
 
+/// `GET /api/usage` query: `since`/`until` in ms (default: the last 30 days),
+/// `tz` = the reader's UTC offset in minutes (days are local days), `top` =
+/// how many chats `topChats` lists (default 5).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct UsageQuery {
+    pub since: Option<u64>,
+    pub until: Option<u64>,
+    pub tz: Option<i64>,
+    pub top: Option<usize>,
+}
+
 /// Everything the UI can ask for. Errors map to HTTP 400 unless they are [`NotFound`].
 #[async_trait]
 pub trait Backend: Send + Sync + 'static {
@@ -219,6 +230,18 @@ pub trait Backend: Send + Sync + 'static {
         let _ = id;
         Err(NotFound("team".into()).into())
     }
+
+    /// Tokens, costs (USD) and timings of a chat; `from_turn` limits the
+    /// per-turn list. Unsupported by default.
+    async fn session_stats(&self, id: &str, from_turn: Option<u64>) -> anyhow::Result<Value> {
+        let _ = (id, from_turn);
+        Err(NotFound("stats".into()).into())
+    }
+    /// Tokens and costs of all chats per day and model, plus the top chats.
+    async fn usage(&self, query: UsageQuery) -> anyhow::Result<Value> {
+        let _ = query;
+        Err(NotFound("usage".into()).into())
+    }
 }
 
 /// Error for unknown sessions, attachments or approvals (→ HTTP 404).
@@ -295,6 +318,8 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/sessions/{id}/goal", get(goal).post(goal_command))
         .route("/sessions/{id}/schedules", get(session_schedules))
         .route("/sessions/{id}/team", get(team))
+        .route("/sessions/{id}/stats", get(session_stats))
+        .route("/usage", get(usage))
         .route("/schedules", get(schedules))
         .route(
             "/schedules/{id}",
@@ -736,6 +761,24 @@ async fn schedule_history(
 
 async fn team(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
     Ok(Json(s.backend.team(&id).await?))
+}
+
+#[derive(Deserialize)]
+struct StatsQuery {
+    #[serde(rename = "fromTurn")]
+    from_turn: Option<u64>,
+}
+
+async fn session_stats(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<StatsQuery>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.session_stats(&id, q.from_turn).await?))
+}
+
+async fn usage(State(s): State<AppState>, Query(q): Query<UsageQuery>) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.usage(q).await?))
 }
 
 #[derive(Deserialize)]

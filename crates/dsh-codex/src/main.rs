@@ -6,6 +6,7 @@ mod jsonrpc;
 mod live;
 mod runtime;
 mod sdk;
+mod usage;
 mod web;
 
 use std::io::{IsTerminal as _, Read as _};
