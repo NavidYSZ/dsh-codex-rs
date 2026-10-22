@@ -22,10 +22,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
+mod composer;
 mod extensions;
 mod folders;
 mod providers;
 
+pub use composer::{Composer, SuggestQuery};
 pub use extensions::{Extensions, OAuthCallback};
 pub use providers::Providers;
 
@@ -204,6 +206,11 @@ pub trait Backend: Send + Sync + 'static {
     fn providers(&self) -> Option<Arc<dyn Providers>> {
         None
     }
+    /// The composer's suggestions, chat MCP servers, compaction, export,
+    /// queue and file uploads; `None` = those routes answer 404.
+    fn composer(&self) -> Option<Arc<dyn Composer>> {
+        None
+    }
 
     // Automation (goals, schedules, Agent Teams); unsupported by default.
 
@@ -338,7 +345,10 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .route("/sessions/{id}/preview", post(preview_grant))
         .route("/sessions/{id}/files", get(list_files))
         .route("/approvals/{call_id}", post(approve))
-        .route("/attachments", post(save_attachment))
+        .route(
+            "/attachments",
+            post(save_attachment).layer(axum::extract::DefaultBodyLimit::max(MAX_UPLOAD + 1024)),
+        )
         .route("/attachments/{id}", get(load_attachment))
         // Automation: goals, schedules, Agent Teams.
         .route("/sessions/{id}/goal", get(goal).post(goal_command))
@@ -356,6 +366,7 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .merge(extensions::routes())
         .merge(folders::routes())
         .merge(providers::routes())
+        .merge(composer::routes())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_token,

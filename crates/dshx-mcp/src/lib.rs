@@ -80,6 +80,29 @@ pub struct ToolInfo {
     pub description: String,
 }
 
+/// One server tool with its owner, for per-session tool sets.
+#[derive(Clone)]
+pub struct ServerTool {
+    pub server: String,
+    /// The server's own name for the tool (what `disabled_tools` lists).
+    pub raw_name: String,
+    /// Offered as `mcp__<server>__<tool>`.
+    pub tool: Arc<dyn Tool>,
+}
+
+/// Names of the shared resource tools.
+pub const RESOURCE_TOOLS: [&str; 3] = [
+    "list_mcp_resource_templates",
+    "list_mcp_resources",
+    "read_mcp_resource",
+];
+
+/// Whether `name` is a tool an [`McpHandle`] bridges: a server tool
+/// (`mcp__…`) or a shared resource tool.
+pub fn is_bridged_tool(name: &str) -> bool {
+    name.starts_with("mcp__") || RESOURCE_TOOLS.contains(&name)
+}
+
 /// State of one configured server.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,6 +186,44 @@ impl McpHandle {
         tools
     }
 
+    /// Every server's current tools with owner and raw name, in server
+    /// order (a per-session selection of [`McpHandle::tools`]).
+    pub fn server_tools(&self) -> Vec<ServerTool> {
+        let mut out = Vec::new();
+        for server in &self.current() {
+            for entry in server.tools() {
+                out.push(ServerTool {
+                    server: server.name().to_owned(),
+                    raw_name: entry.raw.name.clone(),
+                    tool: Arc::new(McpTool::new(server.clone(), entry)),
+                });
+            }
+        }
+        out
+    }
+
+    /// The shared resource tools (they reach every configured server).
+    pub fn resource_tools(&self) -> Vec<Arc<dyn Tool>> {
+        self.resource_tools.clone()
+    }
+
+    /// A server's attributed instructions (`### MCP server: <name>\n\n…`),
+    /// empty when it has none or is not running.
+    pub fn instructions(&self, name: &str) -> String {
+        self.current()
+            .iter()
+            .find(|s| s.name() == name)
+            .map(|s| s.instructions())
+            .unwrap_or_default()
+    }
+
+    /// Whether a running server announced the `resources` capability.
+    pub fn has_resources(&self, name: &str) -> bool {
+        self.current()
+            .iter()
+            .any(|s| s.name() == name && s.has_capability("resources"))
+    }
+
     /// Changes whenever a server's tools or instructions change, and on
     /// every [`McpHandle::apply`] or [`McpHandle::restart`].
     pub fn subscribe(&self) -> watch::Receiver<u64> {
@@ -182,13 +243,24 @@ impl McpHandle {
     /// The `mcp-resource-servers` section and one `mcp:<server>` section per
     /// server, in dsh's assembly order (order, then name bytes).
     pub fn prompt_sections(&self) -> Vec<PromptSection> {
-        let servers = self.current();
+        self.prompt_sections_where(|_| true)
+    }
+
+    /// [`McpHandle::prompt_sections`] of the servers `keep` accepts (the
+    /// resource section names only those).
+    pub fn prompt_sections_where(&self, keep: impl Fn(&str) -> bool) -> Vec<PromptSection> {
+        let servers: Vec<Arc<Server>> = self
+            .current()
+            .into_iter()
+            .filter(|s| keep(s.name()))
+            .collect();
         let mut sections = Vec::new();
         if !servers.is_empty() {
+            let names: Vec<String> = servers.iter().map(|s| s.name().to_owned()).collect();
             sections.push(PromptSection {
                 name: "mcp-resource-servers".into(),
                 order: MCP_SECTION_ORDER,
-                text: resources::servers_section(&self.servers()),
+                text: resources::servers_section(&names),
             });
         }
         for server in &servers {

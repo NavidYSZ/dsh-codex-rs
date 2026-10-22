@@ -444,7 +444,7 @@ pub(crate) async fn compact_if_needed(
         let Some(range) = inner.journal.read(|events, _| select_range(events, &m, 0)) else {
             return Ok(false);
         };
-        compact_region(inner, range, turn, cancel).await?;
+        compact_region(inner, range, Some(turn), cancel).await?;
         return Ok(true);
     }
     let (threshold, retain) = spec(inner)?;
@@ -466,7 +466,7 @@ pub(crate) async fn compact_if_needed(
         else {
             return Ok(done);
         };
-        compact_region(inner, range, turn, cancel).await?;
+        compact_region(inner, range, Some(turn), cancel).await?;
         done = true;
         m = measure_now();
         if m.total_tokens < threshold {
@@ -490,11 +490,58 @@ fn compaction_open(inner: &Inner) -> bool {
     })
 }
 
-/// One bracketed compaction transaction over `range` (dsh `compactSurfaceRegion`).
+/// What a manual compaction replaced (dsh `/compact`: "Compacted N history
+/// items (~T tokens).").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Compacted {
+    /// Surface items the summary replaced.
+    pub items: usize,
+    /// Their estimated tokens.
+    pub tokens: u64,
+}
+
+/// dsh `compactNow`: condenses the oldest balanced span even below the
+/// pressure threshold, keeping only the newest item, in a bracket of its
+/// own (`turn: null`). `None` when nothing can be compacted yet. The caller
+/// keeps turns out meanwhile.
+pub(crate) async fn compact_now(
+    inner: &Arc<Inner>,
+    cancel: &CancellationToken,
+) -> anyhow::Result<Option<Compacted>> {
+    if inner.journal.request_header().is_none() {
+        return Ok(None);
+    }
+    anyhow::ensure!(
+        !compaction_open(inner),
+        "Compaction is unavailable because this process has an active compaction, or the agent is not idle."
+    );
+    let range = inner.journal.read(|events, _| {
+        let m = measure(events);
+        select_range(events, &m, 0)
+    });
+    let Some(range) = range else {
+        return Ok(None);
+    };
+    compact_region(inner, range, None, cancel).await?;
+    Ok(inner.journal.read(|events, _| {
+        let summary = events
+            .iter()
+            .rev()
+            .find(|e| e.kind == kinds::COMPACTION_SUMMARY)?;
+        Some(Compacted {
+            items: summary.data["shadowedSeqs"].as_array().map_or(0, Vec::len),
+            tokens: summary.data["shadowedTokenCount"].as_u64().unwrap_or(0),
+        })
+    }))
+}
+
+/// One bracketed compaction transaction over `range` (dsh
+/// `compactSurfaceRegion`); `turn` is `None` for a manual compaction
+/// between turns.
 async fn compact_region(
     inner: &Arc<Inner>,
     range: (u64, u64),
-    turn: u64,
+    turn: Option<u64>,
     cancel: &CancellationToken,
 ) -> anyhow::Result<()> {
     let id = dshx_core::new_id();

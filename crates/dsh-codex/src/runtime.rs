@@ -1,9 +1,11 @@
 //! Everything a front end (headless, web, SDK) needs to run agents: config,
 //! API key, DeepSeek client, session store, attachments and the tool set
-//! (built-ins, Codex tools, the `skill` tool and MCP servers).
+//! (built-ins, Codex tools, the `skill` tool and MCP servers). Skills and
+//! MCP servers reach a chat only on demand (see [`ondemand`]).
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak};
 
 use anyhow::Context as _;
 use dshx_agent::{
@@ -13,17 +15,20 @@ use dshx_agent::{
 use dshx_core::config::Config;
 use dshx_core::{
     ApprovalDecision, Approver, AttachmentStore, ImageAttachmentRef, LlmClient, Message,
-    SessionLog, Tool, ToolRegistry,
+    SessionEvent, SessionLog, Tool, ToolRegistry,
 };
 use dshx_llm::{DeepSeekClient, DeepSeekConfig, ProviderRouter, SharedApiKey};
 use dshx_session::{Credentials, FileAttachments, FileLog, SessionStore};
 use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
 
 mod extensions;
+pub(crate) mod ondemand;
 mod providers;
+mod suggest;
 
 pub use extensions::RuntimeExtensions;
 pub use providers::RuntimeProviders;
+pub use suggest::SuggestContext;
 
 use crate::automation::Automation;
 use crate::live::{LiveHub, LiveMini, Watched};
@@ -58,6 +63,13 @@ pub struct Runtime {
     ext: extensions::ExtensionState,
     /// Goals, schedules, time context and Agent Teams.
     pub automation: Arc<Automation>,
+    /// Per session: MCP servers switched on (`true`) or off through the API
+    /// that no step has recorded in the log yet.
+    mcp_pending: Mutex<HashMap<String, BTreeMap<String, bool>>>,
+    /// Bumped by every config change (skill and MCP settings among them).
+    settings_version: AtomicU64,
+    /// This runtime, for hooks that outlive a call.
+    me: OnceLock<Weak<Runtime>>,
 }
 
 impl Runtime {
@@ -135,6 +147,7 @@ impl Runtime {
         let ext = extensions::ExtensionState::new(&home);
         // Skill folders of enabled plugins join the catalog right away.
         skills.set_custom_dirs(ext.skill_dirs(&config));
+        skills.set_policy(Some(config.skills.clone()));
         let mcp = dshx_mcp::McpHandle::new(Some(dshx_mcp::OAuthManager::new(home.join("oauth"))));
         // Children see the skill catalog too, like in dsh.
         let child_skills = skills.clone();
@@ -164,7 +177,11 @@ impl Runtime {
             mcp,
             ext,
             automation,
+            mcp_pending: Mutex::default(),
+            settings_version: AtomicU64::new(0),
+            me: OnceLock::new(),
         });
+        let _ = runtime.me.set(Arc::downgrade(&runtime));
         runtime.apply_providers();
         Ok(runtime)
     }
@@ -180,28 +197,41 @@ impl Runtime {
         Ok(())
     }
 
-    /// Changes whenever the MCP tool set or server instructions change,
-    /// including servers added, removed or restarted at runtime.
+    /// Changes whenever the MCP tool set or server instructions change
+    /// (servers added, removed or restarted at runtime) and with every
+    /// config change (skill and MCP settings).
     pub fn tools_version(&self) -> u64 {
-        *self.mcp.subscribe().borrow()
+        let mcp = *self.mcp.subscribe().borrow();
+        mcp.wrapping_add(self.settings_version.load(Ordering::SeqCst))
     }
 
-    /// MCP prompt sections as literal extra sections (dsh order 3100).
+    /// dsh's file-reference guidance (order 900) and the instructions of
+    /// `always` MCP servers (dsh order 3100). Servers a chat activates bring
+    /// their instructions with the activation note instead.
     pub fn prompt_sections(&self) -> Vec<ExtraSection> {
-        self.mcp
-            .prompt_sections()
-            .into_iter()
-            .map(|s| ExtraSection {
-                name: s.name,
-                order: s.order,
-                text: s.text,
-                literal: true,
-            })
-            .collect()
+        let config = self.config();
+        let mut sections = vec![ExtraSection {
+            name: "context:file-reference".into(),
+            order: 900,
+            text: ondemand::FILE_REFERENCE_PROMPT.into(),
+            literal: true,
+        }];
+        sections.extend(
+            self.mcp
+                .prompt_sections_where(|server| config.mcp_availability(server).always)
+                .into_iter()
+                .map(|s| ExtraSection {
+                    name: s.name,
+                    order: s.order,
+                    text: s.text,
+                    literal: true,
+                }),
+        );
+        sections
     }
 
-    /// Brings an open agent's tools and MCP prompt sections up to date when
-    /// they changed since `seen` (call before each turn). A Minimal agent
+    /// Brings an open agent's tools and prompt sections up to date when they
+    /// changed since `seen` (call before each turn). A Minimal agent
     /// composes neither.
     pub fn refresh_agent(&self, agent: &Agent, seen: &AtomicU64) {
         if agent.config().preset == Preset::Minimal {
@@ -211,7 +241,14 @@ impl Runtime {
         if seen.swap(version, Ordering::SeqCst) == version {
             return;
         }
-        agent.set_tools(self.tools());
+        let config = agent.config();
+        let update = config.route.as_ref().and_then(|r| r.tool_update);
+        agent.set_tools(self.session_tools(
+            &agent.session_id(),
+            &config.cwd,
+            &agent.events(),
+            update,
+        ));
         let sections = self.prompt_sections();
         agent.update_config(|c| c.prompt.extra_sections = sections);
     }
@@ -221,6 +258,7 @@ impl Runtime {
     }
 
     /// Applies a change, writes `config.toml` and returns the new config.
+    /// Open agents pick up skill and MCP settings before their next turn.
     pub fn update_config(&self, f: impl FnOnce(&mut Config)) -> anyhow::Result<Config> {
         let mut config = self.config.write().unwrap();
         f(&mut config);
@@ -230,6 +268,8 @@ impl Runtime {
         let tmp = path.with_extension("toml.tmp");
         std::fs::write(&tmp, text)?;
         std::fs::rename(&tmp, &path)?;
+        self.skills.set_policy(Some(config.skills.clone()));
+        self.settings_version.fetch_add(1, Ordering::SeqCst);
         Ok(config.clone())
     }
 
@@ -265,8 +305,9 @@ impl Runtime {
         )
     }
 
-    /// The tools of one session: dsh's built-ins plus the Codex tools.
-    pub fn tools(&self) -> ToolRegistry {
+    /// The tools every Standard session has: dsh's built-ins plus the Codex
+    /// tools (no `skill` tool, no MCP).
+    fn base_tools(&self) -> ToolRegistry {
         let config = self.config();
         let mut tools = ToolRegistry::new();
         for tool in dshx_tools::default_tools(&config) {
@@ -289,8 +330,43 @@ impl Runtime {
             }));
         }
         self.automation.register_tools(&mut tools, &self.subagents);
-        tools.register(Arc::new(SkillTool::new(self.skills.clone())));
-        for tool in self.mcp.tools() {
+        tools
+    }
+
+    /// Whether any enabled skill of `cwd` is model-invocable.
+    pub fn model_skills(&self, cwd: &Path) -> bool {
+        self.skills
+            .snapshot(cwd)
+            .skills
+            .iter()
+            .any(|s| s.model_invocable)
+    }
+
+    /// The tools of one Standard session: the base set, the `skill` tool
+    /// while a skill is model-invocable, and the MCP tools the session's log
+    /// and pending choices select. On the addition-only route, tools the
+    /// session already declared stay declared.
+    pub fn session_tools(
+        &self,
+        session: &str,
+        cwd: &Path,
+        events: &[SessionEvent],
+        update: Option<dshx_agent::ToolUpdate>,
+    ) -> ToolRegistry {
+        let mut tools = self.base_tools();
+        let history = self.mcp_choices(session, events);
+        let keep = update == Some(dshx_agent::ToolUpdate::AdditionOnly);
+        if self.model_skills(cwd) || (keep && history.declared.contains("skill")) {
+            tools.register(Arc::new(SkillTool::new(self.skills.clone())));
+        }
+        let config = self.config();
+        let selection = ondemand::McpSelection {
+            config: &config,
+            choices: &history.choices,
+            declared: &history.declared,
+            tool_update: update,
+        };
+        for tool in self.mcp_tools(&selection) {
             tools.register(tool);
         }
         tools
@@ -298,9 +374,19 @@ impl Runtime {
 
     /// The tools of one session with the given preset: Minimal has dsh's
     /// persistent shell and nothing else.
-    pub fn tools_for(&self, preset: Preset) -> ToolRegistry {
+    fn tools_for(
+        &self,
+        preset: Preset,
+        log: &dyn SessionLog,
+        config: &AgentConfig,
+    ) -> ToolRegistry {
         match preset {
-            Preset::Standard => self.tools(),
+            Preset::Standard => self.session_tools(
+                log.id(),
+                &config.cwd,
+                &log.events(),
+                config.route.as_ref().and_then(|r| r.tool_update),
+            ),
             Preset::Minimal => {
                 let mut tools = ToolRegistry::new();
                 tools.register(Arc::new(
@@ -383,11 +469,12 @@ impl Runtime {
         let recorded = dshx_session::agent_preset(&log.header(), &log.events());
         let preset = Preset::of_session(recorded.as_deref());
         config.apply_preset(preset);
+        let tools = self.tools_for(preset, log.as_ref(), &config);
         let agent = Agent::new(
             config,
             AgentDeps {
                 llm: self.router.clone() as Arc<dyn LlmClient>,
-                tools: self.tools_for(preset),
+                tools,
                 log,
                 attachments: self.attachments.clone() as Arc<dyn AttachmentStore>,
                 approver,
@@ -401,6 +488,12 @@ impl Runtime {
             agent.add_pre_step_hook(Arc::new(SkillsHook {
                 skills: self.skills.clone(),
             }));
+            if let Some(me) = self.me.get() {
+                agent.add_pre_step_hook(Arc::new(ondemand::McpHook {
+                    runtime: me.clone(),
+                    session: agent.session_id(),
+                }));
+            }
             self.subagents.attach(&agent);
             self.automation.attach_root(&agent);
         }
@@ -430,7 +523,9 @@ impl Runtime {
 
 /// dsh `tool-skill`'s two pre-step listeners: the session skill catalog
 /// (first publication, replacements, withdrawal) after the runtime context,
-/// then one `skill-invocation` message per `/name` gesture.
+/// then one `skill-invocation` message per `/name` gesture. The `skill`
+/// tool comes and goes with the model-invocable skills (`[skills]`); the
+/// addition-only route keeps one it declared.
 struct SkillsHook {
     skills: Arc<SkillRegistry>,
 }
@@ -450,14 +545,39 @@ impl PreStepHook for SkillsHook {
         let claimed = step.claimed.to_vec();
         // Discovery reads skill files; keep it off the async workers.
         let (snapshot, invocations) = tokio::task::spawn_blocking(move || {
-            let snapshot = offered.then(|| skills.snapshot(&cwd));
+            let snapshot = skills.snapshot(&cwd);
             let invocations = dshx_tools::skill::invocation_messages(&skills, &cwd, &claimed);
             (snapshot, invocations)
         })
         .await?;
+        let wanted = snapshot.skills.iter().any(|s| s.model_invocable);
+        if wanted && !offered {
+            let tool = Arc::new(SkillTool::new(self.skills.clone()));
+            step.update_tools(|tools| tools.register(tool));
+        } else if !wanted && offered {
+            let declared = step.tool_update == Some(dshx_agent::ToolUpdate::AdditionOnly)
+                && step.read_history(|events, _| {
+                    events.iter().any(|e| {
+                        e.kind == dshx_core::kinds::REQUEST_HEADER
+                            && e.data["header"]["tools"]
+                                .as_array()
+                                .is_some_and(|t| t.iter().any(|t| t["name"] == "skill"))
+                    })
+                });
+            if !declared {
+                step.update_tools(|tools| {
+                    let mut next = ToolRegistry::new();
+                    for tool in tools.iter().filter(|t| t.schema().name != "skill") {
+                        next.register(tool.clone());
+                    }
+                    *tools = next;
+                });
+            }
+        }
         let max = self.skills.config().catalog_description_max_length;
         let batch = std::mem::take(entering);
-        *entering = dshx_tools::skill::apply_catalog(batch, snapshot.as_ref(), max, &history);
+        let snapshot = wanted.then_some(&snapshot);
+        *entering = dshx_tools::skill::apply_catalog(batch, snapshot, max, &history);
         entering.extend(invocations);
         Ok(())
     }

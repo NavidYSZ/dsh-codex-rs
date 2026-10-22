@@ -52,6 +52,15 @@ impl Target {
     }
 }
 
+/// A change to one queued prompt ([`Agent::update_queue`]).
+#[derive(Debug, Clone)]
+pub enum QueueAction {
+    /// New text content (text blocks only; other blocks of the prompt stay).
+    Edit(Vec<ContentBlock>),
+    Remove,
+    Steer,
+}
+
 pub(crate) struct Running {
     pub cancel: CancellationToken,
     pub cause: Option<CancelCause>,
@@ -488,6 +497,87 @@ impl Agent {
         self.run_turn(input).await.map(Some)
     }
 
+    /// Changes one queued prompt (dsh `updateQueue`): `Edit` replaces its
+    /// text, `Remove` drops it, `Steer` hands a prompt queued for the next
+    /// turn to the running turn's next step.
+    pub async fn update_queue(&self, id: &str, action: QueueAction) -> anyhow::Result<()> {
+        let inner = &self.inner;
+        inner.ensure_initialized().await?;
+        let gone = || anyhow::anyhow!("queued item is no longer pending");
+        match action {
+            QueueAction::Edit(content) => {
+                anyhow::ensure!(
+                    content
+                        .iter()
+                        .all(|b| matches!(b, ContentBlock::Text { .. })),
+                    "queue edits accept text content only"
+                );
+                anyhow::ensure!(
+                    content.iter().any(
+                        |b| matches!(b, ContentBlock::Text { text } if !text.trim().is_empty())
+                    ),
+                    "queue edit content must include non-whitespace text"
+                );
+                let current = {
+                    let st = inner.state.lock().unwrap();
+                    st.next_turn
+                        .iter()
+                        .chain(&st.next_step)
+                        .find(|m| m.id == id)
+                        .cloned()
+                };
+                let mut message = current.ok_or_else(gone)?;
+                // Images and other blocks of the prompt stay; the text is replaced.
+                message
+                    .content
+                    .retain(|b| !matches!(b, ContentBlock::Text { .. }));
+                let mut edited = content;
+                edited.append(&mut message.content);
+                message.content = edited;
+                inner
+                    .splice_item(id, Some(message), false)
+                    .await?
+                    .ok_or_else(gone)?;
+            }
+            QueueAction::Remove => {
+                inner.splice_item(id, None, true).await?.ok_or_else(gone)?;
+            }
+            QueueAction::Steer => {
+                let queued = {
+                    let st = inner.state.lock().unwrap();
+                    st.running.is_some() && st.next_turn.iter().any(|m| m.id == id)
+                };
+                anyhow::ensure!(queued, "current turn no longer accepts steering");
+                let (_, message) = inner.splice_item(id, None, false).await?.ok_or_else(gone)?;
+                self.steer_detached(message).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Condenses older history now (dsh `/compact`): only between turns
+    /// with nothing queued; prompts sent meanwhile wait until it is done.
+    /// `None` when there is nothing to compact yet.
+    pub async fn compact_now(&self) -> anyhow::Result<Option<crate::compaction::Compacted>> {
+        const BUSY: &str = "Compaction is unavailable because this process has an active compaction, or the agent is not idle.";
+        let inner = &self.inner;
+        let Ok(_driver) = inner.driver.try_lock() else {
+            anyhow::bail!(BUSY);
+        };
+        inner.ensure_initialized().await?;
+        {
+            let st = inner.state.lock().unwrap();
+            anyhow::ensure!(
+                st.running.is_none() && st.next_turn.is_empty() && st.next_step.is_empty(),
+                BUSY
+            );
+        }
+        let cancel = inner.lifetime.child_token();
+        let result = crate::compaction::compact_now(inner, &cancel).await;
+        inner.journal.flush().await?;
+        result
+    }
+
     /// Cancels the running turn (cause `user`) and drops queued input.
     pub async fn cancel(&self) {
         self.cancel_with(CancelCause::User, false).await;
@@ -564,13 +654,26 @@ impl Inner {
         discard: bool,
     ) -> anyhow::Result<Vec<Message>> {
         let _guard = self.inbox_lock.lock().await;
-        let (start, delete, removed) = {
+        let (start, delete) = {
             let mut st = self.state.lock().unwrap();
             let list = st.list(target);
             let start = start.min(list.len());
-            let delete = delete.min(list.len() - start);
-            (start, delete, list[start..start + delete].to_vec())
+            (start, delete.min(list.len() - start))
         };
+        self.splice_locked(target, start, delete, inserted, discard)
+            .await
+    }
+
+    /// [`Inner::splice`] with the inbox lock held and a valid range.
+    async fn splice_locked(
+        &self,
+        target: Target,
+        start: usize,
+        delete: usize,
+        inserted: Vec<Message>,
+        discard: bool,
+    ) -> anyhow::Result<Vec<Message>> {
+        let removed = self.state.lock().unwrap().list(target)[start..start + delete].to_vec();
         if delete == 0 && inserted.is_empty() {
             return Ok(Vec::new());
         }
@@ -595,6 +698,35 @@ impl Inner {
             .list(target)
             .splice(start..start + delete, inserted);
         Ok(removed)
+    }
+
+    /// Replaces (or with `None` removes) the pending inbox item `id`, looked
+    /// up under the inbox lock; returns its list and the old message.
+    async fn splice_item(
+        &self,
+        id: &str,
+        replacement: Option<Message>,
+        discard: bool,
+    ) -> anyhow::Result<Option<(Target, Message)>> {
+        let _guard = self.inbox_lock.lock().await;
+        let found = {
+            let st = self.state.lock().unwrap();
+            [
+                (Target::NextTurn, &st.next_turn),
+                (Target::NextStep, &st.next_step),
+            ]
+            .into_iter()
+            .find_map(|(target, list)| {
+                let i = list.iter().position(|m| m.id == id)?;
+                Some((target, i, list[i].clone()))
+            })
+        };
+        let Some((target, index, message)) = found else {
+            return Ok(None);
+        };
+        self.splice_locked(target, index, 1, replacement.into_iter().collect(), discard)
+            .await?;
+        Ok(Some((target, message)))
     }
 
     /// Removes and returns the batch one step consumes (dsh `inbox.claim`).

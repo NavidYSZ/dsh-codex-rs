@@ -17,6 +17,8 @@ use crate::chats::ChatState;
 use crate::runtime::{Overrides, Runtime};
 use crate::usage::{self, UsageIndex};
 
+mod composer;
+
 pub async fn run(
     runtime: Arc<Runtime>,
     port: u16,
@@ -25,6 +27,7 @@ pub async fn run(
 ) -> anyhow::Result<i32> {
     runtime.automation.enable_goal_driver();
     let backend = Arc::new(WebBackend::new(runtime.clone()));
+    let _ = backend.me.set(Arc::downgrade(&backend));
     let resolver = Arc::new(Resolver(Arc::downgrade(&backend)));
     if let Err(e) = runtime
         .automation
@@ -117,6 +120,8 @@ pub struct WebBackend {
     workspaces_file: PathBuf,
     chats: ChatState,
     usage: Arc<UsageIndex>,
+    /// This backend, for the composer routes.
+    me: std::sync::OnceLock<std::sync::Weak<WebBackend>>,
 }
 
 impl WebBackend {
@@ -137,6 +142,7 @@ impl WebBackend {
             workspaces_file,
             chats,
             usage,
+            me: std::sync::OnceLock::new(),
         }
     }
 
@@ -629,6 +635,11 @@ impl Backend for WebBackend {
         Some(Arc::new(crate::runtime::RuntimeExtensions::new(
             self.runtime.clone(),
         )))
+    }
+
+    fn composer(&self) -> Option<Arc<dyn dshx_server::Composer>> {
+        let me = self.me.get()?.clone();
+        Some(Arc::new(composer::WebComposer(me)))
     }
 
     fn providers(&self) -> Option<Arc<dyn dshx_server::Providers>> {

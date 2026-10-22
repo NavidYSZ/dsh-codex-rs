@@ -280,8 +280,9 @@ async fn plugins_and_mcp_servers_change_without_a_restart() {
     assert_eq!(note["plugin"], "notes@team-tools");
     assert_eq!(note["active"], true);
 
-    // The open session gets the new tools and the skill on its next prompt.
-    let second = prompt(&web, &mock, &session, "again").await;
+    // The open session gets the new tools once the prompt names them (`@t`,
+    // and `@notes` for the plugin's server), the skill through `/name`.
+    let second = prompt(&web, &mock, &session, "again @t @notes /note-taking").await;
     let tools = tool_names(&second);
     assert!(tools.contains(&"mcp__t__echo".to_owned()), "{tools:?}");
     assert!(

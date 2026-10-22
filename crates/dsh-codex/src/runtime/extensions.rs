@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use dshx_core::config::{Config, McpServerConfig, PluginConfig};
+use dshx_core::config::{Config, McpServerConfig};
 use dshx_mcp::catalog;
 use dshx_mcp::{CallbackParams, LoginRequest, ServerInfo};
 use dshx_plugins::{InstallRecord, Marketplace, MarketplaceRecord, Plugin, PluginHome, plugin_id};
@@ -143,6 +143,27 @@ impl Runtime {
             .unwrap_or_default()
     }
 
+    /// The enabled plugins that load without errors.
+    pub(crate) async fn enabled_plugins(&self) -> Vec<Plugin> {
+        let config = self.config();
+        let plugins = self.plugins_now().await;
+        enabled(&config, &plugins).cloned().collect()
+    }
+
+    /// The MCP servers each enabled plugin brings, by plugin id (for
+    /// `@plugin` mentions).
+    pub(crate) async fn plugin_servers(&self) -> Vec<(String, Vec<String>)> {
+        self.enabled_plugins()
+            .await
+            .into_iter()
+            .filter(|p| !p.mcp_servers.is_empty())
+            .map(|p| {
+                let servers = p.mcp_servers.iter().map(|s| s.name.clone()).collect();
+                (p.id, servers)
+            })
+            .collect()
+    }
+
     /// Re-reads the plugins and applies the skill folders and MCP servers
     /// of the config and the enabled plugins. `wait` bounds the wait for
     /// started servers (`None` = until their first attempt finished).
@@ -223,6 +244,7 @@ impl RuntimeExtensions {
             .into_iter()
             .find(|c| cfg.url.as_deref() == Some(c.url.as_str()))
             .map(|c| c.id);
+        let availability = self.rt.config().mcp_availability(&entry.name);
         let state = match (status, &entry.error) {
             (_, Some(_)) => "error",
             (Some(s), None) => s.status,
@@ -249,7 +271,112 @@ impl RuntimeExtensions {
             "challenge": status.and_then(|s| s.challenge.clone()),
             "warnings": entry.warnings,
             "tools": status.map(|s| s.tools.clone()).unwrap_or_default(),
+            "always": availability.always,
+            "disabledTools": availability.disabled_tools,
         })
+    }
+
+    /// `PUT /api/skills/{name}/settings`: `{enabled?, model?, cwd?}` → the
+    /// skill's row of `GET /api/skills` (for `cwd`, default the home).
+    pub(crate) async fn set_skill_settings(
+        &self,
+        name: &str,
+        body: Value,
+    ) -> anyhow::Result<Value> {
+        anyhow::ensure!(
+            dshx_tools::skill::is_skill_name(name),
+            "invalid skill name {name:?}"
+        );
+        let flag = |key: &str| -> anyhow::Result<Option<bool>> {
+            match body.get(key) {
+                None | Some(Value::Null) => Ok(None),
+                Some(Value::Bool(b)) => Ok(Some(*b)),
+                Some(_) => anyhow::bail!("{key} must be true or false"),
+            }
+        };
+        let (enabled, model) = (flag("enabled")?, flag("model")?);
+        self.rt.update_config(|c| {
+            let entry = c.skills.entries.entry(name.to_owned()).or_default();
+            if let Some(on) = enabled {
+                entry.enabled = on;
+            }
+            if let Some(on) = model {
+                entry.model = on;
+            }
+            if *entry == Default::default() {
+                c.skills.entries.remove(name);
+            }
+        })?;
+        let cwd = body.get("cwd").and_then(Value::as_str).map(str::to_owned);
+        let rows = self.skills(cwd).await?;
+        let config = self.rt.config();
+        let row = rows
+            .as_array()
+            .and_then(|rows| {
+                rows.iter()
+                    .find(|r| r["name"] == name && r["active"] == true)
+                    .or_else(|| rows.iter().find(|r| r["name"] == name))
+            })
+            .cloned();
+        Ok(row.unwrap_or_else(|| {
+            json!({
+                "name": name,
+                "enabled": config.skills.enabled(name),
+                "model": config.skills.model_invocable(name, true),
+            })
+        }))
+    }
+
+    /// `PUT /api/mcp/servers/{name}/settings`: `{always?, disabledTools?}` →
+    /// the server row. Plugin servers keep theirs in the plugin's table.
+    pub(crate) async fn set_mcp_settings(&self, name: &str, body: Value) -> anyhow::Result<Value> {
+        let always = match body.get("always") {
+            None | Some(Value::Null) => None,
+            Some(Value::Bool(b)) => Some(*b),
+            Some(_) => anyhow::bail!("always must be true or false"),
+        };
+        let disabled: Option<Vec<String>> = match body.get("disabledTools") {
+            None | Some(Value::Null) => None,
+            Some(v) => Some(
+                serde_json::from_value(v.clone())
+                    .map_err(|_| anyhow::anyhow!("disabledTools must be a list of tool names"))?,
+            ),
+        };
+        let _ops = self.rt.ext.ops.lock().await;
+        let entry = self.entry(name).await?;
+        let apply = |a: &mut dshx_core::config::McpAvailability| {
+            if let Some(on) = always {
+                a.always = on;
+            }
+            if let Some(list) = &disabled {
+                let mut list = list.clone();
+                list.sort();
+                list.dedup();
+                a.disabled_tools = list;
+            }
+        };
+        self.rt.update_config(|c| match &entry.plugin {
+            Some(plugin) => {
+                let table = c.plugins.entry(plugin.clone()).or_default();
+                let a = table.mcp_servers.entry(name.to_owned()).or_default();
+                apply(a);
+                if a.is_default() {
+                    table.mcp_servers.remove(name);
+                }
+            }
+            None => {
+                if let Some(server) = c.mcp_servers.get_mut(name) {
+                    let mut a = dshx_core::config::McpAvailability {
+                        always: server.always,
+                        disabled_tools: server.disabled_tools.clone(),
+                    };
+                    apply(&mut a);
+                    server.always = a.always;
+                    server.disabled_tools = a.disabled_tools;
+                }
+            }
+        })?;
+        self.server_value(name).await
     }
 
     /// A config change followed by a reload, under the change lock.
@@ -416,7 +543,7 @@ impl Extensions for RuntimeExtensions {
         if enable {
             let id = plugin.id.clone();
             self.change_config(|c| {
-                c.plugins.insert(id, PluginConfig { enabled: true });
+                c.plugins.entry(id).or_default().enabled = true;
             })
             .await?;
         }
@@ -454,7 +581,7 @@ impl Extensions for RuntimeExtensions {
         }
         let key = id.to_owned();
         self.change_config(|c| {
-            c.plugins.insert(key, PluginConfig { enabled: on });
+            c.plugins.entry(key).or_default().enabled = on;
         })
         .await?;
         self.plugin_value(id).await
@@ -553,6 +680,8 @@ impl Extensions for RuntimeExtensions {
                     "active": seen.insert(s.name.clone()),
                     "modelInvocable": s.model_invocable,
                     "userInvocable": s.user_invocable,
+                    "enabled": config.skills.enabled(&s.name),
+                    "model": config.skills.model_invocable(&s.name, s.model_invocable),
                 }));
             }
             // Skills of disabled plugins, so the page can offer them.
@@ -575,6 +704,8 @@ impl Extensions for RuntimeExtensions {
                         "active": false,
                         "modelInvocable": s.model_invocable,
                         "userInvocable": s.user_invocable,
+                        "enabled": config.skills.enabled(&s.name),
+                        "model": config.skills.model_invocable(&s.name, s.model_invocable),
                     }));
                 }
             }

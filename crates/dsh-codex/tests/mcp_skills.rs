@@ -66,8 +66,10 @@ async fn skills_and_mcp_reach_the_model_like_dsh() {
         "---\nname: demo\ndescription: Demo skill for the integration test.\n---\n\nSay DEMO when asked.\n",
     )
     .unwrap();
+    // dsh offers every skill and server up front; dsh-codex does so with
+    // `catalog = "auto"` and `always = true` (its defaults load on demand).
     let config = format!(
-        "[mcp_servers.t]\ncommand = \"python3\"\nargs = [{}]\nenv = {{ MCP_TEST_INSTRUCTIONS = \"Use the fixture tools carefully.\", MCP_TEST_EVENTS = {} }}\n",
+        "[skills]\ncatalog = \"auto\"\n\n[mcp_servers.t]\ncommand = \"python3\"\nargs = [{}]\nalways = true\nenv = {{ MCP_TEST_INSTRUCTIONS = \"Use the fixture tools carefully.\", MCP_TEST_EVENTS = {} }}\n",
         toml_string(&fixture_server()),
         toml_string(&events.display().to_string()),
     );
@@ -191,7 +193,7 @@ async fn sdk_sessions_pick_up_mcp_tool_changes() {
     std::fs::write(
         home.path().join("config.toml"),
         format!(
-            "[mcp_servers.t]\ncommand = \"python3\"\nargs = [{}]\n",
+            "[mcp_servers.t]\ncommand = \"python3\"\nargs = [{}]\nalways = true\n",
             toml_string(&fixture_server())
         ),
     )

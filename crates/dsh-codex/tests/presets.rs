@@ -198,13 +198,14 @@ async fn standard_requests_are_unchanged() {
         "bash",
         "edit",
         "read",
-        "skill",
         "todo_write",
         "subagent",
         "create_goal",
     ] {
         assert!(names.contains(&name), "{name} missing: {names:?}");
     }
+    // The `skill` tool joins only once the model may load a skill on its own.
+    assert!(!names.contains(&"skill"), "{names:?}");
     let bash = &requests[0].body["tools"][0];
     assert_eq!(bash["name"], "bash");
     assert!(bash["input_schema"]["properties"]["description"].is_object());
