@@ -518,11 +518,12 @@ pub fn summarize(parsed: &ParsedLog) -> SessionSummary {
         title,
         cwd: header.cwd.clone(),
         created_at: header.created_at,
+        // A branch's seed keeps its source's times: it was last active
+        // when it was created.
         updated_at: parsed
             .events
             .last()
-            .map(|e| e.time)
-            .unwrap_or(header.created_at),
+            .map_or(header.created_at, |e| e.time.max(header.created_at)),
         status,
         turns,
         event_count: parsed.events.len() as u64,

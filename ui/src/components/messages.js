@@ -32,8 +32,16 @@ const TOP_UP = {
   anthropic: 'https://console.anthropic.com/settings/billing',
 };
 
-const SUFFIXES = [' (branch)', ' (Abzweig)'];
-const baseTitle = (title) => SUFFIXES.reduce((s, x) => (s.endsWith(x) ? s.slice(0, -x.length) : s), title.trim());
+/** A title without its branch suffix ("Fix (Abzweig 2)" → "Fix"). */
+const baseTitle = (title) => title.trim().replace(/ \((?:branch|Abzweig)(?: \d+)?\)$/, '');
+
+/** "Fix (Abzweig)", or "Fix (Abzweig 2)" when that one exists already. */
+function branchTitle(base, sessions) {
+  const taken = new Set(sessions.map((x) => x.title));
+  let title = t.branchTitle(base);
+  for (let n = 2; taken.has(title); n += 1) title = t.branchTitleN(base, n);
+  return title;
+}
 
 /** A new chat with this one's log through `turn` (0 = none of it); `draft` waits in its composer. */
 export async function forkChat(turn, { draft } = {}) {
@@ -41,7 +49,7 @@ export async function forkChat(turn, { draft } = {}) {
   const id = s.activeId;
   if (!id) return;
   const listed = s.sessions.find((x) => x.id === id);
-  const title = t.branchTitle(baseTitle(listed?.title || t.newChat));
+  const title = branchTitle(baseTitle(listed?.title || t.newChat), s.sessions);
   try {
     const { id: child } = await api.forkSession(id, { turn, title });
     await openSession(child);
