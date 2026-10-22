@@ -124,6 +124,19 @@ function MenuKeys({ anchor, children }) {
   return html`<div ref=${ref} class="fp-keys" onKeyDown=${onKeyDown}>${children}</div>`;
 }
 
+/** Renders its children in a layer on <body>, out of reach of clipping or masked ancestors. */
+function Portal({ children }) {
+  const host = useRef(null);
+  if (!host.current) host.current = document.createElement('div');
+  useLayoutEffect(() => {
+    const el = host.current;
+    document.body.appendChild(el);
+    return () => { render(null, el); el.remove(); };
+  }, []);
+  useLayoutEffect(() => { render(children, host.current); });
+  return null;
+}
+
 /**
  * "No project", the recent projects and "Choose folder…". `onPick(path)`
  * runs after a choice ('' = no project); by default it only selects it.
@@ -139,7 +152,9 @@ export function ProjectMenu({ open, onClose, anchor, side = 'top', align = 'star
     const ws = path ? await addProject(path) : null;
     if (ws) onPick(ws.path);
   };
-  return html`<${Menu} open=${open} onClose=${onClose} anchor=${anchor} side=${side} align=${align} class="menu-wide fp-menu">
+  // On <body> and placed in the viewport: the start page's title sits in a
+  // scrolling, masked column that would clip the menu.
+  return html`<${Portal}><${Menu} open=${open} onClose=${onClose} anchor=${anchor} side=${side} align=${align} fixed class="menu-wide fp-menu">
     <${MenuKeys} anchor=${anchor}>
       <${MenuItem} checked=${!cwd} hint=${t.noProjectHint} onClick=${() => pick('')}>${t.noProject}</${MenuItem}>
       ${recent.length ? html`<div class="menu-sep" /><div class="menu-head">${t.recentProjects}</div>
@@ -148,7 +163,7 @@ export function ProjectMenu({ open, onClose, anchor, side = 'top', align = 'star
       <div class="menu-sep" />
       <${ActionItem} icon=${html`<${IconFolderPlus} size=${14} />`} kbd="⌘O" onClick=${choose}>${t.chooseFolder}</${ActionItem}>
     </${MenuKeys}>
-  </${Menu}>`;
+  </${Menu}></${Portal}>`;
 }
 
 // ---- folder browser ---------------------------------------------------------

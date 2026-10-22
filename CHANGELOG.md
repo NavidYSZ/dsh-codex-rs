@@ -23,11 +23,29 @@
   readable rows for schedule/goal/team tools, goal-round/reminder/Team-mail
   lines in the transcript.
 - Prompts carry the browser's time zone (dsh `clientTimeZone`).
+- **Project folders by dialog** instead of a path field: "Choose folder…"
+  (⌘O, start page chip, sidebar "Add project", Mac app File → Open project)
+  uses the Mac app's folder sheet for the local instance, the server's macOS
+  dialog in a browser on the same Mac (`POST /api/fs/pick`), else a folder
+  browser (`GET /api/fs/dirs`, `/api/fs/suggestions`, `POST /api/fs/mkdir`)
+  with breadcrumbs, recent projects, repositories, new folder, edit path and
+  hidden folders. Roots: home, the parents of known projects and
+  `[folders] roots` in `config.toml`. Folders dropped on the Mac app become
+  projects.
+- **Mac app: switching instances without a grey screen.** Instances connect
+  at launch ("Beim Start verbinden") into invisible, rendered pages; the
+  window keeps the current page until the target reports `ready()`, then
+  crossfades, showing the target's last snapshot meanwhile. Progress line,
+  inline error banner, page-colored window background, status dots, unread
+  counts and ⌃1–⌃9 in the switcher.
 
 ### Changed
 
 - Mac app: the local instance reuses its last port, so browser storage
   (sidebar, theme, panel) survives restarts.
+- Mac app: instances switch with ⌃1–⌃9 (⌘1–⌘9 stay free for chats); the SSH
+  tunnel is a detached master with `ControlPersist=10m` that survives a quit
+  for a quick restart, and the access token is reused until a 401.
 - Codex app default theme values: accent `#0285ff`, grey user bubble, 16 px
   composer and bubble radius, 46 px header.
 - Debug builds serve `ui/` with `no-cache`.
