@@ -1,7 +1,8 @@
 //! Sidebar state the session log does not hold: pinned, archived, renamed and
-//! read markers, plus the folders of chats started without a project. Kept in
+//! read markers, plus the folders of chats started without a project, and the
+//! display preferences of Settings → Appearance. Kept in
 //! `$DSHX_HOME/ui-state.json`, so every browser and the desktop app see the
-//! same sidebar.
+//! same sidebar and the same view.
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -25,10 +26,32 @@ struct ChatMeta {
     seen_at: Option<u64>,
 }
 
+/// Display preferences (dsh `ui-chat` settings).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct UiPrefs {
+    /// How much of the agent's work the transcript shows: `compact`,
+    /// `standard`, `detailed` or `verbose` (dsh "Work details").
+    pub work_details: String,
+    /// `compact` (context ring and cost) or `detailed` (dsh "Performance & usage").
+    pub performance_usage: String,
+}
+
+impl Default for UiPrefs {
+    fn default() -> Self {
+        UiPrefs {
+            work_details: "standard".into(),
+            performance_usage: "detailed".into(),
+        }
+    }
+}
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct StateFile {
     #[serde(default)]
     sessions: BTreeMap<String, ChatMeta>,
+    #[serde(default)]
+    ui: UiPrefs,
 }
 
 pub struct ChatState {
@@ -123,6 +146,37 @@ impl ChatState {
         self.save(&file)
     }
 
+    pub fn ui(&self) -> UiPrefs {
+        self.file.lock().unwrap().ui.clone()
+    }
+
+    /// Applies `{workDetails?, performanceUsage?}`.
+    pub fn update_ui(&self, patch: &Value) -> anyhow::Result<UiPrefs> {
+        let pick = |key: &str, allowed: &[&str]| -> anyhow::Result<Option<String>> {
+            match patch.get(key) {
+                None => Ok(None),
+                Some(v) => match v.as_str().filter(|v| allowed.contains(v)) {
+                    Some(v) => Ok(Some(v.to_owned())),
+                    None => anyhow::bail!("{key} must be one of {}", allowed.join(", ")),
+                },
+            }
+        };
+        let work = pick(
+            "workDetails",
+            &["compact", "standard", "detailed", "verbose"],
+        )?;
+        let usage = pick("performanceUsage", &["compact", "detailed"])?;
+        let mut file = self.file.lock().unwrap();
+        if let Some(v) = work {
+            file.ui.work_details = v;
+        }
+        if let Some(v) = usage {
+            file.ui.performance_usage = v;
+        }
+        self.save(&file)?;
+        Ok(file.ui.clone())
+    }
+
     pub fn remove(&self, id: &str) {
         let mut file = self.file.lock().unwrap();
         if file.sessions.remove(id).is_some() {
@@ -193,6 +247,22 @@ mod tests {
             r["title"], "Auto",
             "an empty title restores the generated one"
         );
+    }
+
+    #[test]
+    fn display_preferences_persist_and_are_checked() {
+        let home = tempfile::tempdir().unwrap();
+        let state = ChatState::load(home.path());
+        assert_eq!(state.ui(), UiPrefs::default());
+        state.update_ui(&json!({"workDetails": "verbose"})).unwrap();
+        assert!(
+            state
+                .update_ui(&json!({"performanceUsage": "loud"}))
+                .is_err()
+        );
+        let state = ChatState::load(home.path());
+        assert_eq!(state.ui().work_details, "verbose");
+        assert_eq!(state.ui().performance_usage, "detailed");
     }
 
     #[test]

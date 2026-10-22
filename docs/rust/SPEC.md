@@ -294,7 +294,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | Method | Path | Body → Response |
 |---|---|---|
 | GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], settings:{model, effort, sandbox, approval}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}` |
-| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?}` → `/api/info` shape (`defaultPreset` → config `default_preset`) |
+| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, ui?: {workDetails?, performanceUsage?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
 | GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread, preset?}]` (newest first; `preset` when the session recorded one) |
@@ -318,6 +318,8 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | DELETE | `/api/schedules/:id` | → `{id, deleted: true}`; unknown → 404 |
 | GET | `/api/schedules/:id/history?limit=&before=` | → `{id, records: [{scheduledAt, deliveredAt, messageId, prompt?}], earlierRecordsUnavailable, earlierRecordsPruned, retention, nextBefore?}` (newest first, `limit` 1-100, default 20) |
 | GET | `/api/sessions/:id/team` | → `{members: [{id, name, role, phase, error?}], tasks: [TaskView], roster: [list_agents rows], failure?}` |
+| GET | `/api/sessions/:id/stats?fromTurn=` | → `SessionStats` (below); `fromTurn` limits `turns` to turns ≥ it, the totals always cover the whole log |
+| GET | `/api/usage?since=&until=&tz=&top=` | → `UsageReport` (below) of all sessions; `since`/`until` ms (default the last 30 days), `tz` the reader's UTC offset in minutes (local days), `top` chats (default 5, max 50) |
 | WS | `/api/stream?session=:id&after=:seq` | server → client messages below |
 
 ### Plugins page (`Backend::extensions`, routes in `dshx-server/src/extensions.rs`)
@@ -369,8 +371,9 @@ Without extensions every route below answers 404. Errors are `{error}` with 400,
 
 WebSocket messages (JSON):
 - `{"kind":"event","sessionId","event":SessionEvent}` — every appended event, in order, after `after`.
-- `{"kind":"delta","sessionId","turn","step","index","blockType":"text"|"reasoning","text"}` — live
-  streaming text, not persisted; the final `assistant/message` event replaces it.
+- `{"kind":"delta","sessionId","turn","step","index","blockType":"text"|"reasoning"|"tool-call","text"}` — live
+  streaming text, not persisted; the final `assistant/message` event replaces it. A `tool-call` delta comes once
+  when a tool call starts streaming, with the tool's name as `text` (the UI says what is being prepared).
 - `{"kind":"status","sessionId","status":"idle"|"running"|"waiting-approval"|"error","error"?}`
 - `{"kind":"approval","sessionId","callId","tool","summary","justification"}` — pending approval.
 - `{"kind":"goal","sessionId","goal":GoalView|null}` — goal or activation changed (session clients
@@ -381,9 +384,39 @@ WebSocket messages (JSON):
   that session (merged state, at most 4 frames/s), sent from `Backend::live` on its own channel; the latest one also
   follows the backlog. Never persisted; a lagging client just misses frames.
 - `/api/info` additionally carries `automation: {goals, schedules, timeContext, team}`,
-  `settings.defaultPreset` and `presets: [{id, name, description, help: {intro, explanation, usage}}]`
-  (English; help in Markdown from dsh's agent-preset guide; the UI localizes by `id`).
+  `settings.defaultPreset`, `presets: [{id, name, description, help: {intro, explanation, usage}}]`
+  (English; help in Markdown from dsh's agent-preset guide; the UI localizes by `id`) and
+  `ui: {workDetails: "compact"|"standard"|"detailed"|"verbose", performanceUsage: "compact"|"detailed"}`.
 - `POST /api/sessions/:id/goal` on a Minimal session → 400 (goals are not part of Minimal).
+
+### Usage and costs (`crates/dsh-codex/src/usage.rs`)
+
+The server prices every request; the UI only formats. Costs are USD. A request (`assistant/message` or
+`compaction/summary` with `usage`) costs `(inputTokens × input + cacheReadTokens × cacheRead + cacheWriteTokens ×
+cacheWrite + outputTokens × output) / 1e6` at the price that applied at the event's `time`. Built in are DeepSeek's
+list prices for `deepseek-flash` and `deepseek-v4-pro` (provider `deepseek-*`) on DeepSeek's clock: peak Mon–Fri
+01:00–04:00 and 06:00–10:00 UTC except Chinese public holidays (table per year in the code; a year without one
+assumes peak and sets `approximate`), half price otherwise; a cache write costs a cache miss. `PriceBook::with_override`
+adds flat prices of other providers; a model without a price counts tokens only (`unpricedRequests`).
+
+- `Tally`: `{requests, inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens, reasoningTokens, costUsd,
+  cost: {input, cacheRead, cacheWrite, output}, savedUsd, offPeakRequests, unpricedRequests, approximate}`
+  (`inputTokens` is uncached input; `savedUsd` = cache hits priced as misses minus their price).
+- `SessionStats`: `{currency: "USD", provider, model, turnCount, totals: Tally, timings: Timings, lastRequest:
+  {seq, time, turn, provider, model, ...Tally} | null, turns: [{turn, start, end, status, ...Tally, routes:
+  ["provider/model"], timings: Timings}], context: {contextWindow, usedTokens, estimated, percent, breakdown:
+  {systemTokens, toolsTokens, messageTokens}, compaction: {auto, thresholdTokens, thresholdPercent} | null},
+  subagents?: {sessions, ...Tally}}`. `usedTokens` = input and output of the last request (after a compaction the
+  heuristic estimate, `estimated: true`); `breakdown` is dsh's four-characters-per-token estimate of the history.
+- `Timings` (dsh `sessionStats`): `{steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens, avgTtftMs,
+  tokensPerSecond}`: model time `step/start` → `assistant/message`, first token = first non-empty stream delta,
+  decode = first token → message on steps with output tokens, tool time `tool/call` → `tool/result`.
+- `UsageReport`: `{currency, since, until, totals: Tally, days: [{day: "YYYY-MM-DD", ...Tally, models: [ModelUsage]}],
+  models: [ModelUsage], topChats: [{id, title, cwd, updatedAt, subagents, scratch, pinned, archived, unread, ...Tally}],
+  sessions}`; `ModelUsage` = `{provider, model, priced, ...Tally}`; every day of the range has a row (at most 401);
+  subagent sessions count for the chat they belong to. Hourly buckets per session live in
+  `$DSHX_HOME/usage-index.json` with the listing's `[updatedAt, sizeBytes, eventCount]`, so a report re-reads only
+  changed logs (on-disk logs trail a live session by up to 200 ms).
 
 ## 7. Conventions
 - Rust 2024, stable toolchain in `~/.cargo/bin` (`export PATH=$HOME/.cargo/bin:$PATH`). `cargo fmt`,

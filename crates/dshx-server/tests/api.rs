@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use dshx_core::{ImageAttachmentRef, SessionEvent};
 use dshx_server::{
-    Backend, Extensions, NotFound, OAuthCallback, PromptRequest, StreamMessage, serve,
+    Backend, Extensions, NotFound, OAuthCallback, PromptRequest, StreamMessage, UsageQuery, serve,
 };
 use futures::StreamExt;
 use serde_json::{Value, json};
@@ -167,6 +167,15 @@ impl Backend for Fake {
     fn extensions(&self) -> Option<Arc<dyn Extensions>> {
         self.ext.clone().map(|e| e as Arc<dyn Extensions>)
     }
+    async fn session_stats(&self, id: &str, from_turn: Option<u64>) -> anyhow::Result<Value> {
+        if id != "s1" {
+            return Err(NotFound(id.into()).into());
+        }
+        Ok(json!({ "currency": "USD", "fromTurn": from_turn }))
+    }
+    async fn usage(&self, q: UsageQuery) -> anyhow::Result<Value> {
+        Ok(json!({ "since": q.since, "until": q.until, "tz": q.tz, "top": q.top }))
+    }
 }
 
 async fn start() -> (String, Arc<Fake>) {
@@ -284,6 +293,32 @@ async fn routes_map_to_backend() {
         .await
         .unwrap();
     assert_eq!(r.status(), 400);
+}
+
+#[tokio::test]
+async fn stats_and_usage_routes_pass_their_queries() {
+    let (addr, _) = start().await;
+    let http = reqwest::Client::new();
+    let get = |p: &str| {
+        http.get(format!("http://{addr}/api{p}"))
+            .bearer_auth("secret")
+            .send()
+    };
+    let r = get("/sessions/s1/stats?fromTurn=3").await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(
+        r.json::<Value>().await.unwrap(),
+        json!({ "currency": "USD", "fromTurn": 3 })
+    );
+    let r = get("/sessions/s1/stats").await.unwrap();
+    assert_eq!(r.json::<Value>().await.unwrap()["fromTurn"], Value::Null);
+    assert_eq!(get("/sessions/nope/stats").await.unwrap().status(), 404);
+    let r = get("/usage?since=1000&tz=-120&top=3").await.unwrap();
+    assert_eq!(
+        r.json::<Value>().await.unwrap(),
+        json!({ "since": 1000, "until": null, "tz": -120, "top": 3 })
+    );
+    assert_eq!(get("/usage?since=soon").await.unwrap().status(), 400);
 }
 
 #[tokio::test]

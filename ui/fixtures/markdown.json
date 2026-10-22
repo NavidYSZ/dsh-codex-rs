@@ -992,5 +992,157 @@
    }
   ]
  },
- "live": 25
+ "live": 25,
+ "stats": {
+  "currency": "USD",
+  "provider": "deepseek-official",
+  "model": "deepseek-flash",
+  "turnCount": 2,
+  "totals": {
+   "requests": 2,
+   "inputTokens": 3680,
+   "cacheReadTokens": 22528,
+   "cacheWriteTokens": 0,
+   "outputTokens": 1024,
+   "reasoningTokens": 0,
+   "costUsd": 0.002467968,
+   "cost": {
+    "input": 0.001104,
+    "cacheRead": 0.00013516800000000002,
+    "cacheWrite": 0.0,
+    "output": 0.0012288
+   },
+   "savedUsd": 0.006623232,
+   "offPeakRequests": 0,
+   "unpricedRequests": 0,
+   "approximate": false
+  },
+  "timings": {
+   "steps": 2,
+   "llmMs": 31890,
+   "toolMs": 0,
+   "ttftMs": 1450,
+   "ttftSteps": 2,
+   "decodeMs": 30440,
+   "decodeTokens": 1024,
+   "avgTtftMs": 725.0,
+   "tokensPerSecond": 33.63994743758213
+  },
+  "lastRequest": {
+   "seq": 25,
+   "time": 1792487717440,
+   "turn": 2,
+   "provider": "deepseek-official",
+   "model": "deepseek-flash",
+   "requests": 1,
+   "inputTokens": 1840,
+   "cacheReadTokens": 11264,
+   "cacheWriteTokens": 0,
+   "outputTokens": 512,
+   "reasoningTokens": 0,
+   "costUsd": 0.001233984,
+   "cost": {
+    "input": 0.000552,
+    "cacheRead": 6.758400000000001e-05,
+    "cacheWrite": 0.0,
+    "output": 0.0006144
+   },
+   "savedUsd": 0.003311616,
+   "offPeakRequests": 0,
+   "unpricedRequests": 0,
+   "approximate": false
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "start": 1792487640020,
+    "end": 1792487648635,
+    "status": "completed",
+    "requests": 1,
+    "inputTokens": 1840,
+    "cacheReadTokens": 11264,
+    "cacheWriteTokens": 0,
+    "outputTokens": 512,
+    "reasoningTokens": 0,
+    "costUsd": 0.001233984,
+    "cost": {
+     "input": 0.000552,
+     "cacheRead": 6.758400000000001e-05,
+     "cacheWrite": 0.0,
+     "output": 0.0006144
+    },
+    "savedUsd": 0.003311616,
+    "offPeakRequests": 0,
+    "unpricedRequests": 0,
+    "approximate": false,
+    "routes": [
+     "deepseek-official/deepseek-flash"
+    ],
+    "timings": {
+     "steps": 1,
+     "llmMs": 8350,
+     "toolMs": 0,
+     "ttftMs": 740,
+     "ttftSteps": 1,
+     "decodeMs": 7610,
+     "decodeTokens": 512,
+     "avgTtftMs": 740.0,
+     "tokensPerSecond": 67.27989487516426
+    }
+   },
+   {
+    "turn": 2,
+    "start": 1792487693645,
+    "end": 1792487717450,
+    "status": "completed",
+    "requests": 1,
+    "inputTokens": 1840,
+    "cacheReadTokens": 11264,
+    "cacheWriteTokens": 0,
+    "outputTokens": 512,
+    "reasoningTokens": 0,
+    "costUsd": 0.001233984,
+    "cost": {
+     "input": 0.000552,
+     "cacheRead": 6.758400000000001e-05,
+     "cacheWrite": 0.0,
+     "output": 0.0006144
+    },
+    "savedUsd": 0.003311616,
+    "offPeakRequests": 0,
+    "unpricedRequests": 0,
+    "approximate": false,
+    "routes": [
+     "deepseek-official/deepseek-flash"
+    ],
+    "timings": {
+     "steps": 1,
+     "llmMs": 23540,
+     "toolMs": 0,
+     "ttftMs": 710,
+     "ttftSteps": 1,
+     "decodeMs": 22830,
+     "decodeTokens": 512,
+     "avgTtftMs": 710.0,
+     "tokensPerSecond": 22.426631625054753
+    }
+   }
+  ],
+  "context": {
+   "contextWindow": 1000000,
+   "usedTokens": 13616,
+   "estimated": false,
+   "percent": 1.3616,
+   "breakdown": {
+    "systemTokens": 32,
+    "toolsTokens": 128,
+    "messageTokens": 886
+   },
+   "compaction": {
+    "auto": true,
+    "thresholdTokens": 678464,
+    "thresholdPercent": 67.84639999999999
+   }
+  }
+ }
 }

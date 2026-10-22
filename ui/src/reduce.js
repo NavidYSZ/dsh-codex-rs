@@ -3,6 +3,7 @@
 // Only the events the UI needs are folded; everything else (request/header,
 // inbox splices, delivery receipts, unknown plugin events) is ignored, so a
 // log written by the official dsh renders too.
+import { groupItems, turnWork } from './worklog.js';
 
 export const CODEX_TOOLS = new Set(['computer', 'app', 'browser']);
 
@@ -30,8 +31,6 @@ function blockTimes(stream) {
 function textOf(content) {
   return (content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 }
-
-const inputTotal = (u) => (u?.inputTokens ?? 0) + (u?.cacheReadTokens ?? 0) + (u?.cacheWriteTokens ?? 0);
 
 /** The line for a turn that a goal round, a reminder or a teammate started. */
 function sourceNotice(kind, d, seq) {
@@ -66,7 +65,6 @@ export function buildTranscript(events) {
     effort: undefined,
     sandbox: null,
     contextWindow: 0,
-    usage: { input: 0, cached: 0, output: 0, lastInput: 0 },
     pendingApproval: null,
   };
   const calls = new Map();
@@ -134,13 +132,6 @@ export function buildTranscript(events) {
         });
         if (d.interrupted) t.items.push({ kind: 'notice', key: `i:${e.seq}`, tone: 'muted', code: 'stopped' });
         if (msg.source?.model) out.model = msg.source.model;
-        if (d.usage) {
-          const input = inputTotal(d.usage);
-          out.usage.input += input;
-          out.usage.cached += d.usage.cacheReadTokens ?? 0;
-          out.usage.output += d.usage.outputTokens ?? 0;
-          out.usage.lastInput = input + (d.usage.outputTokens ?? 0);
-        }
         t.retry = null;
         break;
       }
@@ -244,6 +235,11 @@ export function buildTranscript(events) {
     }
   }
   if (lastTodoCall) lastTodoCall.latestTodo = true;
+  // Work groups and the fold of finished turns, once per event, not per render.
+  for (const tn of out.turns) {
+    Object.assign(tn, groupItems(tn.items, tn.end != null));
+    tn.work = turnWork(tn.items);
+  }
   return out;
 }
 

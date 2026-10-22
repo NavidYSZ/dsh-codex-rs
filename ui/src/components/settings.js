@@ -1,4 +1,5 @@
-// Settings: theme (local to this browser), defaults for new chats, API key.
+// Settings: theme (local to this browser), defaults for new chats, API key,
+// appearance and the usage of all chats.
 import { useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, age } from '../i18n.js';
@@ -9,15 +10,17 @@ import {
 import { IconChevronLeft, IconCheck, IconKey, IconSidebar, IconArchive } from '../icons.js';
 import { workspaceName } from './composer.js';
 import { ModeSetting } from './modes.js';
+import { AppearanceCard } from './worklog.js';
+import { UsageCard } from './usage.js';
 
-function Segmented({ value, options, onChange, label }) {
+export function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
     ${options.map(([v, text]) => html`<button type="button" key=${v} role="radio" aria-checked=${v === value}
       class=${cx('seg', v === value && 'is-on', v === 'danger-full-access' && 'is-warn')} onClick=${() => onChange(v)}>${text}</button>`)}
   </div>`;
 }
 
-function Field({ label, hint, children }) {
+export function Field({ label, hint, children }) {
   return html`<div class="field">
     <div class="field-text"><div class="field-label">${label}</div>${hint ? html`<div class="field-hint">${hint}</div>` : null}</div>
     <div class="field-control">${children}</div>
@@ -133,6 +136,9 @@ export function Settings() {
         </${Field}>`}
         <${Field} label=${t.language}><span class="field-value">${t.languageValue}</span></${Field}>
       </section>
+
+      <${AppearanceCard} />
+      <${UsageCard} />
 
       <${Archived} />
 

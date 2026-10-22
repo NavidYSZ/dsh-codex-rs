@@ -138,7 +138,7 @@ def check_approval(base, out):
         page.click('.approval .btn-primary')
         page.wait_for_function("document.body.innerText.includes('10 tests')", timeout=30000)
         page.wait_for_timeout(600)
-        ok = page.evaluate("!document.querySelector('.approval') && !!document.querySelector('.worked')")
+        ok = page.evaluate("!document.querySelector('.approval') && !!document.querySelector('.wl-turn')")
         page.screenshot(path=str(out / 'approval-allowed-light-desktop.png'))
         browser.close()
     return {'ok': ok, 'problems': watch.problems}

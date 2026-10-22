@@ -92,5 +92,2425 @@
    "preset": "minimal",
    "fixture": "minimal"
   }
- ]
+ ],
+ "usage": {
+  "week": {
+   "currency": "USD",
+   "totals": {
+    "requests": 383,
+    "inputTokens": 494972,
+    "cacheReadTokens": 12604676,
+    "cacheWriteTokens": 0,
+    "outputTokens": 176234,
+    "reasoningTokens": 0,
+    "costUsd": 0.427090669,
+    "savedUsd": 3.599599121,
+    "offPeakRequests": 160,
+    "unpricedRequests": 0,
+    "cost": {
+     "input": 0.14408189999999998,
+     "cacheRead": 0.086038849,
+     "cacheWrite": 0.0,
+     "output": 0.19696991999999997
+    },
+    "approximate": false
+   },
+   "days": [
+    {
+     "ago": 6,
+     "requests": 45,
+     "inputTokens": 57262,
+     "cacheReadTokens": 1632910,
+     "cacheWriteTokens": 0,
+     "outputTokens": 20788,
+     "reasoningTokens": 0,
+     "costUsd": 0.04786167599999999,
+     "savedUsd": 0.440839554,
+     "offPeakRequests": 19,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.01534659,
+      "cacheRead": 0.010053426,
+      "cacheWrite": 0.0,
+      "output": 0.022461659999999994
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 43,
+       "inputTokens": 55237,
+       "cacheReadTokens": 1549097,
+       "cacheWriteTokens": 0,
+       "outputTokens": 19469,
+       "reasoningTokens": 0,
+       "costUsd": 0.03895325999999999,
+       "savedUsd": 0.36576099,
+       "offPeakRequests": 18,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.01294155,
+        "cacheRead": 0.0074645100000000015,
+        "cacheWrite": 0.0,
+        "output": 0.018547199999999996
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 2,
+       "inputTokens": 2025,
+       "cacheReadTokens": 83813,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1319,
+       "reasoningTokens": 0,
+       "costUsd": 0.008908416,
+       "savedUsd": 0.075078564,
+       "offPeakRequests": 1,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0024050399999999998,
+        "cacheRead": 0.002588916,
+        "cacheWrite": 0.0,
+        "output": 0.00391446
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 5,
+     "requests": 79,
+     "inputTokens": 106492,
+     "cacheReadTokens": 2619544,
+     "cacheWriteTokens": 0,
+     "outputTokens": 36110,
+     "reasoningTokens": 0,
+     "costUsd": 0.095408559,
+     "savedUsd": 0.799477131,
+     "offPeakRequests": 40,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.0319857,
+      "cacheRead": 0.020818299000000002,
+      "cacheWrite": 0.0,
+      "output": 0.04260456000000001
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 69,
+       "inputTokens": 93237,
+       "cacheReadTokens": 2248026,
+       "cacheWriteTokens": 0,
+       "outputTokens": 30925,
+       "reasoningTokens": 0,
+       "costUsd": 0.058854723,
+       "savedUsd": 0.479578827,
+       "offPeakRequests": 34,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.021099,
+        "cacheRead": 0.009787323,
+        "cacheWrite": 0.0,
+        "output": 0.027968400000000004
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 10,
+       "inputTokens": 13255,
+       "cacheReadTokens": 371518,
+       "cacheWriteTokens": 0,
+       "outputTokens": 5185,
+       "reasoningTokens": 0,
+       "costUsd": 0.036553836,
+       "savedUsd": 0.31989830399999997,
+       "offPeakRequests": 6,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.010886700000000001,
+        "cacheRead": 0.011030976000000001,
+        "cacheWrite": 0.0,
+        "output": 0.014636160000000004
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 4,
+     "requests": 77,
+     "inputTokens": 97353,
+     "cacheReadTokens": 2439877,
+     "cacheWriteTokens": 0,
+     "outputTokens": 32418,
+     "reasoningTokens": 0,
+     "costUsd": 0.07470216399999999,
+     "savedUsd": 0.6582018859999998,
+     "offPeakRequests": 36,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.025479389999999998,
+      "cacheRead": 0.015261573999999998,
+      "cacheWrite": 0.0,
+      "output": 0.0339612
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 72,
+       "inputTokens": 91716,
+       "cacheReadTokens": 2295184,
+       "cacheWriteTokens": 0,
+       "outputTokens": 30788,
+       "reasoningTokens": 0,
+       "costUsd": 0.06014716199999999,
+       "savedUsd": 0.5282597879999998,
+       "offPeakRequests": 33,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.020256149999999997,
+        "cacheRead": 0.010780811999999999,
+        "cacheWrite": 0.0,
+        "output": 0.029110199999999996
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 5,
+       "inputTokens": 5637,
+       "cacheReadTokens": 144693,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1630,
+       "reasoningTokens": 0,
+       "costUsd": 0.014555002,
+       "savedUsd": 0.129942098,
+       "offPeakRequests": 3,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0052232400000000005,
+        "cacheRead": 0.004480761999999999,
+        "cacheWrite": 0.0,
+        "output": 0.004850999999999999
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 3,
+     "requests": 52,
+     "inputTokens": 68354,
+     "cacheReadTokens": 1849608,
+     "cacheWriteTokens": 0,
+     "outputTokens": 27802,
+     "reasoningTokens": 0,
+     "costUsd": 0.05338713,
+     "savedUsd": 0.43967111999999986,
+     "offPeakRequests": 20,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.01669065,
+      "cacheRead": 0.008972879999999997,
+      "cacheWrite": 0.0,
+      "output": 0.027723600000000004
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 52,
+       "inputTokens": 68354,
+       "cacheReadTokens": 1849608,
+       "cacheWriteTokens": 0,
+       "outputTokens": 27802,
+       "reasoningTokens": 0,
+       "costUsd": 0.05338713,
+       "savedUsd": 0.43967111999999986,
+       "offPeakRequests": 20,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.01669065,
+        "cacheRead": 0.008972879999999997,
+        "cacheWrite": 0.0,
+        "output": 0.027723600000000004
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 2,
+     "requests": 86,
+     "inputTokens": 109231,
+     "cacheReadTokens": 2642612,
+     "cacheWriteTokens": 0,
+     "outputTokens": 38711,
+     "reasoningTokens": 0,
+     "costUsd": 0.08742909200000001,
+     "savedUsd": 0.684545308,
+     "offPeakRequests": 33,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.030837959999999998,
+      "cacheRead": 0.015308971999999997,
+      "cacheWrite": 0.0,
+      "output": 0.04128215999999999
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 83,
+       "inputTokens": 104362,
+       "cacheReadTokens": 2540796,
+       "cacheWriteTokens": 0,
+       "outputTokens": 36801,
+       "reasoningTokens": 0,
+       "costUsd": 0.07296435600000001,
+       "savedUsd": 0.589433544,
+       "offPeakRequests": 32,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0255771,
+        "cacheRead": 0.012029255999999999,
+        "cacheWrite": 0.0,
+        "output": 0.035357999999999994
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 3,
+       "inputTokens": 4869,
+       "cacheReadTokens": 101816,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1910,
+       "reasoningTokens": 0,
+       "costUsd": 0.014464735999999999,
+       "savedUsd": 0.095111764,
+       "offPeakRequests": 1,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.005260860000000001,
+        "cacheRead": 0.0032797159999999994,
+        "cacheWrite": 0.0,
+        "output": 0.0059241599999999995
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 1,
+     "requests": 11,
+     "inputTokens": 16375,
+     "cacheReadTokens": 276671,
+     "cacheWriteTokens": 0,
+     "outputTokens": 6184,
+     "reasoningTokens": 0,
+     "costUsd": 0.027676073000000002,
+     "savedUsd": 0.174452287,
+     "offPeakRequests": 3,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.010335570000000002,
+      "cacheRead": 0.005508023,
+      "cacheWrite": 0.0,
+      "output": 0.01183248
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 5,
+       "inputTokens": 7109,
+       "cacheReadTokens": 135708,
+       "cacheWriteTokens": 0,
+       "outputTokens": 2495,
+       "reasoningTokens": 0,
+       "costUsd": 0.020499842,
+       "savedUsd": 0.138389218,
+       "offPeakRequests": 2,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.007795920000000001,
+        "cacheRead": 0.004772042,
+        "cacheWrite": 0.0,
+        "output": 0.007931879999999999
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 6,
+       "inputTokens": 9266,
+       "cacheReadTokens": 140963,
+       "cacheWriteTokens": 0,
+       "outputTokens": 3689,
+       "reasoningTokens": 0,
+       "costUsd": 0.007176231,
+       "savedUsd": 0.036063068999999996,
+       "offPeakRequests": 1,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.00253965,
+        "cacheRead": 0.000735981,
+        "cacheWrite": 0.0,
+        "output": 0.0039005999999999997
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 0,
+     "requests": 33,
+     "inputTokens": 39905,
+     "cacheReadTokens": 1143454,
+     "cacheWriteTokens": 0,
+     "outputTokens": 14221,
+     "reasoningTokens": 0,
+     "costUsd": 0.040625975,
+     "savedUsd": 0.402411835,
+     "offPeakRequests": 9,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.013406039999999998,
+      "cacheRead": 0.010115675000000001,
+      "cacheWrite": 0.0,
+      "output": 0.017104259999999996
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 28,
+       "inputTokens": 35718,
+       "cacheReadTokens": 999820,
+       "cacheWriteTokens": 0,
+       "outputTokens": 13196,
+       "reasoningTokens": 0,
+       "costUsd": 0.029567763000000004,
+       "savedUsd": 0.26719028699999997,
+       "offPeakRequests": 6,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.009618299999999998,
+        "cacheRead": 0.005452863000000001,
+        "cacheWrite": 0.0,
+        "output": 0.014496599999999997
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 5,
+       "inputTokens": 4187,
+       "cacheReadTokens": 143634,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1025,
+       "reasoningTokens": 0,
+       "costUsd": 0.011058211999999998,
+       "savedUsd": 0.135221548,
+       "offPeakRequests": 3,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0037877400000000004,
+        "cacheRead": 0.004662812,
+        "cacheWrite": 0.0,
+        "output": 0.00260766
+       },
+       "approximate": false
+      }
+     ]
+    }
+   ],
+   "models": [
+    {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "priced": true,
+     "requests": 353,
+     "inputTokens": 457890,
+     "cacheReadTokens": 11623494,
+     "cacheWriteTokens": 0,
+     "outputTokens": 162670,
+     "reasoningTokens": 0,
+     "costUsd": 0.321050625,
+     "savedUsd": 2.705957625,
+     "offPeakRequests": 144,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.1087224,
+      "cacheRead": 0.055223625,
+      "cacheWrite": 0.0,
+      "output": 0.15710459999999998
+     },
+     "approximate": false
+    },
+    {
+     "provider": "deepseek-official",
+     "model": "deepseek-v4-pro",
+     "priced": true,
+     "requests": 30,
+     "inputTokens": 37082,
+     "cacheReadTokens": 981182,
+     "cacheWriteTokens": 0,
+     "outputTokens": 13564,
+     "reasoningTokens": 0,
+     "costUsd": 0.106040044,
+     "savedUsd": 0.893641496,
+     "offPeakRequests": 16,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.0353595,
+      "cacheRead": 0.030815224,
+      "cacheWrite": 0.0,
+      "output": 0.039865319999999996
+     },
+     "approximate": false
+    }
+   ],
+   "topChats": [
+    {
+     "id": "session-5e0b3f8d-1c27-4a96-b4d3-8f2e6a1c9d70",
+     "title": "Calculator: 7 × 6",
+     "cwd": "/Users/alex",
+     "updatedAgo": 240000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 119,
+     "inputTokens": 153441,
+     "cacheReadTokens": 3907450,
+     "cacheWriteTokens": 0,
+     "outputTokens": 54633,
+     "reasoningTokens": 0,
+     "costUsd": 0.13239810739,
+     "savedUsd": 1.11587572751,
+     "offPeakRequests": 50,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.04466538899999999,
+      "cacheRead": 0.02667204319,
+      "cacheWrite": 0.0,
+      "output": 0.06106067519999999
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-2b8e5d0c-7a41-4c9e-9f36-5e1a0c3d7b42",
+     "title": "Install deps and run tests",
+     "cwd": "/Users/alex/code/storefront",
+     "updatedAgo": 2280000,
+     "scratch": false,
+     "subagents": 2,
+     "requests": 84,
+     "inputTokens": 108894,
+     "cacheReadTokens": 2773029,
+     "cacheWriteTokens": 0,
+     "outputTokens": 38771,
+     "reasoningTokens": 0,
+     "costUsd": 0.09395994717999999,
+     "savedUsd": 0.7919118066199999,
+     "offPeakRequests": 35,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.031698017999999994,
+      "cacheRead": 0.01892854678,
+      "cacheWrite": 0.0,
+      "output": 0.043333382399999995
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-91c4e7a2-5d38-4b1f-8e60-3a9b2c7d1f05",
+     "title": "Brindle 2.4 CLI changes",
+     "cwd": "/Users/alex/code/dsh-codex",
+     "updatedAgo": 7200000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 54,
+     "inputTokens": 69296,
+     "cacheReadTokens": 1764655,
+     "cacheWriteTokens": 0,
+     "outputTokens": 24673,
+     "reasoningTokens": 0,
+     "costUsd": 0.05979269366,
+     "savedUsd": 0.50394387694,
+     "offPeakRequests": 22,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.020171466,
+      "cacheRead": 0.012045438860000002,
+      "cacheWrite": 0.0,
+      "output": 0.027575788799999997
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-89b9d110-593b-4c06-881d-fca8b3dacf4d",
+     "title": "Session log storage explained",
+     "cwd": "/Users/alex/code/dsh-codex",
+     "updatedAgo": 10800000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 34,
+     "inputTokens": 44547,
+     "cacheReadTokens": 1134421,
+     "cacheWriteTokens": 0,
+     "outputTokens": 15861,
+     "reasoningTokens": 0,
+     "costUsd": 0.038438160209999996,
+     "savedUsd": 0.32396392089,
+     "offPeakRequests": 14,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.012967370999999998,
+      "cacheRead": 0.00774349641,
+      "cacheWrite": 0.0,
+      "output": 0.017727292799999995
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-4ec522fd-b66a-4ac2-aa13-3c746daa6a77",
+     "title": "Add --top flag to tally",
+     "cwd": "/Users/alex/code/tally",
+     "updatedAgo": 93600000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 23,
+     "inputTokens": 29698,
+     "cacheReadTokens": 756281,
+     "cacheWriteTokens": 0,
+     "outputTokens": 10574,
+     "reasoningTokens": 0,
+     "costUsd": 0.025625440139999997,
+     "savedUsd": 0.21597594725999997,
+     "offPeakRequests": 10,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.008644913999999998,
+      "cacheRead": 0.005162330939999999,
+      "cacheWrite": 0.0,
+      "output": 0.011818195199999998
+     },
+     "approximate": false
+    }
+   ],
+   "sessions": 17
+  },
+  "month": {
+   "currency": "USD",
+   "totals": {
+    "requests": 1673,
+    "inputTokens": 2144588,
+    "cacheReadTokens": 57436893,
+    "cacheWriteTokens": 0,
+    "outputTokens": 799628,
+    "reasoningTokens": 0,
+    "costUsd": 1.7694788730000002,
+    "savedUsd": 15.189435087000003,
+    "offPeakRequests": 767,
+    "unpricedRequests": 0,
+    "cost": {
+     "input": 0.5879692499999999,
+     "cacheRead": 0.351130743,
+     "cacheWrite": 0.0,
+     "output": 0.8303788799999999
+    },
+    "approximate": false
+   },
+   "days": [
+    {
+     "ago": 29,
+     "requests": 78,
+     "inputTokens": 108535,
+     "cacheReadTokens": 2756371,
+     "cacheWriteTokens": 0,
+     "outputTokens": 37063,
+     "reasoningTokens": 0,
+     "costUsd": 0.06984252299999998,
+     "savedUsd": 0.5920999769999998,
+     "offPeakRequests": 40,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.024466649999999993,
+      "cacheRead": 0.012083673000000003,
+      "cacheWrite": 0.0,
+      "output": 0.0332922
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 78,
+       "inputTokens": 108535,
+       "cacheReadTokens": 2756371,
+       "cacheWriteTokens": 0,
+       "outputTokens": 37063,
+       "reasoningTokens": 0,
+       "costUsd": 0.06984252299999998,
+       "savedUsd": 0.5920999769999998,
+       "offPeakRequests": 40,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.024466649999999993,
+        "cacheRead": 0.012083673000000003,
+        "cacheWrite": 0.0,
+        "output": 0.0332922
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 28,
+     "requests": 42,
+     "inputTokens": 53764,
+     "cacheReadTokens": 1254975,
+     "cacheWriteTokens": 0,
+     "outputTokens": 21378,
+     "reasoningTokens": 0,
+     "costUsd": 0.03819869099999999,
+     "savedUsd": 0.274073709,
+     "offPeakRequests": 20,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.01257735,
+      "cacheRead": 0.005593340999999999,
+      "cacheWrite": 0.0,
+      "output": 0.020028
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 42,
+       "inputTokens": 53764,
+       "cacheReadTokens": 1254975,
+       "cacheWriteTokens": 0,
+       "outputTokens": 21378,
+       "reasoningTokens": 0,
+       "costUsd": 0.03819869099999999,
+       "savedUsd": 0.274073709,
+       "offPeakRequests": 20,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.01257735,
+        "cacheRead": 0.005593340999999999,
+        "cacheWrite": 0.0,
+        "output": 0.020028
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 27,
+     "requests": 25,
+     "inputTokens": 27003,
+     "cacheReadTokens": 811319,
+     "cacheWriteTokens": 0,
+     "outputTokens": 12093,
+     "reasoningTokens": 0,
+     "costUsd": 0.022305663000000003,
+     "savedUsd": 0.19125743699999997,
+     "offPeakRequests": 11,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.006842249999999999,
+      "cacheRead": 0.003903213,
+      "cacheWrite": 0.0,
+      "output": 0.0115602
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 25,
+       "inputTokens": 27003,
+       "cacheReadTokens": 811319,
+       "cacheWriteTokens": 0,
+       "outputTokens": 12093,
+       "reasoningTokens": 0,
+       "costUsd": 0.022305663000000003,
+       "savedUsd": 0.19125743699999997,
+       "offPeakRequests": 11,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.006842249999999999,
+        "cacheRead": 0.003903213,
+        "cacheWrite": 0.0,
+        "output": 0.0115602
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 26,
+     "requests": 38,
+     "inputTokens": 50994,
+     "cacheReadTokens": 1216794,
+     "cacheWriteTokens": 0,
+     "outputTokens": 19485,
+     "reasoningTokens": 0,
+     "costUsd": 0.03482162100000001,
+     "savedUsd": 0.27704457899999996,
+     "offPeakRequests": 18,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.011831849999999998,
+      "cacheRead": 0.005653971,
+      "cacheWrite": 0.0,
+      "output": 0.017335800000000002
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 38,
+       "inputTokens": 50994,
+       "cacheReadTokens": 1216794,
+       "cacheWriteTokens": 0,
+       "outputTokens": 19485,
+       "reasoningTokens": 0,
+       "costUsd": 0.03482162100000001,
+       "savedUsd": 0.27704457899999996,
+       "offPeakRequests": 18,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.011831849999999998,
+        "cacheRead": 0.005653971,
+        "cacheWrite": 0.0,
+        "output": 0.017335800000000002
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 25,
+     "requests": 34,
+     "inputTokens": 36811,
+     "cacheReadTokens": 1147869,
+     "cacheWriteTokens": 0,
+     "outputTokens": 15983,
+     "reasoningTokens": 0,
+     "costUsd": 0.028517480999999997,
+     "savedUsd": 0.269197719,
+     "offPeakRequests": 15,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.00808905,
+      "cacheRead": 0.005493831,
+      "cacheWrite": 0.0,
+      "output": 0.014934599999999998
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 34,
+       "inputTokens": 36811,
+       "cacheReadTokens": 1147869,
+       "cacheWriteTokens": 0,
+       "outputTokens": 15983,
+       "reasoningTokens": 0,
+       "costUsd": 0.028517480999999997,
+       "savedUsd": 0.269197719,
+       "offPeakRequests": 15,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.00808905,
+        "cacheRead": 0.005493831,
+        "cacheWrite": 0.0,
+        "output": 0.014934599999999998
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 24,
+     "requests": 67,
+     "inputTokens": 91979,
+     "cacheReadTokens": 2335804,
+     "cacheWriteTokens": 0,
+     "outputTokens": 31764,
+     "reasoningTokens": 0,
+     "costUsd": 0.062403944999999995,
+     "savedUsd": 0.5395730550000002,
+     "offPeakRequests": 30,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.022373250000000004,
+      "cacheRead": 0.011011695000000002,
+      "cacheWrite": 0.0,
+      "output": 0.029019000000000007
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 67,
+       "inputTokens": 91979,
+       "cacheReadTokens": 2335804,
+       "cacheWriteTokens": 0,
+       "outputTokens": 31764,
+       "reasoningTokens": 0,
+       "costUsd": 0.062403944999999995,
+       "savedUsd": 0.5395730550000002,
+       "offPeakRequests": 30,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.022373250000000004,
+        "cacheRead": 0.011011695000000002,
+        "cacheWrite": 0.0,
+        "output": 0.029019000000000007
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 23,
+     "requests": 0,
+     "inputTokens": 0,
+     "cacheReadTokens": 0,
+     "cacheWriteTokens": 0,
+     "outputTokens": 0,
+     "reasoningTokens": 0,
+     "costUsd": 0,
+     "savedUsd": 0,
+     "offPeakRequests": 0,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.0,
+      "cacheRead": 0.0,
+      "cacheWrite": 0.0,
+      "output": 0.0
+     },
+     "approximate": false,
+     "models": []
+    },
+    {
+     "ago": 22,
+     "requests": 48,
+     "inputTokens": 57541,
+     "cacheReadTokens": 1751399,
+     "cacheWriteTokens": 0,
+     "outputTokens": 18968,
+     "reasoningTokens": 0,
+     "costUsd": 0.03787697400000001,
+     "savedUsd": 0.393711276,
+     "offPeakRequests": 24,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.012863249999999998,
+      "cacheRead": 0.008034924,
+      "cacheWrite": 0.0,
+      "output": 0.0169788
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 48,
+       "inputTokens": 57541,
+       "cacheReadTokens": 1751399,
+       "cacheWriteTokens": 0,
+       "outputTokens": 18968,
+       "reasoningTokens": 0,
+       "costUsd": 0.03787697400000001,
+       "savedUsd": 0.393711276,
+       "offPeakRequests": 24,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.012863249999999998,
+        "cacheRead": 0.008034924,
+        "cacheWrite": 0.0,
+        "output": 0.0169788
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 21,
+     "requests": 66,
+     "inputTokens": 78624,
+     "cacheReadTokens": 2176623,
+     "cacheWriteTokens": 0,
+     "outputTokens": 28672,
+     "reasoningTokens": 0,
+     "costUsd": 0.05735042099999999,
+     "savedUsd": 0.49641267899999997,
+     "offPeakRequests": 28,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.019026149999999995,
+      "cacheRead": 0.010130870999999998,
+      "cacheWrite": 0.0,
+      "output": 0.028193400000000004
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 66,
+       "inputTokens": 78624,
+       "cacheReadTokens": 2176623,
+       "cacheWriteTokens": 0,
+       "outputTokens": 28672,
+       "reasoningTokens": 0,
+       "costUsd": 0.05735042099999999,
+       "savedUsd": 0.49641267899999997,
+       "offPeakRequests": 28,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.019026149999999995,
+        "cacheRead": 0.010130870999999998,
+        "cacheWrite": 0.0,
+        "output": 0.028193400000000004
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 20,
+     "requests": 94,
+     "inputTokens": 112795,
+     "cacheReadTokens": 3223318,
+     "cacheWriteTokens": 0,
+     "outputTokens": 48342,
+     "reasoningTokens": 0,
+     "costUsd": 0.092709045,
+     "savedUsd": 0.7737865049999997,
+     "offPeakRequests": 40,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.02796749999999999,
+      "cacheRead": 0.016490865000000004,
+      "cacheWrite": 0.0,
+      "output": 0.048250679999999976
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 92,
+       "inputTokens": 111635,
+       "cacheReadTokens": 3145441,
+       "cacheWriteTokens": 0,
+       "outputTokens": 47206,
+       "reasoningTokens": 0,
+       "costUsd": 0.087980871,
+       "savedUsd": 0.7241009789999997,
+       "offPeakRequests": 38,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.027201899999999987,
+        "cacheRead": 0.014777571000000003,
+        "cacheWrite": 0.0,
+        "output": 0.04600139999999998
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 2,
+       "inputTokens": 1160,
+       "cacheReadTokens": 77877,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1136,
+       "reasoningTokens": 0,
+       "costUsd": 0.004728174,
+       "savedUsd": 0.049685526,
+       "offPeakRequests": 2,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0007656000000000001,
+        "cacheRead": 0.0017132939999999998,
+        "cacheWrite": 0.0,
+        "output": 0.00224928
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 19,
+     "requests": 43,
+     "inputTokens": 54655,
+     "cacheReadTokens": 1633621,
+     "cacheWriteTokens": 0,
+     "outputTokens": 19720,
+     "reasoningTokens": 0,
+     "costUsd": 0.05800639099999999,
+     "savedUsd": 0.552043609,
+     "offPeakRequests": 18,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.018495150000000002,
+      "cacheRead": 0.014483080999999998,
+      "cacheWrite": 0.0,
+      "output": 0.025028159999999994
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 38,
+       "inputTokens": 48393,
+       "cacheReadTokens": 1423802,
+       "cacheWriteTokens": 0,
+       "outputTokens": 16823,
+       "reasoningTokens": 0,
+       "costUsd": 0.034561563,
+       "savedUsd": 0.323483937,
+       "offPeakRequests": 16,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.011865450000000001,
+        "cacheRead": 0.0066017129999999995,
+        "cacheWrite": 0.0,
+        "output": 0.01609439999999999
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 5,
+       "inputTokens": 6262,
+       "cacheReadTokens": 209819,
+       "cacheWriteTokens": 0,
+       "outputTokens": 2897,
+       "reasoningTokens": 0,
+       "costUsd": 0.023444827999999997,
+       "savedUsd": 0.22855967200000005,
+       "offPeakRequests": 2,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0066297000000000005,
+        "cacheRead": 0.007881368,
+        "cacheWrite": 0.0,
+        "output": 0.00893376
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 18,
+     "requests": 57,
+     "inputTokens": 78880,
+     "cacheReadTokens": 2050535,
+     "cacheWriteTokens": 0,
+     "outputTokens": 26505,
+     "reasoningTokens": 0,
+     "costUsd": 0.05208190800000002,
+     "savedUsd": 0.4764249420000002,
+     "offPeakRequests": 25,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.018071550000000002,
+      "cacheRead": 0.009722958,
+      "cacheWrite": 0.0,
+      "output": 0.024287399999999994
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 57,
+       "inputTokens": 78880,
+       "cacheReadTokens": 2050535,
+       "cacheWriteTokens": 0,
+       "outputTokens": 26505,
+       "reasoningTokens": 0,
+       "costUsd": 0.05208190800000002,
+       "savedUsd": 0.4764249420000002,
+       "offPeakRequests": 25,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.018071550000000002,
+        "cacheRead": 0.009722958,
+        "cacheWrite": 0.0,
+        "output": 0.024287399999999994
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 17,
+     "requests": 64,
+     "inputTokens": 80773,
+     "cacheReadTokens": 2110779,
+     "cacheWriteTokens": 0,
+     "outputTokens": 30720,
+     "reasoningTokens": 0,
+     "costUsd": 0.079167008,
+     "savedUsd": 0.6832084419999999,
+     "offPeakRequests": 25,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.027208949999999996,
+      "cacheRead": 0.017327257999999998,
+      "cacheWrite": 0.0,
+      "output": 0.034630799999999996
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 57,
+       "inputTokens": 70271,
+       "cacheReadTokens": 1853507,
+       "cacheWriteTokens": 0,
+       "outputTokens": 28817,
+       "reasoningTokens": 0,
+       "costUsd": 0.055062047999999995,
+       "savedUsd": 0.4427590019999999,
+       "offPeakRequests": 22,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.016978949999999996,
+        "cacheRead": 0.009035897999999999,
+        "cacheWrite": 0.0,
+        "output": 0.0290472
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 7,
+       "inputTokens": 10502,
+       "cacheReadTokens": 257272,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1903,
+       "reasoningTokens": 0,
+       "costUsd": 0.02410496,
+       "savedUsd": 0.24044944,
+       "offPeakRequests": 3,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.010230000000000001,
+        "cacheRead": 0.008291360000000001,
+        "cacheWrite": 0.0,
+        "output": 0.0055836
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 16,
+     "requests": 36,
+     "inputTokens": 50284,
+     "cacheReadTokens": 1133427,
+     "cacheWriteTokens": 0,
+     "outputTokens": 16414,
+     "reasoningTokens": 0,
+     "costUsd": 0.027263843999999995,
+     "savedUsd": 0.22238130599999997,
+     "offPeakRequests": 23,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.00978045,
+      "cacheRead": 0.004538394,
+      "cacheWrite": 0.0,
+      "output": 0.012945
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 36,
+       "inputTokens": 50284,
+       "cacheReadTokens": 1133427,
+       "cacheWriteTokens": 0,
+       "outputTokens": 16414,
+       "reasoningTokens": 0,
+       "costUsd": 0.027263843999999995,
+       "savedUsd": 0.22238130599999997,
+       "offPeakRequests": 23,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.00978045,
+        "cacheRead": 0.004538394,
+        "cacheWrite": 0.0,
+        "output": 0.012945
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 15,
+     "requests": 127,
+     "inputTokens": 149414,
+     "cacheReadTokens": 4408004,
+     "cacheWriteTokens": 0,
+     "outputTokens": 63466,
+     "reasoningTokens": 0,
+     "costUsd": 0.14578503500000006,
+     "savedUsd": 1.247040985,
+     "offPeakRequests": 61,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.04503926999999999,
+      "cacheRead": 0.030438545000000004,
+      "cacheWrite": 0.0,
+      "output": 0.07030722
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 117,
+       "inputTokens": 135831,
+       "cacheReadTokens": 4058546,
+       "cacheWriteTokens": 0,
+       "outputTokens": 58937,
+       "reasoningTokens": 0,
+       "costUsd": 0.10465860900000006,
+       "savedUsd": 0.8925917909999999,
+       "offPeakRequests": 56,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.030824849999999994,
+        "cacheRead": 0.018216159000000006,
+        "cacheWrite": 0.0,
+        "output": 0.0556176
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 10,
+       "inputTokens": 13583,
+       "cacheReadTokens": 349458,
+       "cacheWriteTokens": 0,
+       "outputTokens": 4529,
+       "reasoningTokens": 0,
+       "costUsd": 0.041126426,
+       "savedUsd": 0.35444919399999997,
+       "offPeakRequests": 5,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.014214420000000002,
+        "cacheRead": 0.012222386,
+        "cacheWrite": 0.0,
+        "output": 0.014689619999999999
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 14,
+     "requests": 53,
+     "inputTokens": 77915,
+     "cacheReadTokens": 1680635,
+     "cacheWriteTokens": 0,
+     "outputTokens": 25294,
+     "reasoningTokens": 0,
+     "costUsd": 0.08347990600000002,
+     "savedUsd": 0.6325892839999999,
+     "offPeakRequests": 19,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.02984601,
+      "cacheRead": 0.017011395999999998,
+      "cacheWrite": 0.0,
+      "output": 0.0366225
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 44,
+       "inputTokens": 63738,
+       "cacheReadTokens": 1406287,
+       "cacheWriteTokens": 0,
+       "outputTokens": 19836,
+       "reasoningTokens": 0,
+       "costUsd": 0.042513090000000024,
+       "savedUsd": 0.3411840599999999,
+       "offPeakRequests": 15,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.01543095,
+        "cacheRead": 0.00696294,
+        "cacheWrite": 0.0,
+        "output": 0.020119199999999997
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 9,
+       "inputTokens": 14177,
+       "cacheReadTokens": 274348,
+       "cacheWriteTokens": 0,
+       "outputTokens": 5458,
+       "reasoningTokens": 0,
+       "costUsd": 0.040966816,
+       "savedUsd": 0.291405224,
+       "offPeakRequests": 4,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.01441506,
+        "cacheRead": 0.010048455999999997,
+        "cacheWrite": 0.0,
+        "output": 0.016503300000000002
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 13,
+     "requests": 33,
+     "inputTokens": 37835,
+     "cacheReadTokens": 1078193,
+     "cacheWriteTokens": 0,
+     "outputTokens": 15738,
+     "reasoningTokens": 0,
+     "costUsd": 0.049177414,
+     "savedUsd": 0.440503076,
+     "offPeakRequests": 13,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.014926650000000003,
+      "cacheRead": 0.012444603999999998,
+      "cacheWrite": 0.0,
+      "output": 0.021806159999999998
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 6,
+       "inputTokens": 7586,
+       "cacheReadTokens": 229482,
+       "cacheWriteTokens": 0,
+       "outputTokens": 2882,
+       "reasoningTokens": 0,
+       "costUsd": 0.025430086000000005,
+       "savedUsd": 0.24545965400000003,
+       "offPeakRequests": 3,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.007735200000000001,
+        "cacheRead": 0.008464125999999999,
+        "cacheWrite": 0.0,
+        "output": 0.009230760000000001
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 27,
+       "inputTokens": 30249,
+       "cacheReadTokens": 848711,
+       "cacheWriteTokens": 0,
+       "outputTokens": 12856,
+       "reasoningTokens": 0,
+       "costUsd": 0.023747327999999998,
+       "savedUsd": 0.19504342199999997,
+       "offPeakRequests": 10,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.007191450000000002,
+        "cacheRead": 0.003980477999999999,
+        "cacheWrite": 0.0,
+        "output": 0.012575399999999997
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 12,
+     "requests": 108,
+     "inputTokens": 149455,
+     "cacheReadTokens": 3643449,
+     "cacheWriteTokens": 0,
+     "outputTokens": 48802,
+     "reasoningTokens": 0,
+     "costUsd": 0.105337573,
+     "savedUsd": 0.8947346570000002,
+     "offPeakRequests": 54,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.03802104,
+      "cacheRead": 0.02020027299999999,
+      "cacheWrite": 0.0,
+      "output": 0.047116260000000014
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 102,
+       "inputTokens": 141506,
+       "cacheReadTokens": 3427361,
+       "cacheWriteTokens": 0,
+       "outputTokens": 46065,
+       "reasoningTokens": 0,
+       "costUsd": 0.089918037,
+       "savedUsd": 0.7568705130000002,
+       "offPeakRequests": 48,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0327747,
+        "cacheRead": 0.015446336999999992,
+        "cacheWrite": 0.0,
+        "output": 0.04169700000000001
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 6,
+       "inputTokens": 7949,
+       "cacheReadTokens": 216088,
+       "cacheWriteTokens": 0,
+       "outputTokens": 2737,
+       "reasoningTokens": 0,
+       "costUsd": 0.015419535999999998,
+       "savedUsd": 0.13786414400000002,
+       "offPeakRequests": 6,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.00524634,
+        "cacheRead": 0.004753935999999999,
+        "cacheWrite": 0.0,
+        "output": 0.0054192599999999995
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 11,
+     "requests": 34,
+     "inputTokens": 40570,
+     "cacheReadTokens": 1089678,
+     "cacheWriteTokens": 0,
+     "outputTokens": 15783,
+     "reasoningTokens": 0,
+     "costUsd": 0.04778290399999999,
+     "savedUsd": 0.365377996,
+     "offPeakRequests": 16,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.0163515,
+      "cacheRead": 0.009866924,
+      "cacheWrite": 0.0,
+      "output": 0.021564479999999997
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 8,
+       "inputTokens": 10763,
+       "cacheReadTokens": 239611,
+       "cacheWriteTokens": 0,
+       "outputTokens": 3577,
+       "reasoningTokens": 0,
+       "costUsd": 0.025258244,
+       "savedUsd": 0.171246856,
+       "offPeakRequests": 6,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.009560100000000002,
+        "cacheRead": 0.005905064,
+        "cacheWrite": 0.0,
+        "output": 0.009793079999999997
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 26,
+       "inputTokens": 29807,
+       "cacheReadTokens": 850067,
+       "cacheWriteTokens": 0,
+       "outputTokens": 12206,
+       "reasoningTokens": 0,
+       "costUsd": 0.02252465999999999,
+       "savedUsd": 0.19413113999999998,
+       "offPeakRequests": 10,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0067913999999999995,
+        "cacheRead": 0.00396186,
+        "cacheWrite": 0.0,
+        "output": 0.0117714
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 10,
+     "requests": 57,
+     "inputTokens": 81443,
+     "cacheReadTokens": 2068907,
+     "cacheWriteTokens": 0,
+     "outputTokens": 24875,
+     "reasoningTokens": 0,
+     "costUsd": 0.049652838,
+     "savedUsd": 0.453509112,
+     "offPeakRequests": 29,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.01819995,
+      "cacheRead": 0.009255287999999997,
+      "cacheWrite": 0.0,
+      "output": 0.022197599999999994
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 57,
+       "inputTokens": 81443,
+       "cacheReadTokens": 2068907,
+       "cacheWriteTokens": 0,
+       "outputTokens": 24875,
+       "reasoningTokens": 0,
+       "costUsd": 0.049652838,
+       "savedUsd": 0.453509112,
+       "offPeakRequests": 29,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.01819995,
+        "cacheRead": 0.009255287999999997,
+        "cacheWrite": 0.0,
+        "output": 0.022197599999999994
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 9,
+     "requests": 0,
+     "inputTokens": 0,
+     "cacheReadTokens": 0,
+     "cacheWriteTokens": 0,
+     "outputTokens": 0,
+     "reasoningTokens": 0,
+     "costUsd": 0,
+     "savedUsd": 0,
+     "offPeakRequests": 0,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.0,
+      "cacheRead": 0.0,
+      "cacheWrite": 0.0,
+      "output": 0.0
+     },
+     "approximate": false,
+     "models": []
+    },
+    {
+     "ago": 8,
+     "requests": 61,
+     "inputTokens": 83297,
+     "cacheReadTokens": 2067497,
+     "cacheWriteTokens": 0,
+     "outputTokens": 32626,
+     "reasoningTokens": 0,
+     "costUsd": 0.07526029800000002,
+     "savedUsd": 0.5598195419999998,
+     "offPeakRequests": 27,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.025153080000000005,
+      "cacheRead": 0.013077797999999996,
+      "cacheWrite": 0.0,
+      "output": 0.03702942000000001
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 57,
+       "inputTokens": 77258,
+       "cacheReadTokens": 1936536,
+       "cacheWriteTokens": 0,
+       "outputTokens": 29430,
+       "reasoningTokens": 0,
+       "costUsd": 0.055192470000000014,
+       "savedUsd": 0.4423803299999999,
+       "offPeakRequests": 25,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.018399300000000004,
+        "cacheRead": 0.009028169999999997,
+        "cacheWrite": 0.0,
+        "output": 0.027765000000000005
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 4,
+       "inputTokens": 6039,
+       "cacheReadTokens": 130961,
+       "cacheWriteTokens": 0,
+       "outputTokens": 3196,
+       "reasoningTokens": 0,
+       "costUsd": 0.020067828,
+       "savedUsd": 0.117439212,
+       "offPeakRequests": 2,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.006753780000000001,
+        "cacheRead": 0.0040496279999999996,
+        "cacheWrite": 0.0,
+        "output": 0.009264419999999999
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 7,
+     "requests": 47,
+     "inputTokens": 53708,
+     "cacheReadTokens": 1493125,
+     "cacheWriteTokens": 0,
+     "outputTokens": 22014,
+     "reasoningTokens": 0,
+     "costUsd": 0.03893795399999998,
+     "savedUsd": 0.325629696,
+     "offPeakRequests": 22,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.012424649999999999,
+      "cacheRead": 0.006645504,
+      "cacheWrite": 0.0,
+      "output": 0.019867800000000005
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 47,
+       "inputTokens": 53708,
+       "cacheReadTokens": 1493125,
+       "cacheWriteTokens": 0,
+       "outputTokens": 22014,
+       "reasoningTokens": 0,
+       "costUsd": 0.03893795399999998,
+       "savedUsd": 0.325629696,
+       "offPeakRequests": 22,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.012424649999999999,
+        "cacheRead": 0.006645504,
+        "cacheWrite": 0.0,
+        "output": 0.019867800000000005
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 6,
+     "requests": 107,
+     "inputTokens": 136173,
+     "cacheReadTokens": 3819169,
+     "cacheWriteTokens": 0,
+     "outputTokens": 52164,
+     "reasoningTokens": 0,
+     "costUsd": 0.11900303999999995,
+     "savedUsd": 1.0518762299999995,
+     "offPeakRequests": 46,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.040046189999999995,
+      "cacheRead": 0.02470958999999999,
+      "cacheWrite": 0.0,
+      "output": 0.05424726
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 101,
+       "inputTokens": 126034,
+       "cacheReadTokens": 3584689,
+       "cacheWriteTokens": 0,
+       "outputTokens": 49902,
+       "reasoningTokens": 0,
+       "costUsd": 0.09406335599999996,
+       "savedUsd": 0.8214803939999996,
+       "offPeakRequests": 43,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.030133649999999994,
+        "cacheRead": 0.016764905999999993,
+        "cacheWrite": 0.0,
+        "output": 0.0471648
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 6,
+       "inputTokens": 10139,
+       "cacheReadTokens": 234480,
+       "cacheWriteTokens": 0,
+       "outputTokens": 2262,
+       "reasoningTokens": 0,
+       "costUsd": 0.024939683999999997,
+       "savedUsd": 0.230395836,
+       "offPeakRequests": 3,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.009912540000000001,
+        "cacheRead": 0.007944683999999999,
+        "cacheWrite": 0.0,
+        "output": 0.007082459999999999
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 5,
+     "requests": 48,
+     "inputTokens": 58950,
+     "cacheReadTokens": 1678587,
+     "cacheWriteTokens": 0,
+     "outputTokens": 26037,
+     "reasoningTokens": 0,
+     "costUsd": 0.062260943000000006,
+     "savedUsd": 0.49344792699999995,
+     "offPeakRequests": 19,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.01855116,
+      "cacheRead": 0.012141382999999999,
+      "cacheWrite": 0.0,
+      "output": 0.031568399999999996
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 43,
+       "inputTokens": 54120,
+       "cacheReadTokens": 1548114,
+       "cacheWriteTokens": 0,
+       "outputTokens": 23537,
+       "reasoningTokens": 0,
+       "costUsd": 0.042662991000000004,
+       "savedUsd": 0.346302159,
+       "offPeakRequests": 18,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.012323399999999998,
+        "cacheRead": 0.007067390999999999,
+        "cacheWrite": 0.0,
+        "output": 0.023272199999999996
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 5,
+       "inputTokens": 4830,
+       "cacheReadTokens": 130473,
+       "cacheWriteTokens": 0,
+       "outputTokens": 2500,
+       "reasoningTokens": 0,
+       "costUsd": 0.019597952000000002,
+       "savedUsd": 0.14714576799999998,
+       "offPeakRequests": 1,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0062277600000000015,
+        "cacheRead": 0.005073991999999999,
+        "cacheWrite": 0.0,
+        "output": 0.0082962
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 4,
+     "requests": 103,
+     "inputTokens": 127905,
+     "cacheReadTokens": 3606046,
+     "cacheWriteTokens": 0,
+     "outputTokens": 48492,
+     "reasoningTokens": 0,
+     "costUsd": 0.10145391800000003,
+     "savedUsd": 0.9182593120000002,
+     "offPeakRequests": 47,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.03281427,
+      "cacheRead": 0.020737567999999998,
+      "cacheWrite": 0.0,
+      "output": 0.04790208
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 99,
+       "inputTokens": 124469,
+       "cacheReadTokens": 3462509,
+       "cacheWriteTokens": 0,
+       "outputTokens": 46694,
+       "reasoningTokens": 0,
+       "costUsd": 0.08698324200000003,
+       "savedUsd": 0.7763311080000002,
+       "offPeakRequests": 45,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.028753949999999997,
+        "cacheRead": 0.015843491999999997,
+        "cacheWrite": 0.0,
+        "output": 0.0423858
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 4,
+       "inputTokens": 3436,
+       "cacheReadTokens": 143537,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1798,
+       "reasoningTokens": 0,
+       "costUsd": 0.014470676000000002,
+       "savedUsd": 0.141928204,
+       "offPeakRequests": 2,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.00406032,
+        "cacheRead": 0.004894076,
+        "cacheWrite": 0.0,
+        "output": 0.00551628
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 3,
+     "requests": 10,
+     "inputTokens": 11893,
+     "cacheReadTokens": 330398,
+     "cacheWriteTokens": 0,
+     "outputTokens": 4183,
+     "reasoningTokens": 0,
+     "costUsd": 0.035738934,
+     "savedUsd": 0.330909546,
+     "offPeakRequests": 4,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.01173744,
+      "cacheRead": 0.011410674,
+      "cacheWrite": 0.0,
+      "output": 0.012590820000000003
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 10,
+       "inputTokens": 11893,
+       "cacheReadTokens": 330398,
+       "cacheWriteTokens": 0,
+       "outputTokens": 4183,
+       "reasoningTokens": 0,
+       "costUsd": 0.035738934,
+       "savedUsd": 0.330909546,
+       "offPeakRequests": 4,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.01173744,
+        "cacheRead": 0.011410674,
+        "cacheWrite": 0.0,
+        "output": 0.012590820000000003
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 2,
+     "requests": 62,
+     "inputTokens": 86739,
+     "cacheReadTokens": 2206238,
+     "cacheWriteTokens": 0,
+     "outputTokens": 25376,
+     "reasoningTokens": 0,
+     "costUsd": 0.05620190699999998,
+     "savedUsd": 0.525843843,
+     "offPeakRequests": 24,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.020953199999999998,
+      "cacheRead": 0.010731507000000005,
+      "cacheWrite": 0.0,
+      "output": 0.0245172
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 62,
+       "inputTokens": 86739,
+       "cacheReadTokens": 2206238,
+       "cacheWriteTokens": 0,
+       "outputTokens": 25376,
+       "reasoningTokens": 0,
+       "costUsd": 0.05620190699999998,
+       "savedUsd": 0.525843843,
+       "offPeakRequests": 24,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.020953199999999998,
+        "cacheRead": 0.010731507000000005,
+        "cacheWrite": 0.0,
+        "output": 0.0245172
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 1,
+     "requests": 13,
+     "inputTokens": 19387,
+     "cacheReadTokens": 415885,
+     "cacheWriteTokens": 0,
+     "outputTokens": 7345,
+     "reasoningTokens": 0,
+     "costUsd": 0.026592697000000002,
+     "savedUsd": 0.225328313,
+     "offPeakRequests": 5,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.00997686,
+      "cacheRead": 0.006898417,
+      "cacheWrite": 0.0,
+      "output": 0.009717420000000001
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 4,
+       "inputTokens": 5814,
+       "cacheReadTokens": 139512,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1421,
+       "reasoningTokens": 0,
+       "costUsd": 0.016721386,
+       "savedUsd": 0.163406474,
+       "offPeakRequests": 1,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.00665346,
+        "cacheRead": 0.005634706,
+        "cacheWrite": 0.0,
+        "output": 0.00443322
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 9,
+       "inputTokens": 13573,
+       "cacheReadTokens": 276373,
+       "cacheWriteTokens": 0,
+       "outputTokens": 5924,
+       "reasoningTokens": 0,
+       "costUsd": 0.009871311,
+       "savedUsd": 0.06192183899999999,
+       "offPeakRequests": 4,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0033234000000000007,
+        "cacheRead": 0.001263711,
+        "cacheWrite": 0.0,
+        "output": 0.0052842
+       },
+       "approximate": false
+      }
+     ]
+    },
+    {
+     "ago": 0,
+     "requests": 118,
+     "inputTokens": 147266,
+     "cacheReadTokens": 4248248,
+     "cacheWriteTokens": 0,
+     "outputTokens": 60326,
+     "reasoningTokens": 0,
+     "costUsd": 0.11226799699999998,
+     "savedUsd": 0.9833503330000003,
+     "offPeakRequests": 64,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.034334579999999996,
+      "cacheRead": 0.021093197,
+      "cacheWrite": 0.0,
+      "output": 0.05684021999999998
+     },
+     "approximate": false,
+     "models": [
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-flash",
+       "priced": true,
+       "requests": 115,
+       "inputTokens": 144559,
+       "cacheReadTokens": 4184488,
+       "cacheWriteTokens": 0,
+       "outputTokens": 59027,
+       "reasoningTokens": 0,
+       "costUsd": 0.10155668099999998,
+       "savedUsd": 0.9105366690000003,
+       "offPeakRequests": 63,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.031121699999999995,
+        "cacheRead": 0.018582381000000002,
+        "cacheWrite": 0.0,
+        "output": 0.051852599999999985
+       },
+       "approximate": false
+      },
+      {
+       "provider": "deepseek-official",
+       "model": "deepseek-v4-pro",
+       "priced": true,
+       "requests": 3,
+       "inputTokens": 2707,
+       "cacheReadTokens": 63760,
+       "cacheWriteTokens": 0,
+       "outputTokens": 1299,
+       "reasoningTokens": 0,
+       "costUsd": 0.010711316,
+       "savedUsd": 0.072813664,
+       "offPeakRequests": 1,
+       "unpricedRequests": 0,
+       "cost": {
+        "input": 0.0032128800000000004,
+        "cacheRead": 0.002510816,
+        "cacheWrite": 0.0,
+        "output": 0.00498762
+       },
+       "approximate": false
+      }
+     ]
+    }
+   ],
+   "models": [
+    {
+     "provider": "deepseek-official",
+     "model": "deepseek-flash",
+     "priced": true,
+     "requests": 1584,
+     "inputTokens": 2027748,
+     "cacheReadTokens": 54409817,
+     "cacheWriteTokens": 0,
+     "outputTokens": 757850,
+     "reasoningTokens": 0,
+     "costUsd": 1.426752027,
+     "savedUsd": 12.266276673000004,
+     "offPeakRequests": 722,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.47061464999999986,
+      "cacheRead": 0.25033217700000004,
+      "cacheWrite": 0.0,
+      "output": 0.7058051999999999
+     },
+     "approximate": false
+    },
+    {
+     "provider": "deepseek-official",
+     "model": "deepseek-v4-pro",
+     "priced": true,
+     "requests": 89,
+     "inputTokens": 116840,
+     "cacheReadTokens": 3027076,
+     "cacheWriteTokens": 0,
+     "outputTokens": 41778,
+     "reasoningTokens": 0,
+     "costUsd": 0.3427268460000001,
+     "savedUsd": 2.923158414,
+     "offPeakRequests": 45,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.11735460000000002,
+      "cacheRead": 0.10079856599999999,
+      "cacheWrite": 0.0,
+      "output": 0.12457367999999999
+     },
+     "approximate": false
+    }
+   ],
+   "topChats": [
+    {
+     "id": "session-5e0b3f8d-1c27-4a96-b4d3-8f2e6a1c9d70",
+     "title": "Calculator: 7 × 6",
+     "cwd": "/Users/alex",
+     "updatedAgo": 240000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 519,
+     "inputTokens": 664822,
+     "cacheReadTokens": 17805437,
+     "cacheWriteTokens": 0,
+     "outputTokens": 247885,
+     "reasoningTokens": 0,
+     "costUsd": 0.5485384506300001,
+     "savedUsd": 4.708724876970001,
+     "offPeakRequests": 238,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.18227046749999998,
+      "cacheRead": 0.10885053033,
+      "cacheWrite": 0.0,
+      "output": 0.2574174528
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-2b8e5d0c-7a41-4c9e-9f36-5e1a0c3d7b42",
+     "title": "Install deps and run tests",
+     "cwd": "/Users/alex/code/storefront",
+     "updatedAgo": 2280000,
+     "scratch": false,
+     "subagents": 2,
+     "requests": 368,
+     "inputTokens": 471809,
+     "cacheReadTokens": 12636116,
+     "cacheWriteTokens": 0,
+     "outputTokens": 175918,
+     "reasoningTokens": 0,
+     "costUsd": 0.38928535206000003,
+     "savedUsd": 3.341675719140001,
+     "offPeakRequests": 169,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.12935323499999998,
+      "cacheRead": 0.07724876346000001,
+      "cacheWrite": 0.0,
+      "output": 0.1826833536
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-91c4e7a2-5d38-4b1f-8e60-3a9b2c7d1f05",
+     "title": "Brindle 2.4 CLI changes",
+     "cwd": "/Users/alex/code/dsh-codex",
+     "updatedAgo": 7200000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 234,
+     "inputTokens": 300242,
+     "cacheReadTokens": 8041165,
+     "cacheWriteTokens": 0,
+     "outputTokens": 111948,
+     "reasoningTokens": 0,
+     "costUsd": 0.24772704222000005,
+     "savedUsd": 2.1265209121800006,
+     "offPeakRequests": 107,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.082315695,
+      "cacheRead": 0.04915830402000001,
+      "cacheWrite": 0.0,
+      "output": 0.1162530432
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-89b9d110-593b-4c06-881d-fca8b3dacf4d",
+     "title": "Session log storage explained",
+     "cwd": "/Users/alex/code/dsh-codex",
+     "updatedAgo": 10800000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 151,
+     "inputTokens": 193013,
+     "cacheReadTokens": 5169320,
+     "cacheWriteTokens": 0,
+     "outputTokens": 71967,
+     "reasoningTokens": 0,
+     "costUsd": 0.15925309857,
+     "savedUsd": 1.3670491578300001,
+     "offPeakRequests": 69,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.05291723249999999,
+      "cacheRead": 0.03160176687,
+      "cacheWrite": 0.0,
+      "output": 0.07473409919999999
+     },
+     "approximate": false
+    },
+    {
+     "id": "session-4ec522fd-b66a-4ac2-aa13-3c746daa6a77",
+     "title": "Add --top flag to tally",
+     "cwd": "/Users/alex/code/tally",
+     "updatedAgo": 93600000,
+     "scratch": false,
+     "subagents": 0,
+     "requests": 100,
+     "inputTokens": 128675,
+     "cacheReadTokens": 3446214,
+     "cacheWriteTokens": 0,
+     "outputTokens": 47978,
+     "reasoningTokens": 0,
+     "costUsd": 0.10616873238,
+     "savedUsd": 0.9113661052200002,
+     "offPeakRequests": 46,
+     "unpricedRequests": 0,
+     "cost": {
+      "input": 0.03527815499999999,
+      "cacheRead": 0.02106784458,
+      "cacheWrite": 0.0,
+      "output": 0.04982273279999999
+     },
+     "approximate": false
+    }
+   ],
+   "sessions": 48
+  }
+ }
 }

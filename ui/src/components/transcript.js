@@ -1,14 +1,16 @@
-// The conversation: user bubbles, Markdown answers, reasoning, tool rows,
-// turn notices and the live (streaming) tail of the running step.
+// The conversation: user bubbles, Markdown answers, work groups (reasoning
+// and tool rows behind one status line), turn notices and the live
+// (streaming) tail of the running step.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, duration } from '../i18n.js';
 import { renderMarkdown, onMarkdownClick } from '../markdown.js';
 import { IconAlert, IconArrowDown, IconChevronRight, IconFile } from '../icons.js';
 import { Shimmer, Thumb } from './common.js';
-import { ToolItem } from './tools.js';
 import { openSettings, openPanel, openFile } from '../state.js';
 import { collectChanges, Counts } from './panel.js';
+import { staysVisible } from '../worklog.js';
+import { WorkGroup, WorkItem, ReasoningLine, ThinkingRow, TurnLine, useWorkPolicy } from './worklog.js';
 
 export function Markdown({ text, class: klass }) {
   const htmlText = useMemo(() => renderMarkdown(text), [text]);
@@ -87,58 +89,115 @@ function ChangesCard({ turn, cwd }) {
   </div>`;
 }
 
-/** Work items between the prompt and the final answer can fold under "Worked for …". */
-function Turn({ turn, live, deltas, cwd }) {
-  const [folded, setFolded] = useState(false);
-  const items = turn.items;
-  const firstWork = items.findIndex((x) => x.kind !== 'user');
-  let lastTool = -1;
-  items.forEach((x, i) => { if (x.kind === 'tool') lastTool = i; });
-  const done = !live && turn.end != null && turn.status === 'completed';
-  const showWorked = done && lastTool >= 0 && turn.start != null;
+const SOURCES = new Set(['goal', 'schedule', 'team-message']);
+
+/**
+ * The running turn's segments plus what streams: reasoning and starting tool
+ * calls join the open group (or open one), text closes it.
+ */
+function liveSegments(turn, deltas) {
+  const segs = [...turn.segments];
+  let groups = turn.groups;
+  const last = segs[segs.length - 1];
+  let open = null;
+  if (last?.kind === 'group') {
+    open = { ...last, closed: false, live: [], prep: null };
+    segs[segs.length - 1] = open;
+  }
+  const blocks = deltas && deltas.turn === turn.turn
+    ? Object.entries(deltas.blocks).map(([i, b]) => ({ ...b, index: Number(i) })).sort((a, b) => a.index - b.index)
+    : [];
+  let streaming = false;
+  blocks.forEach((b, k) => {
+    const next = blocks[k + 1];
+    if (b.type === 'text') {
+      if (!b.text) return;
+      if (open) open.closed = true;
+      open = null;
+      streaming = true;
+      segs.push({ kind: 'live-text', key: `live-t-${deltas.key}-${b.index}`, text: b.text, streaming: !next });
+      return;
+    }
+    if (b.type === 'reasoning' && !b.text) return;
+    if (!open) {
+      open = { kind: 'group', key: `g:${groups++}`, items: [], counts: [], closed: false, live: [], prep: null };
+      segs.push(open);
+    }
+    // Reasoning stays "Thinking" only until the next block starts streaming.
+    if (b.type === 'reasoning') open.live.push({ key: `live-r-${deltas.key}-${b.index}`, text: b.text, live: !next, ms: next ? next.start - b.start : null });
+    else if (b.type === 'tool-call') open.prep = { name: b.text };
+  });
+  return { segs, open, streaming };
+}
+
+/**
+ * One turn in the current work-details view (dsh `POLICIES`): work groups
+ * behind status lines, and once it is done, folded under one turn line.
+ */
+function Turn({ turn, live, deltas, cwd, policy }) {
+  const [unfolded, setUnfolded] = useState(false);
+  const work = turn.work;
+  const ended = !live && turn.end != null;
+  const waiting = turn.items.some((x) => x.kind === 'tool' && x.approval && !x.approval.outcome);
+  // Stopped, failed and interrupted turns, steered turns and pending approvals stay open.
+  const alwaysOpen = !ended || ['aborted', 'error', 'interrupted'].includes(turn.status) || work.steered || waiting;
+  const foldable = ended && policy.foldCompletedTurns && !alwaysOpen && work.hidden;
+  const folded = foldable && !unfolded;
+  const flat = policy.stepGrouping === 'none' || (policy.stepGrouping === 'history' && !ended);
+  const verbose = policy.stepGrouping === 'none';
+
+  const { segs, open, streaming } = live ? liveSegments(turn, deltas) : { segs: turn.segments, open: null, streaming: false };
 
   const render = (x) => {
     switch (x.kind) {
       case 'user': return html`<${UserBubble} key=${x.key} text=${x.text} images=${x.images} />`;
-      case 'reasoning': return html`<${Reasoning} key=${x.key} text=${x.text} ms=${x.ms} />`;
       case 'text': return html`<${Markdown} key=${x.key} text=${x.text} />`;
-      case 'tool': return html`<${ToolItem} key=${x.key} item=${x} cwd=${cwd} />`;
       case 'notice': return html`<${Notice} key=${x.key} item=${x} />`;
       case 'divider': return html`<div key=${x.key} class="divider"><span>${t.compacted}</span></div>`;
       default: return null;
     }
   };
+  // The verbose view keeps today's open reasoning; the others show one line.
+  const reasoning = (b) => (verbose
+    ? html`<${Reasoning} key=${b.key} text=${b.text} ms=${b.ms} live=${!!b.live} />`
+    : html`<${ReasoningLine} key=${b.key} text=${b.text} ms=${b.ms} live=${!!b.live} preview=${policy.settledReasoningPreview} />`);
 
   const out = [];
-  items.forEach((x, i) => {
-    if (folded && showWorked && i >= firstWork && i <= lastTool) return;
-    out.push(render(x));
-    if (showWorked && i === lastTool) {
-      out.push(html`<button key="worked" type="button" class=${cx('worked', folded && 'is-folded')} onClick=${() => setFolded((v) => !v)}>
-        <span class="worked-line" /><span class="worked-label">${t.workedFor(duration(turn.end - turn.start))}<${IconChevronRight} size=${11} /></span><span class="worked-line" />
-      </button>`);
+  let lineShown = false;
+  const line = () => {
+    if (lineShown || !ended) return;
+    lineShown = true;
+    out.push(html`<${TurnLine} key="turn-line" turn=${turn} folded=${folded} foldable=${foldable} onToggle=${() => setUnfolded((v) => !v)} />`);
+  };
+  for (const seg of segs) {
+    if (seg.kind === 'live-text') {
+      out.push(html`<${Markdown} key=${seg.key} text=${seg.text} class=${seg.streaming ? 'is-streaming' : ''} />`);
+      continue;
     }
-  });
+    if (seg.kind === 'item') {
+      const x = seg.item;
+      // The turn line sits under the prompt (and a goal, reminder or team line).
+      if (x.kind !== 'user' && !(x.kind === 'notice' && SOURCES.has(x.code))) line();
+      if (folded && x.key !== work.answerKey && !staysVisible(x)) continue;
+      out.push(render(x));
+      continue;
+    }
+    line();
+    if (folded) continue;
+    if (flat) {
+      for (const x of seg.items) out.push(x.kind === 'reasoning' ? reasoning(x) : html`<${WorkItem} key=${x.key} item=${x} cwd=${cwd} />`);
+      for (const b of seg.live ?? []) out.push(reasoning(b));
+    } else {
+      out.push(html`<${WorkGroup} key=${seg.key} group=${seg} closed=${seg.closed || !live} policy=${policy} cwd=${cwd} />`);
+    }
+  }
+  line();
 
-  // The running step streams here until its assistant/message event lands.
-  let streaming = false;
-  if (live && deltas && deltas.turn === turn.turn) {
-    const blocks = Object.entries(deltas.blocks).filter(([, b]) => b.text).sort((a, b) => a[0] - b[0]);
-    blocks.forEach(([index, b], k) => {
-      streaming = true;
-      const next = blocks[k + 1]?.[1];
-      // Reasoning stays "Thinking" only until the next block starts streaming.
-      out.push(b.type === 'reasoning'
-        ? html`<${Reasoning} key=${`live-r-${deltas.key}-${index}`} text=${b.text} live=${!next} ms=${next ? next.start - b.start : null} />`
-        : html`<${Markdown} key=${`live-t-${deltas.key}-${index}`} text=${b.text} class=${next ? '' : 'is-streaming'} />`);
-    });
-  }
-  if (done) out.push(html`<${ChangesCard} key="changes" turn=${turn} cwd=${cwd} />`);
+  if (ended && turn.status === 'completed') out.push(html`<${ChangesCard} key="changes" turn=${turn} cwd=${cwd} />`);
   if (live && turn.retry) out.push(html`<${Retry} key="retry" retry=${turn.retry} />`);
-  const busyTool = items.some((x) => x.kind === 'tool' && !x.result);
-  if (live && !streaming && !busyTool && !turn.retry) {
-    out.push(html`<div key="thinking" class="row thinking"><${Shimmer} active><span class="row-title">${t.thinking}</span></${Shimmer}></div>`);
-  }
+  // Before anything streams, a status line (flat views: "Thinking") shows the agent is on it.
+  const shown = open && (!flat || open.live.length || open.items.some((x) => x.kind === 'tool' && !x.result));
+  if (live && !streaming && !shown && !turn.retry) out.push(html`<${ThinkingRow} key="thinking" policy=${policy} />`);
   return html`<section class="turn" data-turn=${turn.turn}>${out}</section>`;
 }
 
@@ -180,16 +239,21 @@ export function Transcript({ tx, deltas, status, pending, cwd }) {
     pinned.current = true;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   };
+  // Opening a row keeps it where it is instead of following the bottom.
+  const onClickCapture = (e) => {
+    if (e.target.closest?.('button[aria-expanded="false"]')) pinned.current = false;
+  };
 
   // A prompt that is not in the log yet shows right away (its own turn if the agent is idle).
   const lastTurn = tx.turns[lastIndex];
   const liveTurn = running && lastTurn && lastTurn.end == null ? lastIndex : -1;
-  return html`<div class="scroll-wrap"><div class="scroll" ref=${scroller} onScroll=${onScroll}>
+  const policy = useWorkPolicy();
+  return html`<div class="scroll-wrap"><div class="scroll" ref=${scroller} onScroll=${onScroll} onClickCapture=${onClickCapture}>
     <div class="column transcript">
-      ${tx.turns.map((turn, i) => html`<${Turn} key=${turn.turn} turn=${turn} live=${i === liveTurn} deltas=${deltas} cwd=${cwd} />`)}
+      ${tx.turns.map((turn, i) => html`<${Turn} key=${turn.turn} turn=${turn} live=${i === liveTurn} deltas=${deltas} cwd=${cwd} policy=${policy} />`)}
       ${pending ? html`<section class="turn"><${UserBubble} text=${pending.text} images=${pending.images} pending />
-        ${liveTurn < 0 ? html`<div class="row thinking"><${Shimmer} active><span class="row-title">${t.thinking}</span></${Shimmer}></div>` : null}</section>` : null}
-      ${running && liveTurn < 0 && !pending ? html`<div class="row thinking"><${Shimmer} active><span class="row-title">${t.thinking}</span></${Shimmer}></div>` : null}
+        ${liveTurn < 0 ? html`<${ThinkingRow} policy=${policy} />` : null}</section>` : null}
+      ${running && liveTurn < 0 && !pending ? html`<${ThinkingRow} policy=${policy} />` : null}
     </div>
   </div>
   ${away ? html`<button type="button" class="to-bottom" aria-label=${t.scrollDown} onClick=${toBottom}><${IconArrowDown} size=${16} /></button>` : null}

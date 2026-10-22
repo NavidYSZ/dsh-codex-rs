@@ -440,5 +440,95 @@
    }
   ]
  },
- "live": 14
+ "live": 14,
+ "stats": {
+  "currency": "USD",
+  "provider": "deepseek-official",
+  "model": "deepseek-flash",
+  "turnCount": 1,
+  "totals": {
+   "requests": 0,
+   "inputTokens": 0,
+   "cacheReadTokens": 0,
+   "cacheWriteTokens": 0,
+   "outputTokens": 0,
+   "reasoningTokens": 0,
+   "costUsd": 0.0,
+   "cost": {
+    "input": 0.0,
+    "cacheRead": 0.0,
+    "cacheWrite": 0.0,
+    "output": 0.0
+   },
+   "savedUsd": 0.0,
+   "offPeakRequests": 0,
+   "unpricedRequests": 0,
+   "approximate": false
+  },
+  "timings": {
+   "steps": 1,
+   "llmMs": 0,
+   "toolMs": 0,
+   "ttftMs": 0,
+   "ttftSteps": 0,
+   "decodeMs": 0,
+   "decodeTokens": 0,
+   "avgTtftMs": null,
+   "tokensPerSecond": null
+  },
+  "lastRequest": null,
+  "turns": [
+   {
+    "turn": 1,
+    "start": 1792487640020,
+    "end": 1792487640940,
+    "status": "error",
+    "requests": 0,
+    "inputTokens": 0,
+    "cacheReadTokens": 0,
+    "cacheWriteTokens": 0,
+    "outputTokens": 0,
+    "reasoningTokens": 0,
+    "costUsd": 0.0,
+    "cost": {
+     "input": 0.0,
+     "cacheRead": 0.0,
+     "cacheWrite": 0.0,
+     "output": 0.0
+    },
+    "savedUsd": 0.0,
+    "offPeakRequests": 0,
+    "unpricedRequests": 0,
+    "approximate": false,
+    "routes": [],
+    "timings": {
+     "steps": 1,
+     "llmMs": 0,
+     "toolMs": 0,
+     "ttftMs": 0,
+     "ttftSteps": 0,
+     "decodeMs": 0,
+     "decodeTokens": 0,
+     "avgTtftMs": null,
+     "tokensPerSecond": null
+    }
+   }
+  ],
+  "context": {
+   "contextWindow": 1000000,
+   "usedTokens": 304,
+   "estimated": true,
+   "percent": 0.030400000000000003,
+   "breakdown": {
+    "systemTokens": 32,
+    "toolsTokens": 128,
+    "messageTokens": 144
+   },
+   "compaction": {
+    "auto": true,
+    "thresholdTokens": 678464,
+    "thresholdPercent": 67.84639999999999
+   }
+  }
+ }
 }

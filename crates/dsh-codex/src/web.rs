@@ -15,6 +15,7 @@ use tokio::sync::{broadcast, oneshot};
 
 use crate::chats::ChatState;
 use crate::runtime::{Overrides, Runtime};
+use crate::usage::{self, UsageIndex};
 
 pub async fn run(
     runtime: Arc<Runtime>,
@@ -115,6 +116,7 @@ pub struct WebBackend {
     tx: broadcast::Sender<StreamMessage>,
     workspaces_file: PathBuf,
     chats: ChatState,
+    usage: Arc<UsageIndex>,
 }
 
 impl WebBackend {
@@ -122,6 +124,7 @@ impl WebBackend {
         let (tx, _) = broadcast::channel(4096);
         let workspaces_file = runtime.home.join("workspaces.json");
         let chats = ChatState::load(&runtime.home);
+        let usage = Arc::new(UsageIndex::load(&runtime.home));
         runtime.live.enable_viewers();
         WebBackend {
             approvals: Arc::new(Approvals {
@@ -133,6 +136,7 @@ impl WebBackend {
             tx,
             workspaces_file,
             chats,
+            usage,
         }
     }
 
@@ -239,6 +243,7 @@ impl WebBackend {
             "apiKeyConfigured": self.runtime.api_key_configured(),
             "tools": { "browser": browser, "app": app, "computer": computer },
             "automation": self.runtime.automation.features(),
+            "ui": self.chats.ui(),
         })
     }
 
@@ -279,6 +284,9 @@ impl Backend for WebBackend {
     }
 
     async fn update_settings(&self, patch: Value) -> anyhow::Result<Value> {
+        if let Some(ui) = patch.get("ui") {
+            self.chats.update_ui(ui)?;
+        }
         if let Some(key) = patch.get("apiKey") {
             self.runtime.set_api_key(key.as_str())?;
         }
@@ -666,6 +674,83 @@ impl Backend for WebBackend {
     async fn team(&self, id: &str) -> anyhow::Result<Value> {
         crate::automation::team(&self.runtime, id)
     }
+
+    async fn session_stats(&self, id: &str, from_turn: Option<u64>) -> anyhow::Result<Value> {
+        let (events, cwd) = match self.open.lock().await.get(id) {
+            Some(s) => (s.log.events(), s.cwd.clone()),
+            None => {
+                if self.runtime.store.locate(id)?.is_none() {
+                    return Err(NotFound(id.to_owned()).into());
+                }
+                let stored = self.runtime.store.read(id)?;
+                (stored.events, PathBuf::from(stored.header.cwd))
+            }
+        };
+        let runtime = self.runtime.clone();
+        let index = self.usage.clone();
+        let id = id.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let prices = usage::price_book(&runtime.config());
+            let agent = runtime.agent_config(&cwd, &Overrides::default());
+            let route = runtime.route(&agent.model);
+            let rule = usage::CompactionRule {
+                auto: agent.compaction.auto,
+                threshold_ratio: agent.compaction.threshold_ratio,
+                headroom_tokens: agent.compaction.headroom_tokens,
+                default_max_tokens: route.default_max_tokens.into(),
+            };
+            let stats = usage::session_stats(
+                &events,
+                &prices,
+                Some(rule),
+                route.context_window,
+                from_turn,
+            );
+            let mut out = serde_json::to_value(stats)?;
+            // Subagents run in sessions of their own; the usage index has them.
+            let children: Vec<_> = runtime
+                .store
+                .list()?
+                .into_iter()
+                .filter(|r| r.parent_session.is_some())
+                .collect();
+            index.refresh(&runtime.store, &children, &prices, false)?;
+            let (sessions, tally) = index.descendants(&id);
+            if sessions > 0 {
+                let mut sub = serde_json::to_value(tally)?;
+                sub["sessions"] = json!(sessions);
+                out["subagents"] = sub;
+            }
+            Ok(out)
+        })
+        .await?
+    }
+
+    async fn usage(&self, q: dshx_server::UsageQuery) -> anyhow::Result<Value> {
+        const DAY_MS: u64 = 86_400_000;
+        let runtime = self.runtime.clone();
+        let index = self.usage.clone();
+        let mut report = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
+            let prices = usage::price_book(&runtime.config());
+            index.refresh(&runtime.store, &runtime.store.list()?, &prices, true)?;
+            let now = now_ms();
+            let query = usage::UsageQuery {
+                since: q.since.unwrap_or(now.saturating_sub(30 * DAY_MS)),
+                until: q.until.unwrap_or(now),
+                offset_minutes: q.tz.unwrap_or(0).clamp(-14 * 60, 14 * 60),
+                top: q.top.unwrap_or(5).min(50),
+            };
+            Ok(serde_json::to_value(index.report(&query, &prices))?)
+        })
+        .await??;
+        // Renamed titles live in ui-state.json.
+        if let Some(rows) = report["topChats"].as_array_mut() {
+            for row in rows {
+                self.chats.decorate(row);
+            }
+        }
+        Ok(report)
+    }
 }
 
 /// Opens a session for reminder delivery like a prompt would.
@@ -704,6 +789,19 @@ impl AgentObserver for WebObserver {
             index: delta.index,
             block_type: block_type.unwrap_or_else(|| "text".into()),
             text: delta.text.clone(),
+        });
+    }
+
+    /// A tool call starts streaming: `blockType: "tool-call"` with the tool's
+    /// name as `text`, so the work row can say what is being prepared.
+    fn on_tool_call(&self, turn: u64, step: u64, index: usize, name: &str) {
+        let _ = self.tx.send(StreamMessage::Delta {
+            session_id: self.session_id.clone(),
+            turn,
+            step,
+            index,
+            block_type: "tool-call".into(),
+            text: name.to_owned(),
         });
     }
 

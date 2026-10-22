@@ -1051,5 +1051,120 @@
     }
    }
   ]
+ },
+ "stats": {
+  "currency": "USD",
+  "provider": "deepseek-official",
+  "model": "deepseek-flash",
+  "turnCount": 1,
+  "totals": {
+   "requests": 2,
+   "inputTokens": 3680,
+   "cacheReadTokens": 22528,
+   "cacheWriteTokens": 0,
+   "outputTokens": 760,
+   "reasoningTokens": 0,
+   "costUsd": 0.001075584,
+   "cost": {
+    "input": 0.000552,
+    "cacheRead": 6.758400000000001e-05,
+    "cacheWrite": 0.0,
+    "output": 0.000456
+   },
+   "savedUsd": 0.003311616,
+   "offPeakRequests": 2,
+   "unpricedRequests": 0,
+   "approximate": false
+  },
+  "timings": {
+   "steps": 1,
+   "llmMs": 8226,
+   "toolMs": 60,
+   "ttftMs": 1825,
+   "ttftSteps": 2,
+   "decodeMs": 6401,
+   "decodeTokens": 760,
+   "avgTtftMs": 912.5,
+   "tokensPerSecond": 118.731448211217
+  },
+  "lastRequest": {
+   "seq": 16,
+   "time": 1792498448626,
+   "turn": 1,
+   "provider": "deepseek-official",
+   "model": "deepseek-flash",
+   "requests": 1,
+   "inputTokens": 1840,
+   "cacheReadTokens": 11264,
+   "cacheWriteTokens": 0,
+   "outputTokens": 380,
+   "reasoningTokens": 0,
+   "costUsd": 0.000537792,
+   "cost": {
+    "input": 0.000276,
+    "cacheRead": 3.3792000000000004e-05,
+    "cacheWrite": 0.0,
+    "output": 0.000228
+   },
+   "savedUsd": 0.001655808,
+   "offPeakRequests": 1,
+   "unpricedRequests": 0,
+   "approximate": false
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "start": 1792498440015,
+    "end": null,
+    "status": null,
+    "requests": 2,
+    "inputTokens": 3680,
+    "cacheReadTokens": 22528,
+    "cacheWriteTokens": 0,
+    "outputTokens": 760,
+    "reasoningTokens": 0,
+    "costUsd": 0.001075584,
+    "cost": {
+     "input": 0.000552,
+     "cacheRead": 6.758400000000001e-05,
+     "cacheWrite": 0.0,
+     "output": 0.000456
+    },
+    "savedUsd": 0.003311616,
+    "offPeakRequests": 2,
+    "unpricedRequests": 0,
+    "approximate": false,
+    "routes": [
+     "deepseek-official/deepseek-flash"
+    ],
+    "timings": {
+     "steps": 1,
+     "llmMs": 8226,
+     "toolMs": 60,
+     "ttftMs": 1825,
+     "ttftSteps": 2,
+     "decodeMs": 6401,
+     "decodeTokens": 760,
+     "avgTtftMs": 912.5,
+     "tokensPerSecond": 118.731448211217
+    }
+   }
+  ],
+  "context": {
+   "contextWindow": 1000000,
+   "usedTokens": 13484,
+   "estimated": false,
+   "percent": 1.3484,
+   "breakdown": {
+    "systemTokens": 32,
+    "toolsTokens": 0,
+    "messageTokens": 322
+   },
+   "compaction": {
+    "auto": true,
+    "thresholdTokens": 678464,
+    "thresholdPercent": 67.84639999999999
+   }
+  }
  }
 }

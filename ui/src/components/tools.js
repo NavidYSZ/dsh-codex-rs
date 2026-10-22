@@ -1,5 +1,5 @@
 // Codex-like transcript rows for the dsh tools. One quiet 24 px line each
-// (icon, verb, dot, detail); a click opens the body. Edits open by default.
+// (icon, verb, dot, detail); a click opens the body. Edits open in the detailed views.
 import { useMemo, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, clip } from '../i18n.js';
@@ -14,6 +14,7 @@ import { Shimmer, useImage } from './common.js';
 import { CodexRow } from './codex.js';
 import { openFile, openAutomations } from '../state.js';
 import { describeSchedule } from './automations.js';
+import { diffsOpen } from './worklog.js';
 
 const resultText = (r) => (r?.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
 const errorReason = (r) => r?.error?.reason || resultText(r).replace(/^Error:\s*/, '') || t.failed;
@@ -154,7 +155,7 @@ function EditRow({ item, cwd }) {
   const create = name === 'write' && (meta?.operation === 'create' || (!meta?.diffs?.length && running));
   const hunks = useMemo(() => editHunks(item), [result, item.argsRaw]);
   const { add, del } = countChanges(hunks.flat());
-  const [open, toggle] = useOpen(!failed);
+  const [open, toggle] = useOpen(!failed && diffsOpen());
   const title = create ? (running ? t.creating : t.created) : running ? t.editing : t.edited;
   const counts = !failed && (add || del)
     ? html`<span class="row-meta counts">${add ? html`<span class="add">+${add}</span>` : null}${del ? html`<span class="del">−${del}</span>` : null}</span>`

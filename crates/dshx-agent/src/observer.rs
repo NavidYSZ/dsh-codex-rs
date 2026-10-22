@@ -56,6 +56,11 @@ pub trait AgentObserver: Send + Sync {
     fn on_attempt(&self, turn: u64, step: u64, attempt: u32) {
         let _ = (turn, step, attempt);
     }
+    /// The model started streaming a call of tool `name` as block `index`;
+    /// its arguments follow until the assistant message lands.
+    fn on_tool_call(&self, turn: u64, step: u64, index: usize, name: &str) {
+        let _ = (turn, step, index, name);
+    }
 }
 
 /// Observer that ignores everything.
