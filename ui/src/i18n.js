@@ -193,7 +193,7 @@ const EN = {
     standard: {
       intro: 'Choose Standard mode when starting a new task. Describe what you want to accomplish, point to the relevant files, and explain how to check the result.',
       sections: [
-        ['How it works', 'The agent calls tools directly to read and edit files, search, and run terminal commands. It includes Skills, planning, goals, subagents, and context compaction, plus the browser, app and computer tools.'],
+        ['How it works', 'The agent calls tools directly to read and edit files, search, and run terminal commands. It includes skills, planning, goals, subagents, and context compaction, plus the browser, app and computer tools.'],
         ['When to choose it', 'Start here for everyday coding, file work, and research. Standard mode can also write scripts and process files in batches.'],
       ],
       examples: [
@@ -212,7 +212,7 @@ const EN = {
     minimal: {
       intro: 'Choose Minimal mode for a new task. For a comparison, hold the model, permissions, input, and starting workspace state constant across runs.',
       sections: [
-        ['What is included', 'One persistent shell tool and a fixed system prompt. Minimal mode does not load Skills, planning, context compaction, or the standard runtime context. The browser, app and computer tools, MCP servers, goals and subagents are not available either.'],
+        ['What is included', 'One persistent shell tool and a fixed system prompt. Minimal mode does not load skills, planning, context compaction, or the standard runtime context. The browser, app and computer tools, MCP servers, goals and subagents are not available either.'],
         ['When to choose it', 'Use it as a baseline for experiments and comparisons. It can still read files and execute scripts through shell commands, but offers fewer built-in ways to manage a long task. Fewer tools does not necessarily make it easier for a beginner.'],
       ],
       examples: [
@@ -610,7 +610,7 @@ const DE = {
   maxTokens: 'Ausgabelimit erreicht. Schreib „weiter“, damit das Modell fortsetzt.',
   interrupted: 'Der Agent wurde beendet, bevor dieser Schritt fertig war.',
   retrying: (n, max, s, why) => `Neuer Versuch (${n}/${max}) in ${s}${why ? ` · ${why}` : ''}`,
-  compacted: 'Kontext verdichtet',
+  compacted: 'Kontext komprimiert',
   openSettings: 'Einstellungen öffnen',
   ran: 'Ausgeführt', running: 'Läuft', exit: (c) => `Exit ${c}`,
   read: 'Gelesen', reading: 'Liest',

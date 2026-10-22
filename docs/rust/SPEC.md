@@ -301,7 +301,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}`; each model row adds `{provider, providerName, model, maxTokens, available, cost?}` and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
+| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}`; each model row adds `{provider, providerName, model, maxTokens, available, cost?, offPeakCost?}` (DeepSeek rows: `cost` at peak hours and `offPeakCost`, both from the usage price book) and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
 | PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, ui?: {workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?, sidebarArchived?, confirmFullAccess?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
