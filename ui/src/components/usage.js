@@ -109,16 +109,19 @@ store.subscribe(() => {
   }
   if (last <= tracked.seq) return;
   let relevant = false;
+  let ended = false;
   let from = Infinity;
   for (let i = events.length - 1; i >= 0 && events[i].seq > tracked.seq; i--) {
     const e = events[i];
     if (!RELEVANT.has(e.type)) continue;
     relevant = true;
+    ended ||= e.type === 'turn/end';
     if (typeof e.data?.turn === 'number') from = Math.min(from, e.data.turn);
   }
   tracked.seq = last;
   const known = statsFeed.get().stats?.turns;
-  if (relevant) schedule(id, Number.isFinite(from) ? from : known?.length ? known[known.length - 1].turn : null, 350);
+  // A finished turn shows its cost at once; steps in a running turn are batched.
+  if (relevant) schedule(id, Number.isFinite(from) ? from : known?.length ? known[known.length - 1].turn : null, ended ? 60 : 350);
 });
 
 export const useStats = () => useStore(statsFeed, (f) => f.stats);
@@ -367,7 +370,7 @@ function DayBars({ report }) {
     const parts = series.map((key, k) => ({ k, u: d.models.find((m) => `${m.provider}/${m.model}` === key) }))
       .filter((p) => p.u && value(p.u) > 0);
     const rest = d.models.filter((m) => !series.includes(`${m.provider}/${m.model}`)).reduce((n, m) => n + value(m), 0);
-    const tip = t.usageDayTip(dayName(d.day), costLabel(d), shortTokens(allTokens(d)));
+    const tip = t.usageDayTip(dayName(d.day), costLabel(d), shortTokens(allTokens(d)), hitRate(d) === null ? null : percent(hitRate(d)));
     // Shares in per cent: flex-grow below 1 in total would leave the bar partly empty.
     const share = (v) => (value(d) ? (v / value(d)) * 100 : 0);
     return html`<div class="uv-col" role="listitem" key=${d.day} title=${tip} aria-label=${tip}>

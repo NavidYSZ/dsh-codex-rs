@@ -32,8 +32,6 @@ function textOf(content) {
   return (content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 }
 
-const inputTotal = (u) => (u?.inputTokens ?? 0) + (u?.cacheReadTokens ?? 0) + (u?.cacheWriteTokens ?? 0);
-
 /** The line for a turn that a goal round, a reminder or a teammate started. */
 function sourceNotice(kind, d, seq) {
   const text = textOf(d.content);
@@ -67,7 +65,6 @@ export function buildTranscript(events) {
     effort: undefined,
     sandbox: null,
     contextWindow: 0,
-    usage: { input: 0, cached: 0, output: 0, lastInput: 0 },
     pendingApproval: null,
   };
   const calls = new Map();
@@ -135,13 +132,6 @@ export function buildTranscript(events) {
         });
         if (d.interrupted) t.items.push({ kind: 'notice', key: `i:${e.seq}`, tone: 'muted', code: 'stopped' });
         if (msg.source?.model) out.model = msg.source.model;
-        if (d.usage) {
-          const input = inputTotal(d.usage);
-          out.usage.input += input;
-          out.usage.cached += d.usage.cacheReadTokens ?? 0;
-          out.usage.output += d.usage.outputTokens ?? 0;
-          out.usage.lastInput = input + (d.usage.outputTokens ?? 0);
-        }
         t.retry = null;
         break;
       }

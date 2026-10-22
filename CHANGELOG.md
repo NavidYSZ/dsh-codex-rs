@@ -23,9 +23,22 @@
   readable rows for schedule/goal/team tools, goal-round/reminder/Team-mail
   lines in the transcript.
 - Prompts carry the browser's time zone (dsh `clientTimeZone`).
+- **Work details** like DSH: Compact, Standard (default), Detailed and Verbose
+  in Settings → Appearance and the chat's … menu, kept in `ui-state.json`.
+  Reasoning and tool steps between answers fold behind one status line with
+  the live activity ("Running commands · npm test", "Preparing to write
+  files"), reasoning shows one line, and a finished turn folds into
+  "Completed in 1m 20s · 12 tool calls · 3 messages · $0.0031".
+- **Usage bar** under the composer: context ring (composition, compaction
+  threshold), cache hit rate and cost in USD, each with details; the cost of
+  each turn; Settings → Usage per day, model and chat. Prices are DeepSeek's
+  list prices with peak and off-peak hours, computed by the server
+  (`GET /api/sessions/:id/stats`, `GET /api/usage`, `usage-index.json`).
 
 ### Changed
 
+- Edit diffs stay closed in the transcript in the Compact and Standard views
+  (the "N files changed" card and the Review panel still show them).
 - Mac app: the local instance reuses its last port, so browser storage
   (sidebar, theme, panel) survives restarts.
 - Codex app default theme values: accent `#0285ff`, grey user bubble, 16 px

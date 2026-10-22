@@ -38,7 +38,6 @@ const EN = {
   thinking: 'Thinking',
   thoughtFor: (s) => `Thought for ${s}`,
   thought: 'Thought',
-  workedFor: (s) => `Worked for ${s}`,
   stopped: 'Stopped',
   turnFailed: 'This turn failed',
   maxTokens: 'Output token limit reached. Send “continue” to let the model resume.',
@@ -92,7 +91,6 @@ const EN = {
   about: 'About', version: 'Version', platform: 'Platform', tools: 'Mac tools',
   toolNames: { browser: 'Browser', app: 'Apps', computer: 'Computer' },
   on: 'on', off: 'off', back: 'Back',
-  tokens: (n) => `${n} tokens`, cached: (p) => `${p}% cached`, context: (p) => `${p}% of context`,
   justNow: 'now',
   scrollDown: 'Scroll to bottom',
   // sidebar
@@ -228,7 +226,7 @@ const EN = {
   usageRanges: { 7: '7 days', 30: '30 days' }, usageRange: 'Period', usageTokens: 'Tokens', usageCacheRate: 'Cache rate', usageRequests: 'Requests',
   usageByDay: 'Per day', usageByModel: 'Per model', usageTopChats: 'Most expensive chats', usageEmpty: 'No model requests in this period.',
   usageFailed: 'Usage could not be loaded.', retry: 'Try again', subagentsN: (n) => `+${n} ${n === 1 ? 'subagent' : 'subagents'}`,
-  noPrice: 'no price', usageOther: 'Other', usageDayTip: (day, cost, tokens) => `${day}: ${cost}, ${tokens} tokens`,
+  noPrice: 'no price', usageOther: 'Other', usageDayTip: (day, cost, tokens, cache) => `${day}: ${cost}, ${tokens} tokens${cache ? `, ${cache} from the cache` : ''}`,
 };
 
 const DE = {
@@ -265,7 +263,6 @@ const DE = {
   thinking: 'Denkt nach',
   thoughtFor: (s) => `${s} nachgedacht`,
   thought: 'Nachgedacht',
-  workedFor: (s) => `${s} gearbeitet`,
   stopped: 'Gestoppt',
   turnFailed: 'Dieser Schritt ist fehlgeschlagen',
   maxTokens: 'Ausgabelimit erreicht. Schreib „weiter“, damit das Modell fortsetzt.',
@@ -315,7 +312,6 @@ const DE = {
   about: 'Über', version: 'Version', platform: 'Plattform', tools: 'Mac-Werkzeuge',
   toolNames: { browser: 'Browser', app: 'Apps', computer: 'Computer' },
   on: 'an', off: 'aus', back: 'Zurück',
-  tokens: (n) => `${n} Tokens`, cached: (p) => `${p} % aus dem Cache`, context: (p) => `${p} % vom Kontext`,
   justNow: 'jetzt',
   scrollDown: 'Nach unten',
   search: 'Suchen', pinned: 'Angepinnt', projects: 'Projekte', chats: 'Chats', activity: 'Aktivität',
@@ -438,7 +434,7 @@ const DE = {
   usageRanges: { 7: '7 Tage', 30: '30 Tage' }, usageRange: 'Zeitraum', usageTokens: 'Tokens', usageCacheRate: 'Cache-Quote', usageRequests: 'Anfragen',
   usageByDay: 'Pro Tag', usageByModel: 'Pro Modell', usageTopChats: 'Teuerste Chats', usageEmpty: 'In diesem Zeitraum gab es keine Modellanfragen.',
   usageFailed: 'Der Verbrauch ließ sich nicht laden.', retry: 'Erneut versuchen', subagentsN: (n) => `+${n} ${n === 1 ? 'Subagent' : 'Subagenten'}`,
-  noPrice: 'kein Preis', usageOther: 'Andere', usageDayTip: (day, cost, tokens) => `${day}: ${cost}, ${tokens} Tokens`,
+  noPrice: 'kein Preis', usageOther: 'Andere', usageDayTip: (day, cost, tokens, cache) => `${day}: ${cost}, ${tokens} Tokens${cache ? `, ${cache} aus dem Cache` : ''}`,
 };
 
 export const t = de ? DE : EN;
