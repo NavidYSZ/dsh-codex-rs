@@ -83,13 +83,18 @@ impl Server {
     async fn idle_after(&self, id: &str, turns: usize) -> Vec<Value> {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
         loop {
-            let s = self.ok(reqwest::Method::GET, &format!("/sessions/{id}"), None).await;
+            let s = self
+                .ok(reqwest::Method::GET, &format!("/sessions/{id}"), None)
+                .await;
             let events = s["events"].as_array().cloned().unwrap_or_default();
             let ended = events.iter().filter(|e| e["type"] == "turn/end").count();
             if ended >= turns && s["status"] == "idle" {
                 return events;
             }
-            assert!(tokio::time::Instant::now() < deadline, "turn {turns} did not end: {s}");
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "turn {turns} did not end: {s}"
+            );
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
@@ -183,19 +188,27 @@ async fn providers_routes_and_a_chat_across_three_routes() {
 
     // Validation.
     let (status, err) = server
-        .call(Method::PUT, "/providers/Bad", Some(json!({"api": "openai-completions"})))
+        .call(
+            Method::PUT,
+            "/providers/Bad",
+            Some(json!({"api": "openai-completions"})),
+        )
         .await;
     assert_eq!(status, 400, "{err}");
     let (status, err) = server
         .call(
             Method::PUT,
             "/providers/relay",
-            Some(json!({"api": "openai-completions", "baseUrl": "ftp://x", "models": [{"id": "m"}]})),
+            Some(
+                json!({"api": "openai-completions", "baseUrl": "ftp://x", "models": [{"id": "m"}]}),
+            ),
         )
         .await;
     assert_eq!(status, 400, "{err}");
     assert!(err["error"].as_str().unwrap().contains("base URL"));
-    let (status, _) = server.call(Method::DELETE, "/providers/deepseek-official", None).await;
+    let (status, _) = server
+        .call(Method::DELETE, "/providers/deepseek-official", None)
+        .await;
     assert_eq!(status, 400);
 
     // Anthropic from the catalog, pointed at the mock, with a stored key.
@@ -210,7 +223,10 @@ async fn providers_routes_and_a_chat_across_three_routes() {
     assert_eq!(row["key"]["source"], "stored");
     assert_eq!(row["modelsCustomized"], false);
     assert_eq!(row["models"].as_array().unwrap().len(), 4);
-    assert!(!row.to_string().contains("sk-ant-mock"), "keys never come back");
+    assert!(
+        !row.to_string().contains("sk-ant-mock"),
+        "keys never come back"
+    );
     let creds = std::fs::read_to_string(home.path().join("credentials.toml")).unwrap();
     assert!(creds.contains("[providers.anthropic]") && creds.contains("sk-ant-mock"));
     #[cfg(unix)]
@@ -223,7 +239,10 @@ async fn providers_routes_and_a_chat_across_three_routes() {
         assert_eq!(mode & 0o777, 0o600);
     }
     let config = std::fs::read_to_string(home.path().join("config.toml")).unwrap();
-    assert!(config.contains("[providers.anthropic]") && !config.contains("sk-ant"), "{config}");
+    assert!(
+        config.contains("[providers.anthropic]") && !config.contains("sk-ant"),
+        "{config}"
+    );
 
     // A custom OpenAI-compatible endpoint; its model list comes from the mock.
     let relay_base = format!("http://{}/v1", relay.addr());
@@ -245,9 +264,11 @@ async fn providers_routes_and_a_chat_across_three_routes() {
         .ok(
             Method::PUT,
             "/providers/relay",
-            Some(json!({"api": "openai-completions", "baseUrl": relay_base, "displayName": "Relay",
+            Some(
+                json!({"api": "openai-completions", "baseUrl": relay_base, "displayName": "Relay",
                 "apiKey": "sk-relay", "models": [{"id": "glm-5.3", "contextWindow": 1000000,
-                "reasoningEfforts": ["low", "high"], "cost": {"input": 0.5, "output": 2}}]})),
+                "reasoningEfforts": ["low", "high"], "cost": {"input": 0.5, "output": 2}}]}),
+            ),
         )
         .await;
     assert_eq!(row["name"], "Relay");
@@ -321,7 +342,10 @@ async fn providers_routes_and_a_chat_across_three_routes() {
     server.idle_after(&id, 2).await;
     let relay_request = &relay.requests()[0];
     assert_eq!(relay_request.path, "/v1/chat/completions");
-    assert_eq!(relay_request.header("authorization"), Some("Bearer sk-relay"));
+    assert_eq!(
+        relay_request.header("authorization"),
+        Some("Bearer sk-relay")
+    );
     // Claude's signed thinking does not travel to another provider.
     assert!(!String::from_utf8_lossy(&relay_request.raw_body).contains("sig-claude"));
 
@@ -356,7 +380,11 @@ async fn providers_routes_and_a_chat_across_three_routes() {
 
     // Without its key the provider refuses prompts up front.
     let row = server
-        .ok(Method::PUT, "/providers/anthropic/key", Some(json!({"key": null})))
+        .ok(
+            Method::PUT,
+            "/providers/anthropic/key",
+            Some(json!({"key": null})),
+        )
         .await;
     assert_eq!(row["key"]["configured"], false);
     let (status, err) = server
@@ -367,7 +395,13 @@ async fn providers_routes_and_a_chat_across_three_routes() {
         )
         .await;
     assert_eq!(status, 400);
-    assert!(err["error"].as_str().unwrap().contains("No API key for Anthropic"), "{err}");
+    assert!(
+        err["error"]
+            .as_str()
+            .unwrap()
+            .contains("No API key for Anthropic"),
+        "{err}"
+    );
 
     // Removing a provider removes its key and its table.
     let (status, _) = server.call(Method::DELETE, "/providers/relay", None).await;

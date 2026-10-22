@@ -123,6 +123,14 @@ Read the source; it is short. Summary:
 - `dshx-testkit`: `MockDeepSeek` (axum or hyper) on 127.0.0.1:0 with scripted turns
   (text, thinking, tool calls, errors 429/500/overflow, slow streams), records requests for assertions.
 - Tests: golden comparison of our request bodies with `wire-0.2.0-rc.2` (modulo ids/telemetry fields).
+- Other providers (`provider.rs`, `provider_client.rs`, `anthropic/`, `openai.rs`, `router.rs`): `[providers.<id>]`
+  over the built-in catalog (Anthropic), `ProviderClient` for Anthropic Messages (`x-api-key` or bearer,
+  `cache_control` on the last tool, the system block and the newest turn, adaptive/budget thinking, signatures
+  replayed only to the producing route, replay kind `anthropic-messages` v1) and OpenAI Chat Completions
+  (`reasoning_content`/`reasoning` deltas, data-URI images, `stream_options.include_usage`). No in-history system
+  prompt and no tool updates there: the system prompt sits at the top and every request lists all tools.
+  `ProviderRouter` is the agent's client: it serves DeepSeek itself (unchanged bytes) and hands an agent with
+  `AgentConfig.provider` its route through `LlmClient::for_provider`.
 
 ### 5.2 `dshx-session` (worker: session)
 - File-backed `FileLog: SessionLog`, layout and framing **identical to dsh v4**:
@@ -269,7 +277,7 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], settings:{model, effort, sandbox, approval}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}` |
+| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}`; each model row adds `{provider, providerName, model, maxTokens, available, cost?}` and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
 | PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?}` → `/api/info` shape |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
@@ -295,6 +303,27 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | GET | `/api/schedules/:id/history?limit=&before=` | → `{id, records: [{scheduledAt, deliveredAt, messageId, prompt?}], earlierRecordsUnavailable, earlierRecordsPruned, retention, nextBefore?}` (newest first, `limit` 1-100, default 20) |
 | GET | `/api/sessions/:id/team` | → `{members: [{id, name, role, phase, error?}], tasks: [TaskView], roster: [list_agents rows], failure?}` |
 | WS | `/api/stream?session=:id&after=:seq` | server → client messages below |
+
+### Models page (`Backend::providers`, routes in `dshx-server/src/providers.rs`)
+
+Without providers every route below answers 404. Errors are `{error}` with 400, unknown ids 404.
+Keys go in, never out: rows only say whether a key is configured and where it comes from.
+
+| Method | Path | Body → Response |
+|---|---|---|
+| GET | `/api/providers` | → `{providers:[Provider], catalog:[{id, name, api, baseUrl, apiKeyEnv, models, added}]}` (DeepSeek first, then `[providers.<id>]` by id) |
+| PUT | `/api/providers/:id` | `{displayName?, api?, baseUrl?, apiKeyEnv?, titleModel?, headers?, models?, compat?, apiKey?}` (fields sent replace, `null` clears, others stay; a catalog provider whose models equal the catalog's keeps inheriting them; `deepseek-official` takes `baseUrl` and `apiKey`) → `Provider` |
+| DELETE | `/api/providers/:id` | → 204 (table and stored key; a default model of that provider falls back to `deepseek-flash`); `deepseek-official` → 400 |
+| PUT | `/api/providers/:id/key` | `{key}` (`null`/blank removes; a key from the environment is read-only → 400) → `Provider` |
+| POST | `/api/providers/:id/models/fetch` | `{api?, baseUrl?, apiKey?}` (unsaved values of the dialog) → `{models:[{id, name?, contextWindow?, maxTokens?, input?, reasoningEfforts?, defaultEffort?, thinking?, cost?}]}` from Anthropic `GET /v1/models` or OpenAI-compatible `GET /models` |
+
+- `Provider`: `{id, name, api:"anthropic-messages"|"openai-completions", baseUrl, defaultBaseUrl, baseUrlLocked?, apiKeyEnv,
+  builtin, catalog, modelsEditable, modelsCustomized, titleModel?, headers:[names], compat?:{auth, cacheControl, maxTokensField,
+  reasoningContent}, key:{configured, source:"env"|"stored"|null, locked, env, required}, models:[{id, ref, name, contextWindow,
+  maxTokens, input, reasoningEfforts, defaultReasoningEffort, thinking?, cost?:{input, output, cacheRead, cacheWrite}}], error?}`
+  (`cost` in USD per million tokens).
+- Prompts name a model reference; the agent records the route's provider (`request/context`, `assistant/message`
+  source) and the bare model id, so DeepSeek sessions stay byte-identical to dsh.
 
 ### Plugins page (`Backend::extensions`, routes in `dshx-server/src/extensions.rs`)
 
