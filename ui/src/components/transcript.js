@@ -201,7 +201,9 @@ function Turn({ turn, live, deltas, cwd, policy, acts }) {
   if (live && turn.retry) out.push(html`<${Retry} key="retry" retry=${turn.retry} />`);
   // Before anything streams, a status line (flat views: "Thinking") shows the agent is on it.
   const shown = open && (!flat || open.live.length || open.items.some((x) => x.kind === 'tool' && !x.result));
-  if (live && !streaming && !shown && !turn.retry) out.push(html`<${ThinkingRow} key="thinking" policy=${policy} />`);
+  // A running compaction says what the agent does already.
+  const compacting = turn.items.some((x) => x.kind === 'divider' && x.running);
+  if (live && !streaming && !shown && !turn.retry && !compacting) out.push(html`<${ThinkingRow} key="thinking" policy=${policy} />`);
   return html`<section class="turn" data-turn=${turn.turn}>${out}</section>`;
 }
 

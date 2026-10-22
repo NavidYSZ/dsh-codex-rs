@@ -82,9 +82,12 @@ export function FindBar({ scroller, pinned, onQuery }) {
   const open = query != null;
 
   useEffect(() => {
-    if (!open) return;
-    input.current?.focus();
-    input.current?.select();
+    if (!open) return undefined;
+    const take = () => { input.current?.focus(); input.current?.select(); };
+    take();
+    // Again after the keystroke's own focus changes settle.
+    const id = setTimeout(take, 0);
+    return () => clearTimeout(id);
   }, [open, focus]);
 
   const reveal = (i) => {

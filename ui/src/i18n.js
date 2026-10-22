@@ -353,7 +353,7 @@ const EN = {
   // failures with the action that helps (dsh message.failure.*)
   failure: {
     AUTH: ['API key is invalid', 'The provider rejected the key. Check it in the provider’s settings.'],
-    QUOTA: ['Request quota exhausted.', 'Top up your balance with the provider, then send again.'],
+    QUOTA: ['Request quota exhausted', 'Top up your balance with the provider, then send again.'],
     RATE_LIMIT: ['Too many requests', 'The provider is limiting requests right now. Wait a moment and send again.'],
     CONTEXT_WINDOW_EXCEEDED: ['The context is full', 'The conversation no longer fits the model’s context window. Compact it with /compact or continue in a new chat.'],
     TRANSPORT: ['Couldn’t reach the provider', 'Check your internet connection, proxy or VPN, then send again.'],
@@ -392,7 +392,7 @@ const EN = {
     palette: 'Search chats and actions', newChat: 'New chat', openProject: 'Open project', sidebar: 'Show or hide the sidebar',
     shortcuts: 'Keyboard shortcuts', nthChat: 'Open chat 1–9 of the sidebar', prevChat: 'Previous chat', nextChat: 'Next chat',
     attention: 'Next chat that needs you', allRead: 'Mark all as read', archive: 'Archive chat', pin: 'Pin or unpin chat',
-    rename: 'Rename chat', find: 'Find in chat', send: 'Send', newline: 'New line', other: 'While it works: queue instead (or add now)',
+    rename: 'Rename chat', find: 'Find in chat', send: 'Send', newline: 'New line', other: 'Queue or add now (the other way)',
     close: 'Close menu, dialog or search',
   },
   nothingWaiting: 'No chat needs you right now', noChatOpen: 'Open a chat first',
@@ -757,7 +757,7 @@ const DE = {
     palette: 'Chats und Aktionen suchen', newChat: 'Neuer Chat', openProject: 'Projekt öffnen', sidebar: 'Seitenleiste ein- oder ausblenden',
     shortcuts: 'Tastenkürzel', nthChat: 'Chat 1–9 der Seitenleiste öffnen', prevChat: 'Vorheriger Chat', nextChat: 'Nächster Chat',
     attention: 'Nächster Chat, der dich braucht', allRead: 'Alle als gelesen markieren', archive: 'Chat archivieren', pin: 'Chat anpinnen oder lösen',
-    rename: 'Chat umbenennen', find: 'Im Chat suchen', send: 'Senden', newline: 'Neue Zeile', other: 'Während er arbeitet: einreihen (bzw. sofort einbringen)',
+    rename: 'Chat umbenennen', find: 'Im Chat suchen', send: 'Senden', newline: 'Neue Zeile', other: 'Einreihen oder sofort einbringen (das andere)',
     close: 'Menü, Dialog oder Suche schließen',
   },
   nothingWaiting: 'Gerade braucht dich kein Chat', noChatOpen: 'Öffne zuerst einen Chat',

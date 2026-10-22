@@ -81,8 +81,18 @@ export const COMMANDS = {
   'rename-chat': () => { const row = openChat(); if (row) rename(row); },
 };
 
+/** A letter by its character; with ⌥, which turns it into another one on a Mac, by its key. */
+const key = (e, letter) => e.key.toLowerCase() === letter || (e.altKey && e.code === `Key${letter.toUpperCase()}`);
 const typing = (el) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 const modal = () => document.querySelector('.md-scrim, .palette-scrim');
+
+// A key the page handled can still reach the Mac app's menu; run it once.
+let last = { command: null, time: 0 };
+function run(command, fromMenu) {
+  if (fromMenu && last.command === command && Date.now() - last.time < 400) return;
+  last = { command, time: Date.now() };
+  COMMANDS[command]();
+}
 
 function onKey(e) {
   if (e.defaultPrevented || e.isComposing) return;
@@ -97,27 +107,27 @@ function onKey(e) {
     const id = sidebarOrder()[Number(e.key) - 1];
     if (id) openSession(id);
     return;
-  } else if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyF') command = 'find';
-  else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyA') command = 'archive-chat';
-  else if (mod && e.altKey && !e.shiftKey && e.code === 'KeyP') command = 'pin-chat';
-  else if (mod && e.altKey && !e.shiftKey && e.code === 'KeyR') command = 'rename-chat';
-  else if (mod && e.altKey && !e.shiftKey && e.code === 'KeyA') command = 'next-attention';
-  else if (mod && e.shiftKey && !e.altKey && e.code === 'BracketLeft') command = 'previous-chat';
-  else if (mod && e.shiftKey && !e.altKey && e.code === 'BracketRight') command = 'next-chat';
+  } else if (mod && !e.altKey && !e.shiftKey && key(e, 'f')) command = 'find';
+  else if (mod && e.shiftKey && !e.altKey && key(e, 'a')) command = 'archive-chat';
+  else if (mod && e.altKey && !e.shiftKey && key(e, 'p')) command = 'pin-chat';
+  else if (mod && e.altKey && !e.shiftKey && key(e, 'r')) command = 'rename-chat';
+  else if (mod && e.altKey && !e.shiftKey && key(e, 'a')) command = 'next-attention';
+  else if (mod && e.shiftKey && !e.altKey && (e.code === 'BracketLeft' || e.key === '[' || e.key === '{')) command = 'previous-chat';
+  else if (mod && e.shiftKey && !e.altKey && (e.code === 'BracketRight' || e.key === ']' || e.key === '}')) command = 'next-chat';
   else if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') command = e.shiftKey ? 'previous-chat' : 'next-chat';
   else if (e.key === 'Escape' && e.shiftKey && !mod && !e.altKey && !typing(e.target) && !document.querySelector('.menu')) command = 'mark-all-read';
   if (!command) return;
   e.preventDefault();
-  COMMANDS[command]();
+  run(command, false);
 }
 
 window.addEventListener('keydown', onKey);
 // The Mac app's menu items for the same commands.
 window.addEventListener('dshx-desktop-command', (e) => {
-  const run = COMMANDS[e.detail?.command];
-  if (!run) return;
+  const command = e.detail?.command;
+  if (!COMMANDS[command]) return;
   e.preventDefault();
-  run();
+  run(command, true);
 });
 
 // ---- ⌘/ overview ----------------------------------------------------------------------
