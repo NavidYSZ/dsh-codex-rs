@@ -587,3 +587,27 @@ async fn previews_serve_only_the_chats_folder() {
         .unwrap();
     assert_eq!(r.status(), 404);
 }
+
+#[tokio::test]
+async fn session_presets_need_backend_support() {
+    let (addr, _) = start().await;
+    let http = reqwest::Client::new();
+    let create = |body: Value| {
+        http.post(format!("http://{addr}/api/sessions"))
+            .bearer_auth("secret")
+            .json(&body)
+            .send()
+    };
+    // Standard is what every backend runs; other presets need support.
+    let r = create(json!({ "cwd": "/w", "preset": "standard" }))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.json::<Value>().await.unwrap()["id"], "s2");
+    let r = create(json!({ "preset": "minimal" })).await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert_eq!(
+        r.json::<Value>().await.unwrap()["error"],
+        "agent presets are not supported"
+    );
+}

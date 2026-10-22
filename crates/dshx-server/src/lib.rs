@@ -124,6 +124,19 @@ pub trait Backend: Send + Sync + 'static {
     async fn list_sessions(&self, cwd: Option<String>) -> anyhow::Result<Value>;
     /// Returns the new session id. An empty `cwd` starts a chat without a project folder.
     async fn create_session(&self, cwd: String) -> anyhow::Result<String>;
+    /// [`Backend::create_session`] with an agent preset (`standard`,
+    /// `minimal`); `None` = the configured default. Without preset support
+    /// only `standard` is accepted.
+    async fn create_session_with_preset(
+        &self,
+        cwd: String,
+        preset: Option<String>,
+    ) -> anyhow::Result<String> {
+        if preset.as_deref().is_some_and(|p| p != "standard") {
+            anyhow::bail!("agent presets are not supported");
+        }
+        self.create_session(cwd).await
+    }
     /// `{header, events, status}`.
     async fn session(&self, id: &str) -> anyhow::Result<Value>;
     /// Events with `seq > after`, for WebSocket catch-up.
@@ -484,6 +497,8 @@ async fn list_sessions(
 struct CreateBody {
     #[serde(default)]
     cwd: Option<String>,
+    #[serde(default)]
+    preset: Option<String>,
 }
 
 async fn create_session(
@@ -492,7 +507,7 @@ async fn create_session(
 ) -> ApiResult<Json<Value>> {
     let id = s
         .backend
-        .create_session(body.cwd.unwrap_or_default())
+        .create_session_with_preset(body.cwd.unwrap_or_default(), body.preset)
         .await?;
     Ok(Json(json!({ "id": id })))
 }

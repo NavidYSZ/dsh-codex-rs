@@ -83,8 +83,9 @@ class HttpApi {
   workspaces() { return this.req('GET', '/api/workspaces'); }
   addWorkspace(path) { return this.req('POST', '/api/workspaces', { path }); }
   sessions() { return this.req('GET', '/api/sessions'); }
-  /** An empty `cwd` starts a chat without a project (the server gives it its own folder). */
-  createSession(cwd) { return this.req('POST', '/api/sessions', cwd ? { cwd } : {}); }
+  /** An empty `cwd` starts a chat without a project (the server gives it its own folder);
+   * `preset` is the chat's mode (default: the server's). */
+  createSession(cwd, preset) { return this.req('POST', '/api/sessions', { ...(cwd ? { cwd } : {}), ...(preset ? { preset } : {}) }); }
   session(id) { return this.req('GET', `/api/sessions/${enc(id)}`); }
   /** `{title?, pinned?, archived?, seen?, unread?}` → the session's list row. */
   updateSession(id, patch) { return this.req('PATCH', `/api/sessions/${enc(id)}`, patch); }
@@ -191,7 +192,8 @@ const DEFAULT_INFO = {
     { id: 'deepseek-v4-pro', name: 'deepseek-v4-pro', contextWindow: 1000000, inputModalities: ['text'],
       reasoningEfforts: ['off', 'low', 'high', 'max'], defaultReasoningEffort: 'high' },
   ],
-  settings: { model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask' },
+  settings: { model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask', defaultPreset: 'standard' },
+  presets: [{ id: 'standard', name: 'Standard' }, { id: 'minimal', name: 'Minimal' }],
   apiKeyConfigured: true,
   tools: { browser: true, app: true, computer: true },
 };
@@ -288,17 +290,18 @@ class FixtureApi {
     return clone(row);
   }
 
-  async createSession(cwd) {
+  async createSession(cwd, preset) {
     await this.ready;
     const id = `session-fixture-${Date.now().toString(36)}`;
     const scratch = !cwd;
     if (scratch) cwd = `/Users/alex/.dsh-codex/chats/chat-${id.slice(-8)}`;
-    this.sessionData = { header: { type: 'session', version: 4, id, createdAt: Date.now(), cwd, isSeeded: false, delegationDepth: 0 }, events: [] };
+    const agentPreset = preset ?? this.infoData.settings.defaultPreset ?? 'standard';
+    this.sessionData = { header: { type: 'session', version: 4, id, createdAt: Date.now(), cwd, isSeeded: false, delegationDepth: 0, agentPreset }, events: [] };
     this.history = [];
     this.pendingLive = [];
     this.seq = -1;
     this.status = 'idle';
-    this.created = { id, title: '', cwd, scratch, createdAt: Date.now(), updatedAt: Date.now(), status: 'idle' };
+    this.created = { id, title: '', cwd, scratch, createdAt: Date.now(), updatedAt: Date.now(), status: 'idle', preset: agentPreset };
     return { id };
   }
 

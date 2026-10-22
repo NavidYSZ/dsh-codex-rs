@@ -304,6 +304,16 @@ pub fn confine(
     workspace_root: &Path,
 ) -> Confined {
     let inner = vec!["bash".to_owned(), "-c".to_owned(), command.to_owned()];
+    confine_argv(runner, inner, mode, workspace_root)
+}
+
+/// Wraps any argv for `mode` (the persistent shell confines a whole `bash`).
+pub fn confine_argv(
+    runner: &Runner,
+    inner: Vec<String>,
+    mode: SandboxMode,
+    workspace_root: &Path,
+) -> Confined {
     let root = canonical_path(workspace_root);
     let wrap = |prefix: Vec<String>| -> Vec<String> {
         let mut argv = prefix;

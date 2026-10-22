@@ -23,6 +23,15 @@
   readable rows for schedule/goal/team tools, goal-round/reminder/Team-mail
   lines in the transcript.
 - Prompts carry the browser's time zone (dsh `clientTimeZone`).
+- **Modes Standard and Minimal** (dsh agent presets): a mode chip on the start
+  page with a "When to choose which?" guide (English and German), the mode of
+  a chat beside its title with "New chat in … mode", and the default mode in
+  Settings. Minimal is dsh's Minimal preset: the fixed persona as the whole
+  system prompt and one persistent `bash` shell, nothing else; its request
+  equals the one the official dsh sends (`docs/rust/upstream/*-minimal-*`).
+  Sessions record the mode in the header like dsh (`agentPreset`) and keep it.
+  API: `POST /api/sessions {preset}`, `/api/info` `presets` and
+  `settings.defaultPreset`; config `default_preset`; CLI `--preset`.
 
 ### Changed
 

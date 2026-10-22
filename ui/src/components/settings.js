@@ -8,6 +8,7 @@ import {
 } from '../state.js';
 import { IconChevronLeft, IconCheck, IconKey, IconSidebar, IconArchive } from '../icons.js';
 import { workspaceName } from './composer.js';
+import { ModeSetting } from './modes.js';
 
 function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
@@ -97,6 +98,7 @@ export function Settings() {
 
       <section class="card">
         <h2 class="card-title">${t.defaults}</h2>
+        <${ModeSetting} />
         <${Field} label=${t.model}>
           <select class="select" value=${s.model} aria-label=${t.model} onChange=${(e) => updateSettings({ model: e.currentTarget.value })}>
             ${models.map((m) => html`<option key=${m.id} value=${m.id}>${m.name ?? m.id}</option>`)}

@@ -36,7 +36,7 @@ pub use repair::{
     TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN, ToolCallRecovery, interrupted_turn_closers,
     to_new_events,
 };
-pub use store::{Located, SessionStore, SessionSummary, StoredSession, summarize};
+pub use store::{Located, SessionStore, SessionSummary, StoredSession, agent_preset, summarize};
 pub use surface::{
     SurfaceFold, SurfaceOp, SurfaceReplacement, derive_event_message, derive_messages,
     fold_lenient, fold_surface, message_value, surface_op_of,

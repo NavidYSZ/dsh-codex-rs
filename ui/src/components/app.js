@@ -17,6 +17,7 @@ import { LiveFloat, useLiveTab } from './live.js';
 import { useTeamTab } from './team.js';
 import { PluginsPage } from './plugins.js';
 import { AutomationsPage } from './automations.js';
+import { ModeLabel, ModeGuide } from './modes.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
@@ -49,6 +50,7 @@ function TopBar({ title, sub, row }) {
     <div class="topbar-title">
       ${title ? html`<${EditableTitle} row=${row} title=${title} />` : null}
       ${sub ? html`<span class="tb-sub">${sub}</span>` : null}
+      ${row ? html`<${ModeLabel} />` : null}
     </div>
     <span class="spacer" />
     ${row ? html`<button type="button" class=${cx('icon-btn', panelOpen && 'is-on')} aria-label=${t.sidePanel} title=${t.sidePanel}
@@ -123,5 +125,6 @@ export function App() {
     <main class="main">${view === 'settings' ? html`<${Settings} />` : view === 'plugins' ? html`<${PluginsPage} />`
     : view === 'automations' ? html`<${AutomationsPage} />` : html`<${Chat} />`}</main>
     <${Palette} />
+    <${ModeGuide} />
   </div>`;
 }

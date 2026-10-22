@@ -33,6 +33,7 @@ Teams are ported (§5.9).
 | Exact request header (24 tools, full descriptions + schemas) of dsh 0.2.0-rc.2 headless | `docs/rust/upstream/request-header-0.2.0-rc.2.json` |
 | System prompt of dsh 0.2.0-rc.2 headless | `docs/rust/upstream/system-prompt-0.2.0-rc.2.txt` |
 | Captured wire requests of dsh (4 calls: agent step, title, 2 more steps) | `docs/rust/upstream/wire-0.2.0-rc.2/*.json` |
+| dsh's **Minimal** agent preset: request header (one persistent `bash`), system prompt, first wire request | `docs/rust/upstream/{request-header,system-prompt}-minimal-0.2.0-rc.2.*`, `wire-minimal-0.2.0-rc.2/001.json` |
 | Instant DeepSeek stand-in that can dump requests | `tools/dev/mock_deepseek.py` |
 | Original dsh-codex plugin (JS + Swift), the product to carry over | repo root: `client.js`, `index.js`, `lib/*.js`, `helper/` |
 
@@ -231,6 +232,29 @@ CLI: `dsh-codex "task"` (headless; flags `--json` NDJSON like dsh, `--session-id
 `initialize`, `session/prompt`, `session/resume`, `session/wait`, `session/working-directory/{get,set}`,
 `shutdown`; notifications `session.event`, `session.status`, `subagent.started`, `subagent.finished`).
 
+### 5.8a Agent presets (modes): Standard and Minimal
+dsh's web bundle composes each session from an agent preset (`dsh-web-app/presets/*.patch.yml`).
+We ship two: **Standard** (everything above, unchanged) and **Minimal**
+(`presets/minimal.patch.yml`): `dsh-persona` with `complete: true` and `includeRuntimeContext: false`
+(the system prompt is exactly `You are a helpful software engineer assistant.`) plus
+`dsh-tool-bash-persistent` (tool `bash`, the preset's own description, schema `{command}`, 300 s
+timeout, 16 000 output characters). No workspace instructions, compaction, pruner, skills, MCP,
+Codex tools, subagents, goals, Teams or time context; titles, retries, image offload and the
+repeat-tool reminder stay (dsh host plane). The goldens were captured from the official dsh
+0.2.0-rc.2 `sdk-minimal` profile, which composes the same persona and shell rows, against the mock
+with an isolated `DSH_HOME` (`tools/dev/dsh_sdk_capture.py`); our first Minimal request equals it
+minus `dsh_session_log`/`dsh_plugin_packages` (`crates/dsh-codex/tests/presets.rs`).
+
+- The preset is chosen when a session is created and recorded like dsh in the header
+  (`agentPreset`); `agent-preset/selected` events are honoured when reading dsh sessions. No record
+  (older sessions, headless runs without `--preset`) and unknown ids (`ptc`, `cordis`) run Standard.
+  A session never changes preset (prompt cache); another mode means a new chat.
+- The persistent shell is one `bash --noprofile --norc` per session reading commands from a pipe
+  (stderr folded into stdout, stdin of each command `/dev/null`), wrapped in dsh's start/end
+  markers; results, timeout, truncation and reset texts are dsh's. It runs under the session's
+  sandbox mode for its life and restarts when the mode changes; it has no escalation arguments.
+- CLI: `dsh-codex --preset minimal "task"` (new sessions only); config `default_preset`.
+
 ### 5.9 Automation: `dshx-goal`, `dshx-schedule`, `dshx-team`
 Ports of the dsh 0.2.0-rc.2 packages, with tool names, descriptions and schemas byte-identical to
 the goldens in `docs/rust/upstream/tools-0.2.0-rc.2/` (compiled with `tools/dev/extract_tool_schemas.mjs`;
@@ -270,11 +294,11 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | Method | Path | Body → Response |
 |---|---|---|
 | GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], settings:{model, effort, sandbox, approval}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin}}` |
-| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?}` → `/api/info` shape |
+| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?}` → `/api/info` shape (`defaultPreset` → config `default_preset`) |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
-| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread}]` (newest first) |
-| POST | `/api/sessions` | `{cwd?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`) |
+| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread, preset?}]` (newest first; `preset` when the session recorded one) |
+| POST | `/api/sessions` | `{cwd?, preset?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`); `preset` (`standard`, `minimal`, default `settings.defaultPreset`) is fixed for the session and recorded as header `agentPreset`; unknown → 400 |
 | GET | `/api/sessions/:id` | → `{header, events:[SessionEvent], status}` |
 | PATCH | `/api/sessions/:id` | `{title?, pinned?, archived?, seen?, unread?}` → list row; kept in `$DSHX_HOME/ui-state.json`, not in the log |
 | POST | `/api/sessions/:id/preview` | → `{base, root}`: `base` is `/preview/<grant>/`, a 2-hour read-only capability for the chat's folder |
@@ -356,7 +380,10 @@ WebSocket messages (JSON):
   image?:base64 JPEG, attachment?:ImageAttachmentRef, meta?, error?, time}` — live view of browser/computer work of
   that session (merged state, at most 4 frames/s), sent from `Backend::live` on its own channel; the latest one also
   follows the backlog. Never persisted; a lagging client just misses frames.
-- `/api/info` additionally carries `automation: {goals, schedules, timeContext, team}`.
+- `/api/info` additionally carries `automation: {goals, schedules, timeContext, team}`,
+  `settings.defaultPreset` and `presets: [{id, name, description, help: {intro, explanation, usage}}]`
+  (English; help in Markdown from dsh's agent-preset guide; the UI localizes by `id`).
+- `POST /api/sessions/:id/goal` on a Minimal session → 400 (goals are not part of Minimal).
 
 ## 7. Conventions
 - Rust 2024, stable toolchain in `~/.cargo/bin` (`export PATH=$HOME/.cargo/bin:$PATH`). `cargo fmt`,

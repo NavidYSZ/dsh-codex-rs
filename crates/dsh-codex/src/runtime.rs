@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 
 use anyhow::Context as _;
 use dshx_agent::{
-    Agent, AgentConfig, AgentDeps, AgentObserver, ExtraSection, PreStep, PreStepHook,
+    Agent, AgentConfig, AgentDeps, AgentObserver, ExtraSection, PreStep, PreStepHook, Preset,
     RouteCapabilities,
 };
 use dshx_core::config::Config;
@@ -16,7 +16,7 @@ use dshx_core::{
     SessionLog, Tool, ToolRegistry,
 };
 use dshx_llm::{DeepSeekClient, DeepSeekConfig, SharedApiKey};
-use dshx_session::{Credentials, FileAttachments, SessionStore};
+use dshx_session::{Credentials, FileAttachments, FileLog, SessionStore};
 use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
 
 mod extensions;
@@ -188,8 +188,12 @@ impl Runtime {
     }
 
     /// Brings an open agent's tools and MCP prompt sections up to date when
-    /// they changed since `seen` (call before each turn).
+    /// they changed since `seen` (call before each turn). A Minimal agent
+    /// composes neither.
     pub fn refresh_agent(&self, agent: &Agent, seen: &AtomicU64) {
+        if agent.config().preset == Preset::Minimal {
+            return;
+        }
         let version = self.tools_version();
         if seen.swap(version, Ordering::SeqCst) == version {
             return;
@@ -279,6 +283,38 @@ impl Runtime {
         tools
     }
 
+    /// The tools of one session with the given preset: Minimal has dsh's
+    /// persistent shell and nothing else.
+    pub fn tools_for(&self, preset: Preset) -> ToolRegistry {
+        match preset {
+            Preset::Standard => self.tools(),
+            Preset::Minimal => {
+                let mut tools = ToolRegistry::new();
+                tools.register(Arc::new(
+                    dshx_tools::persistent_bash::PersistentBashTool::new(),
+                ));
+                tools
+            }
+        }
+    }
+
+    /// The configured preset of new chats.
+    pub fn default_preset(&self) -> Preset {
+        crate::presets::default_of(&self.config())
+    }
+
+    /// A new session for `cwd`; a chosen `preset` is recorded in the header
+    /// like dsh does (`agentPreset`) and stays for the session's life.
+    pub fn create_session(&self, cwd: &str, preset: Option<Preset>) -> anyhow::Result<FileLog> {
+        let mut header = SessionStore::new_header(cwd);
+        if let Some(preset) = preset {
+            header
+                .extra
+                .insert("agentPreset".into(), preset.id().into());
+        }
+        Ok(self.store.create_with_header(header)?)
+    }
+
     /// Agent settings for `cwd` from the config, with per-call overrides.
     pub fn agent_config(&self, cwd: &Path, overrides: &Overrides) -> AgentConfig {
         let mut core = self.config();
@@ -314,18 +350,22 @@ impl Runtime {
         route
     }
 
+    /// An agent for `log`, composed like the preset the session recorded.
     pub fn new_agent(
         &self,
-        config: AgentConfig,
+        mut config: AgentConfig,
         log: Arc<dyn SessionLog>,
         approver: Arc<dyn Approver>,
         observer: Option<Arc<dyn AgentObserver>>,
     ) -> Agent {
+        let recorded = dshx_session::agent_preset(&log.header(), &log.events());
+        let preset = Preset::of_session(recorded.as_deref());
+        config.apply_preset(preset);
         let agent = Agent::new(
             config,
             AgentDeps {
                 llm: self.llm.clone() as Arc<dyn LlmClient>,
-                tools: self.tools(),
+                tools: self.tools_for(preset),
                 log,
                 attachments: self.attachments.clone() as Arc<dyn AttachmentStore>,
                 approver,
@@ -333,11 +373,15 @@ impl Runtime {
                 tool_state: None,
             },
         );
-        agent.add_pre_step_hook(Arc::new(SkillsHook {
-            skills: self.skills.clone(),
-        }));
-        self.subagents.attach(&agent);
-        self.automation.attach_root(&agent);
+        // Skills, delegation, goals, Teams and the time context belong to
+        // Standard's composition.
+        if preset == Preset::Standard {
+            agent.add_pre_step_hook(Arc::new(SkillsHook {
+                skills: self.skills.clone(),
+            }));
+            self.subagents.attach(&agent);
+            self.automation.attach_root(&agent);
+        }
         agent
     }
 

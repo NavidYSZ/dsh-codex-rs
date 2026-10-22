@@ -61,6 +61,10 @@ pub struct SessionSummary {
     /// Set for subagent child sessions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_session: Option<String>,
+    /// The agent preset the session runs (see [`agent_preset`]); `None` for
+    /// sessions that recorded none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
 }
 
 /// Where a session lives on disk.
@@ -426,6 +430,24 @@ fn select_generation(dir: &Path) -> Result<Option<Located>> {
     }))
 }
 
+/// dsh's `agentPreset` session projection: the header's creation-time
+/// preset, advanced by `agent-preset/selected` events.
+pub fn agent_preset(header: &SessionHeader, events: &[SessionEvent]) -> Option<String> {
+    let mut preset = header
+        .extra
+        .get("agentPreset")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    for event in events.iter().filter(|e| e.kind == "agent-preset/selected") {
+        preset = event
+            .data
+            .get("agentPreset")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+    }
+    preset
+}
+
 /// Title, status and timestamps of a parsed log. An open final turn is
 /// reported as `interrupted-open` and resolved against the lock by the caller.
 pub fn summarize(parsed: &ParsedLog) -> SessionSummary {
@@ -486,5 +508,6 @@ pub fn summarize(parsed: &ParsedLog) -> SessionSummary {
             .get("parentSession")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        preset: agent_preset(header, &parsed.events),
     }
 }

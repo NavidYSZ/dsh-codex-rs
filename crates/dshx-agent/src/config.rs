@@ -80,6 +80,46 @@ impl RouteCapabilities {
     }
 }
 
+/// dsh agent presets (`dsh-agent-preset` declarations of dsh's web bundle):
+/// which tools, prompt sections and context producers an agent composes. A
+/// session keeps the preset it was created with (header `agentPreset`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Preset {
+    /// Today's full composition (dsh `presets/standard.patch.yml`).
+    #[default]
+    Standard,
+    /// One persistent shell and a fixed prompt (dsh `presets/minimal.patch.yml`).
+    Minimal,
+}
+
+/// The Minimal preset's persona, the whole system prompt (dsh `dsh-persona`
+/// with `complete: true`).
+pub const MINIMAL_PERSONA: &str = "You are a helpful software engineer assistant.";
+
+impl Preset {
+    pub const ALL: [Preset; 2] = [Preset::Standard, Preset::Minimal];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Preset::Standard => "standard",
+            Preset::Minimal => "minimal",
+        }
+    }
+
+    /// A known preset id.
+    pub fn parse(id: &str) -> Option<Preset> {
+        Preset::ALL.into_iter().find(|p| p.id() == id)
+    }
+
+    /// The preset a session recorded; no record (sessions from before
+    /// presets, dsh's headless profile) and presets we do not ship (dsh's
+    /// `ptc`, `cordis`) run as Standard.
+    pub fn of_session(id: Option<&str>) -> Preset {
+        id.and_then(Preset::parse).unwrap_or_default()
+    }
+}
+
 /// An extra prompt section contributed by an embedding product.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExtraSection {
@@ -96,6 +136,9 @@ pub struct PromptConfig {
     pub include_harness_identity: bool,
     /// `deployment:persona-prefix` template (order 0).
     pub persona_prefix: String,
+    /// The persona prefix is the whole prompt: no identity, suffix, tool
+    /// guidance or extra section (dsh persona `complete: true`).
+    pub complete: bool,
     /// `deployment:persona-suffix` template (order 10200).
     pub persona_suffix: String,
     pub include_runtime_context: bool,
@@ -112,6 +155,7 @@ impl Default for PromptConfig {
         PromptConfig {
             include_harness_identity: true,
             persona_prefix: "You are a coding agent powered by the {{model}} model.".into(),
+            complete: false,
             persona_suffix: "Your working directory is {{cwd}}.".into(),
             include_runtime_context: true,
             extra_sections: Vec::new(),
@@ -275,6 +319,8 @@ impl Default for RepeatReminderConfig {
 /// Everything that shapes one agent's requests and behaviour.
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
+    /// The composition this agent was built for; see [`AgentConfig::apply_preset`].
+    pub preset: Preset,
     pub model: String,
     /// Reasoning effort; `None` = adapter default (recorded as `adapterDefaults`).
     pub effort: Option<String>,
@@ -302,6 +348,7 @@ pub struct AgentConfig {
 impl AgentConfig {
     pub fn new(model: impl Into<String>, cwd: impl Into<PathBuf>) -> Self {
         AgentConfig {
+            preset: Preset::Standard,
             model: model.into(),
             effort: None,
             max_tokens: None,
@@ -331,6 +378,29 @@ impl AgentConfig {
         c.approval = ApprovalPolicy::parse(&core.approval);
         c.prompt.goal_blocked_after = core.codex.goal.blocked_after_consecutive_rounds;
         c
+    }
+
+    /// Shapes the agent like the preset's composition. Standard changes
+    /// nothing. Minimal mounts dsh's persona row with `complete: true` and
+    /// `includeRuntimeContext: false` and none of the per-agent rows: no
+    /// workspace instructions, no compaction or tool-result pruner. Host-wide
+    /// services (titles, retries, the repeat-tool reminder) stay. The tools
+    /// are the caller's part.
+    pub fn apply_preset(&mut self, preset: Preset) {
+        self.preset = preset;
+        if preset == Preset::Standard {
+            return;
+        }
+        self.prompt.include_harness_identity = false;
+        self.prompt.persona_prefix = MINIMAL_PERSONA.into();
+        self.prompt.persona_suffix = String::new();
+        self.prompt.complete = true;
+        self.prompt.include_runtime_context = false;
+        self.prompt.extra_sections.clear();
+        self.prompt.extra_context.clear();
+        self.instructions.enabled = false;
+        self.compaction.auto = false;
+        self.pruner.enabled = false;
     }
 
     pub(crate) fn route(&self) -> RouteCapabilities {

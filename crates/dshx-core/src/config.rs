@@ -24,6 +24,9 @@ pub struct Config {
     /// `ask`: wider access needs the user's OK; `never`: never ask (deny in headless).
     pub approval: String,
     pub max_tokens: u32,
+    /// Agent preset of new chats (`standard`, `minimal`); unset = `standard`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_preset: Option<String>,
     pub codex: CodexConfig,
     /// MCP servers by name (the `mcp__<name>__<tool>` namespace).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -43,6 +46,7 @@ impl Default for Config {
             sandbox: SandboxMode::WorkspaceWrite,
             approval: "ask".into(),
             max_tokens: 256_000,
+            default_preset: None,
             codex: CodexConfig::default(),
             mcp_servers: BTreeMap::new(),
             plugins: BTreeMap::new(),
