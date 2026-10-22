@@ -1,0 +1,17 @@
+/* A note with one action at the bottom of the window ("Archived · Undo"),
+   in the look of the Plugins page's toast. */
+.snackbar {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 90;
+  display: flex; align-items: center; gap: 14px; max-width: min(520px, calc(100vw - 32px));
+  padding: 8px 8px 8px 16px; border-radius: 12px; background: var(--tooltip); color: #fff; font-size: 13px; line-height: 1.45;
+  box-shadow: var(--menu-shadow); transform: translateX(-50%); animation: snack-in .16s ease-out;
+}
+.snackbar > span { min-width: 0; overflow-wrap: anywhere; }
+.snackbar-btn {
+  flex: none; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: #ffffff1f; color: #fff;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.snackbar-btn:hover { background: #ffffff33; }
+.snackbar-btn:focus-visible { outline: 2px solid #ffffffb3; outline-offset: 1px; }
+@keyframes snack-in { from { opacity: 0; transform: translate(-50%, 6px); } }
+@media (prefers-reduced-motion: reduce) { .snackbar { animation: none; } }

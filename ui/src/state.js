@@ -697,6 +697,21 @@ export function fail(e) {
 }
 
 let toastTimer = 0;
+let snackTimer = 0;
+/** A short note at the bottom with one action ("Undo"); the next one replaces it. */
+export function snack(text, action) {
+  clearTimeout(snackTimer);
+  store.set((s) => ({ snack: { text, action, id: (s.snack?.id ?? 0) + 1 } }));
+  snackTimer = setTimeout(() => store.set({ snack: null }), 6000);
+}
+
+/** Archives (or restores) a chat and offers to undo it. */
+export function archiveWithUndo(row, archived = !row.archived) {
+  setArchived(row.id, archived);
+  snack(archived ? t.archivedChat(row.title || t.newChat) : t.restoredChat(row.title || t.newChat),
+    [t.undo, () => { store.set({ snack: null }); setArchived(row.id, !archived); }]);
+}
+
 export function toast(text) {
   clearTimeout(toastTimer);
   store.set({ toast: text });

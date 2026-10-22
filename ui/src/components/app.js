@@ -20,6 +20,7 @@ import { AutomationsPage } from './automations.js';
 import { ModeLabel, ModeGuide } from './modes.js';
 import { ShortcutsDialog } from './shortcuts.js';
 import { FullAccessConfirm, AskDialog } from './confirm.js';
+import { Snackbar } from './common.js';
 
 /** Title that turns into an input on double-click. */
 function EditableTitle({ row, title }) {
@@ -139,5 +140,6 @@ export function App() {
     <${ShortcutsDialog} />
     <${FullAccessConfirm} />
     <${AskDialog} />
+    <${Snackbar} />
   </div>`;
 }
