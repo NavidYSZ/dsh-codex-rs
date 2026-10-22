@@ -226,6 +226,11 @@
   to a minute for an MCP server that hangs in its handshake: after 3 s it
   serves the UI and slow servers keep connecting in the background, shown
   as "Connecting…". `run` and `sdk` still wait like dsh before the first turn.
+- Stopping or timing out a bash command stops the script: the shell itself
+  is killed at once (bash survives a SIGTERM that arrives while it forks and
+  then ran its next command), while the commands it started still get
+  SIGTERM and the grace period. The bash tool's kill tests are no longer
+  flaky.
 
 ## 0.2.0 – 2026-10-17
 
