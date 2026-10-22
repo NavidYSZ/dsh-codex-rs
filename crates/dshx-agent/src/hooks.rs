@@ -9,10 +9,11 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use dshx_core::{Message, SessionEvent};
+use dshx_core::{Message, SessionEvent, ToolRegistry};
 use tokio_util::sync::CancellationToken;
 
 use crate::agent::Inner;
+use crate::config::ToolUpdate;
 use crate::journal::Journal;
 
 /// What a [`PreStepHook`] sees of the step being prepared.
@@ -21,13 +22,16 @@ pub struct PreStep<'a> {
     pub cwd: &'a Path,
     /// Input claimed for this step (user prompts, notices), in order.
     pub claimed: &'a [Message],
-    /// Names of the tools offered to the model, sorted.
+    /// Names of the tools offered to the model when the hooks started, sorted.
     pub tools: &'a [String],
+    /// How the routed model accepts tool-set changes mid-conversation.
+    pub tool_update: Option<ToolUpdate>,
     pub cancel: &'a CancellationToken,
     /// The turn and step being prepared.
     pub turn: u64,
     pub step: u64,
     journal: &'a Journal,
+    registry: &'a Mutex<ToolRegistry>,
     decision: Mutex<Decision>,
 }
 
@@ -45,6 +49,18 @@ impl PreStep<'_> {
     pub fn read_history<R>(&self, f: impl FnOnce(&[SessionEvent], &dyn Fn(u64) -> bool) -> R) -> R {
         self.journal
             .read(|events, surface| f(events, &|seq| surface.nodes.contains(&seq)))
+    }
+
+    /// Changes the agent's tool set before this step's request is built
+    /// (e.g. tools a mention in the claimed input switched on); the request
+    /// header records the change like [`crate::Agent::set_tools`] does.
+    pub fn update_tools(&self, f: impl FnOnce(&mut ToolRegistry)) {
+        f(&mut self.registry.lock().unwrap());
+    }
+
+    /// The agent's current tool set (including earlier hooks' changes).
+    pub fn current_tools(&self) -> ToolRegistry {
+        self.registry.lock().unwrap().clone()
     }
 
     /// Rejects the step (dsh pre-step `{kind: "reject"}`): nothing enters,
@@ -90,16 +106,21 @@ pub(crate) async fn run(
     if hooks.is_empty() {
         return Decision::default();
     }
-    let cwd = inner.config.lock().unwrap().cwd.clone();
+    let (cwd, tool_update) = {
+        let c = inner.config.lock().unwrap();
+        (c.cwd.clone(), c.route().tool_update)
+    };
     let tools: Vec<String> = inner.tool_schemas().into_iter().map(|t| t.name).collect();
     let step = PreStep {
         cwd: &cwd,
         claimed,
         tools: &tools,
+        tool_update,
         cancel,
         turn,
         step,
         journal: &inner.journal,
+        registry: &inner.tools,
         decision: Mutex::new(Decision::default()),
     };
     for hook in hooks {

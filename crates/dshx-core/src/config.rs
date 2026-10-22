@@ -9,6 +9,8 @@
 //! `[providers.<id>]` tables add model providers besides the built-in
 //! DeepSeek route (dsh `llm-pi-ai` providers).
 //! `[folders]` widens what the web UI's folder browser may list.
+//! `[skills]` decides which skills the model sees on its own; `/name` in a
+//! prompt loads any enabled skill.
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -46,6 +48,9 @@ pub struct Config {
     /// keys live in `credentials.toml`, never here.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub providers: BTreeMap<String, ProviderConfig>,
+    /// Skills the model may load on its own, and switched-off skills.
+    #[serde(skip_serializing_if = "SkillsConfig::is_default")]
+    pub skills: SkillsConfig,
 }
 
 impl Default for Config {
@@ -63,7 +68,87 @@ impl Default for Config {
             plugins: BTreeMap::new(),
             folders: FoldersConfig::default(),
             providers: BTreeMap::new(),
+            skills: SkillsConfig::default(),
         }
+    }
+}
+
+impl Config {
+    /// `always` and `disabled_tools` of an MCP server: its `[mcp_servers]`
+    /// table, else the table of the enabled plugin that brings it.
+    pub fn mcp_availability(&self, server: &str) -> McpAvailability {
+        if let Some(c) = self.mcp_servers.get(server) {
+            return McpAvailability {
+                always: c.always,
+                disabled_tools: c.disabled_tools.clone(),
+            };
+        }
+        self.plugins
+            .values()
+            .filter(|p| p.enabled)
+            .find_map(|p| p.mcp_servers.get(server).cloned())
+            .unwrap_or_default()
+    }
+}
+
+/// `[skills]`: with `catalog = "manual"` (the default) the model sees no
+/// skill catalog and loads no skill by itself unless its entry says `model =
+/// true`; `auto` lists every model-invocable skill like dsh. `/name` in a
+/// prompt loads any enabled skill either way.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct SkillsConfig {
+    pub catalog: SkillCatalog,
+    /// Per-skill switches by skill name (`[skills.entries."<name>"]`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub entries: BTreeMap<String, SkillEntryConfig>,
+}
+
+/// `[skills] catalog`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SkillCatalog {
+    #[default]
+    Manual,
+    Auto,
+}
+
+/// One `[skills.entries."<name>"]` table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct SkillEntryConfig {
+    /// `false`: neither listed nor loadable, not even through `/name`.
+    pub enabled: bool,
+    /// The model may load it on its own (with `catalog = "manual"`).
+    pub model: bool,
+}
+
+impl Default for SkillEntryConfig {
+    fn default() -> Self {
+        SkillEntryConfig {
+            enabled: true,
+            model: false,
+        }
+    }
+}
+
+impl SkillsConfig {
+    fn is_default(&self) -> bool {
+        *self == SkillsConfig::default()
+    }
+
+    /// Whether the skill `name` may load at all.
+    pub fn enabled(&self, name: &str) -> bool {
+        self.entries.get(name).is_none_or(|e| e.enabled)
+    }
+
+    /// Whether the model may load `name` on its own, given that its
+    /// frontmatter allows model invocation (`frontmatter`).
+    pub fn model_invocable(&self, name: &str, frontmatter: bool) -> bool {
+        frontmatter
+            && self.enabled(name)
+            && (self.catalog == SkillCatalog::Auto
+                || self.entries.get(name).is_some_and(|e| e.model))
     }
 }
 
@@ -232,6 +317,33 @@ pub struct McpServerConfig {
     #[serde(alias = "failOnStartupError")]
     pub fail_on_startup_error: bool,
     pub reconnect: McpReconnectConfig,
+    /// Offer the tools in every chat; otherwise only in chats that
+    /// activated the server (`@name` or the active-server chips).
+    #[serde(skip_serializing_if = "is_false")]
+    pub always: bool,
+    /// Raw tool names of this server that are never offered.
+    #[serde(alias = "disabledTools", skip_serializing_if = "Vec::is_empty")]
+    pub disabled_tools: Vec<String>,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
+/// `always` and `disabled_tools` of one MCP server (see [`McpServerConfig`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct McpAvailability {
+    #[serde(skip_serializing_if = "is_false")]
+    pub always: bool,
+    #[serde(alias = "disabledTools", skip_serializing_if = "Vec::is_empty")]
+    pub disabled_tools: Vec<String>,
+}
+
+impl McpAvailability {
+    pub fn is_default(&self) -> bool {
+        *self == McpAvailability::default()
+    }
 }
 
 impl Default for McpServerConfig {
@@ -252,6 +364,8 @@ impl Default for McpServerConfig {
             max_instruction_bytes: 32_768,
             fail_on_startup_error: false,
             reconnect: McpReconnectConfig::default(),
+            always: false,
+            disabled_tools: Vec::new(),
         }
     }
 }
@@ -288,11 +402,17 @@ impl Default for McpOAuthConfig {
 #[serde(default, rename_all = "snake_case")]
 pub struct PluginConfig {
     pub enabled: bool,
+    /// `always` and `disabled_tools` of the plugin's MCP servers by name.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_servers: BTreeMap<String, McpAvailability>,
 }
 
 impl Default for PluginConfig {
     fn default() -> Self {
-        PluginConfig { enabled: true }
+        PluginConfig {
+            enabled: true,
+            mcp_servers: BTreeMap::new(),
+        }
     }
 }
 

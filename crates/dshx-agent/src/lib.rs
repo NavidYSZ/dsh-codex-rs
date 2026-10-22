@@ -31,7 +31,8 @@ mod stream;
 pub mod testing;
 mod title;
 
-pub use agent::{Agent, AgentDeps};
+pub use agent::{Agent, AgentDeps, QueueAction};
+pub use compaction::Compacted;
 pub use config::{
     AgentConfig, ApprovalPolicy, CompactionConfig, ExtraSection, InstructionsConfig,
     MINIMAL_PERSONA, Preset, PromptConfig, PrunerConfig, RepeatReminderConfig, RouteCapabilities,

@@ -10,6 +10,7 @@ use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 use std::sync::RwLock;
 
+use dshx_core::config::SkillsConfig;
 use serde_json::{Map, Value};
 
 use super::frontmatter;
@@ -146,15 +147,20 @@ struct Root {
 }
 
 /// Discovers skills on every call; no caching, so edits apply at the next step.
-/// The custom roots can change while the registry is shared.
+/// The custom roots and the policy can change while the registry is shared.
 #[derive(Debug)]
 pub struct SkillRegistry {
     config: RwLock<SkillConfig>,
+    /// dsh-codex `[skills]`; `None` = dsh: every skill loads, the frontmatter
+    /// alone decides model invocation.
+    policy: RwLock<Option<SkillsConfig>>,
 }
 
 impl Clone for SkillRegistry {
     fn clone(&self) -> Self {
-        SkillRegistry::new(self.config())
+        let registry = SkillRegistry::new(self.config());
+        registry.set_policy(self.policy());
+        registry
     }
 }
 
@@ -162,7 +168,33 @@ impl SkillRegistry {
     pub fn new(config: SkillConfig) -> Self {
         SkillRegistry {
             config: RwLock::new(config),
+            policy: RwLock::new(None),
         }
+    }
+
+    /// Applies `[skills]` from the next discovery on: switched-off skills
+    /// disappear from snapshots, lists and lookups, and model invocation
+    /// also needs the policy's consent.
+    pub fn set_policy(&self, policy: Option<SkillsConfig>) {
+        *self.policy.write().unwrap() = policy;
+    }
+
+    pub fn policy(&self) -> Option<SkillsConfig> {
+        self.policy.read().unwrap().clone()
+    }
+
+    /// Whether the policy lets `skill` load, and if so its effective model
+    /// invocation flag.
+    fn admit(&self, mut skill: SkillSummary) -> Option<SkillSummary> {
+        let policy = self.policy.read().unwrap();
+        let Some(policy) = policy.as_ref() else {
+            return Some(skill);
+        };
+        if !policy.enabled(&skill.name) {
+            return None;
+        }
+        skill.model_invocable = policy.model_invocable(&skill.name, skill.model_invocable);
+        Some(skill)
     }
 
     /// The current settings (custom roots included).
@@ -176,7 +208,8 @@ impl SkillRegistry {
         self.config.write().unwrap().custom_dirs = dirs;
     }
 
-    /// Winning skills for a workspace, sorted by name (all invocation policies).
+    /// Winning skills for a workspace, sorted by name (all invocation
+    /// policies), without the ones the policy switched off.
     pub fn snapshot(&self, cwd: &Path) -> SkillSnapshot {
         let (candidates, complete) = self.discover(cwd);
         let mut winners: Vec<SkillSummary> = Vec::new();
@@ -193,13 +226,14 @@ impl SkillRegistry {
         }
         winners.sort_by(|a, b| a.name.cmp(&b.name));
         SkillSnapshot {
-            skills: winners,
+            skills: winners.into_iter().filter_map(|s| self.admit(s)).collect(),
             complete,
         }
     }
 
     /// Every valid skill of every root, highest precedence first; the first
-    /// of each name is the one [`SkillRegistry::snapshot`] picks.
+    /// of each name is the one [`SkillRegistry::snapshot`] picks. The policy
+    /// does not apply here.
     pub fn candidates(&self, cwd: &Path) -> Vec<SkillSummary> {
         self.discover(cwd).0
     }
@@ -248,6 +282,7 @@ impl SkillRegistry {
         let winner = self.list(cwd).into_iter().find(|s| s.name == name)?;
         let (summary, content) =
             parse_skill_file(&winner.path, &winner.source, winner.resource_base.clone())?;
+        let summary = self.admit(summary)?;
         (summary.name == winner.name).then_some(SkillDefinition { summary, content })
     }
 

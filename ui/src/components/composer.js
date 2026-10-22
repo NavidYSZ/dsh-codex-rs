@@ -5,12 +5,12 @@ import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
 import {
-  store, api, send, cancel, decide, setComposer, openSettings, fail,
+  store, send, cancel, decide, setComposer, openSettings,
 } from '../state.js';
 import {
   IconPlus, IconArrowUp, IconStop, IconChevronDown, IconFolder, IconShield, IconAlert, IconTerminal, IconPencil, IconTool,
 } from '../icons.js';
-import { Menu, MenuItem, ActionItem, Thumb } from './common.js';
+import { Menu, MenuItem, ActionItem } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
 import { ModeChip, useChatMode } from './modes.js';
 import { ProjectMenu } from './folders.js';
@@ -19,6 +19,9 @@ import { IconImage } from '../icons.js';
 import { parseArgs } from '../reduce.js';
 import { UsageBar } from './usage.js';
 import { confirmFullAccess } from './confirm.js';
+import { ComposerInput, insertAtCaret } from './composer-input.js';
+import { useAttachments, AttachmentRow } from './composer-attach.js';
+import { ComposerExtras } from './composer-extras.js';
 
 const ACCESS = ['read-only', 'workspace-write', 'danger-full-access'];
 
@@ -84,26 +87,21 @@ function HeroTray({ sel }) {
   </div>`;
 }
 
-function readFiles(list) {
-  return [...(list ?? [])].filter((f) => /^image\/(png|jpe?g|webp|gif)$/.test(f.type));
-}
-
 export function Composer({ hero, tx }) {
   const status = useStore(store, (s) => s.status);
   const info = useStore(store, (s) => s.info);
   const activeId = useStore(store, (s) => s.activeId);
   const sel = useSelection(tx);
   const [text, setText] = useState('');
-  const [images, setImages] = useState([]);
   const [drag, setDrag] = useState(false);
   const area = useRef(null);
   const file = useRef(null);
   const composing = useRef(false);
+  const att = useAttachments({ sel, insert: (s) => insertAtCaret(area.current, s) });
 
   const running = status === 'running' || status === 'waiting-approval';
   const noKey = info && !info.apiKeyConfigured;
-  const uploading = images.some((i) => !i.ref);
-  const canSend = !noKey && !uploading && (text.trim() || images.length);
+  const canSend = !noKey && !att.uploading && (text.trim() || att.items.length);
 
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, [activeId]);
   // "New automation" and similar hand over a draft once.
@@ -125,33 +123,20 @@ export function Composer({ hero, tx }) {
     el.style.height = `${Math.min(el.scrollHeight, Math.round(window.innerHeight * 0.4))}px`;
   }, [text]);
 
-  const attach = async (files) => {
-    for (const f of readFiles(files)) {
-      const key = Math.random().toString(36).slice(2);
-      setImages((xs) => [...xs, { key, ref: null, name: f.name }]);
-      try {
-        const ref = await api.upload(f);
-        setImages((xs) => xs.map((x) => (x.key === key ? { ...x, ref } : x)));
-      } catch (e) {
-        setImages((xs) => xs.filter((x) => x.key !== key));
-        fail(e);
-      }
-    }
-  };
-
   // While a turn runs, a message either steers it (taken at its next step) or
   // queues as the next turn; ⌘↩ picks the other one for this message.
   const followup = useStore(store, (s) => s.followup);
   const submit = async (other = false) => {
     if (running && !canSend) { cancel(); return; }
     if (!canSend) return;
-    const body = text.trim();
-    const refs = images.map((i) => i.ref);
+    const typed = text.trim();
+    const body = att.withFiles(typed);
+    const refs = att.refs();
     setText('');
-    setImages([]);
+    att.clear();
     const steer = running && (followup === 'steer') !== other;
     const ok = await send(body, refs, { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}), sandbox: sel.sandbox, ...(steer ? { steer } : {}) });
-    if (!ok) { setText(body); }
+    if (!ok) { setText(typed); }
   };
 
   const onKey = (e) => {
@@ -167,13 +152,11 @@ export function Composer({ hero, tx }) {
   return html`<div class=${cx('composer', drag && 'is-drag')}
       onDragOver=${(e) => { if ([...(e.dataTransfer?.types ?? [])].includes('Files')) { e.preventDefault(); setDrag(true); } }}
       onDragLeave=${() => setDrag(false)}
-      onDrop=${(e) => { e.preventDefault(); setDrag(false); attach(e.dataTransfer?.files); }}>
-    ${images.length ? html`<div class="composer-images">${images.map((i) => html`<${Thumb} key=${i.key} image=${i.ref} label=${t.removeImage}
-      onRemove=${() => setImages((xs) => xs.filter((x) => x.key !== i.key))} />`)}</div>` : null}
-    <textarea ref=${area} class="composer-input" rows="1" value=${text} placeholder=${placeholder} aria-label=${placeholder}
-      onInput=${(e) => setText(e.currentTarget.value)} onKeyDown=${onKey}
+      onDrop=${(e) => { e.preventDefault(); setDrag(false); att.drop(e.dataTransfer); }}>
+    <${AttachmentRow} att=${att} />
+    <${ComposerInput} areaRef=${area} value=${text} onValue=${setText} placeholder=${placeholder} onKeyDown=${onKey} model=${sel.model} hero=${hero}
       onCompositionStart=${() => { composing.current = true; }} onCompositionEnd=${() => { composing.current = false; }}
-      onPaste=${(e) => { const fs = readFiles(e.clipboardData?.files); if (fs.length) { e.preventDefault(); attach(fs); } }} />
+      onPaste=${(e) => { const fs = e.clipboardData?.files; if (fs?.length) { e.preventDefault(); att.add(fs); } }} />
     <div class="composer-foot">
       <span class="chip-wrap">
         <button type="button" ref=${plusAnchor} class="icon-btn add" aria-label=${t.attach} title=${t.attach} aria-haspopup="menu"
@@ -181,13 +164,13 @@ export function Composer({ hero, tx }) {
           <${IconPlus} size=${18} />
         </button>
         <${Menu} open=${plus} onClose=${() => setPlus(false)} anchor=${plusAnchor} side="top" align="start" class="menu-actions">
-          <${ActionItem} icon=${html`<${IconImage} size=${14} />`} onClick=${() => { setPlus(false); file.current?.click(); }}>${t.attachImage}</${ActionItem}>
+          <${ActionItem} icon=${html`<${IconImage} size=${14} />`} onClick=${() => { setPlus(false); file.current?.click(); }}>${t.attachFile}</${ActionItem}>
           <${ActionItem} icon=${html`<svg class="icon" width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>`}
             onClick=${() => { setPlus(false); openGoalForm(); }}>${t.setGoal}</${ActionItem}>
         </${Menu}>
       </span>
-      <input ref=${file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden
-        onChange=${(e) => { attach(e.currentTarget.files); e.currentTarget.value = ''; }} />
+      <input ref=${file} type="file" multiple hidden
+        onChange=${(e) => { att.add(e.currentTarget.files); e.currentTarget.value = ''; }} />
       <${ModelChip} sel=${sel} />
       ${hero ? null : html`<${AccessChip} sel=${sel} />`}
       <span class="spacer" />
@@ -264,6 +247,7 @@ export function ComposerSeat({ hero, tx }) {
       <${Banners} />
       ${approval ? html`<${ApprovalCard} approval=${approval} />` : null}
       ${hero ? null : html`<${GoalBar} />`}
+      <${ComposerExtras} />
       ${hero ? html`<${HeroTray} sel=${sel} />` : null}
       <${Composer} hero=${hero} tx=${tx} />
       ${hero ? null : html`<${UsageBar} />`}

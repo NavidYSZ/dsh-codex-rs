@@ -309,7 +309,8 @@ pub fn apply_catalog(
 }
 
 /// `/name` gesture tokens in the text of direct user messages, deduplicated
-/// in first-seen order (unvalidated against the registry).
+/// in first-seen order (unvalidated against the registry). `$name` is an
+/// alias, as Codex users know it.
 pub fn invoked_skill_names(claimed: &[Message]) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for message in claimed {
@@ -322,7 +323,7 @@ pub fn invoked_skill_names(claimed: &[Message]) -> Vec<String> {
             };
             let mut prev_is_boundary = true;
             for (i, c) in text.char_indices() {
-                if c == '/' && prev_is_boundary {
+                if (c == '/' || c == '$') && prev_is_boundary {
                     let rest = &text[i + 1..];
                     let end = rest.find(is_js_space).unwrap_or(rest.len());
                     let token = &rest[..end];
@@ -377,6 +378,10 @@ mod tests {
         assert_eq!(
             invoked_skill_names(&[m("/a run /b-c and /a, /usr/bin 5/8 /B /d\n/e")]),
             ["a", "b-c", "d", "e"]
+        );
+        assert_eq!(
+            invoked_skill_names(&[m("$a and /b $HOME $c-d x$e")]),
+            ["a", "b", "c-d"]
         );
         let mut injected = m("/x");
         injected.source = MessageSource::Other(json!({"kind": "runtime-context"}));

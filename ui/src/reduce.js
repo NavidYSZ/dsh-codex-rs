@@ -113,6 +113,11 @@ export function buildTranscript(events) {
           t.items.push(sourceNotice(kind, d, e.seq));
           break;
         }
+        // An MCP server the user switched on or off for this chat: a quiet line.
+        if (kind === 'mcp-activation' || kind === 'mcp-deactivation') {
+          current(null, e.time).items.push({ kind: 'notice', key: `m:${e.seq}`, code: kind, tone: 'muted', server: d.source.server ?? '' });
+          break;
+        }
         // Runtime context, AGENTS.md, skills etc. are model-only user messages.
         if (kind !== 'user') break;
         const t = current(null, e.time);
@@ -198,11 +203,13 @@ export function buildTranscript(events) {
         break;
 
       // dsh `compactSummary`: one marker per compaction, running until its end,
-      // with the summary and how much it replaced.
+      // with the summary and how much it replaced. A manual /compact runs
+      // between turns (`turn: null`): its marker closes the last turn.
       case 'compaction/start': {
         const item = { kind: 'divider', key: `k:${e.seq}`, code: 'compacted', running: true, summary: null, items: null, tokens: null, error: null };
         compactions.set(d.compactionId, item);
-        current(null, e.time).items.push(item);
+        const host = !turn && d.turn == null && out.turns.length ? out.turns[out.turns.length - 1] : current(null, e.time);
+        host.items.push(item);
         break;
       }
       case 'compaction/summary': {
