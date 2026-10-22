@@ -112,20 +112,6 @@ pub fn rank(query: &str, text: &str) -> Option<u32> {
     Some(3_000u32.saturating_sub(gaps * 20).max(100))
 }
 
-/// "visual-brand-foundation" → "Visual Brand Foundation".
-fn title_of(name: &str) -> String {
-    name.split(['-', '_'])
-        .filter(|w| !w.is_empty())
-        .map(|w| {
-            let mut c = w.chars();
-            c.next()
-                .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
-                .unwrap_or_default()
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn sorted(mut items: Vec<(u32, Value)>, max: usize) -> Vec<Value> {
     items.sort_by(|a, b| {
         b.0.cmp(&a.0).then_with(|| {
@@ -371,13 +357,7 @@ impl Runtime {
         let owners = self.skill_owners().await;
         let mut items = Vec::new();
         for s in snapshot.skills.into_iter().filter(|s| s.user_invocable) {
-            let title = s
-                .metadata
-                .as_ref()
-                .and_then(|m| m.get("title"))
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .unwrap_or_else(|| title_of(&s.name));
+            let title = super::extensions::skill_title(&s);
             let Some(score) = rank(q, &s.name).max(rank(q, &title)) else {
                 continue;
             };

@@ -30,6 +30,12 @@ use super::Runtime;
 mod mcp_form;
 mod skill_files;
 
+/// The title the Skills page and the `/` menu show: frontmatter `title`,
+/// else the name in words.
+pub(crate) fn skill_title(s: &dshx_tools::skill::SkillSummary) -> String {
+    skill_files::frontmatter_title(&s.path).unwrap_or_else(|| skill_files::title(None, &s.name))
+}
+
 use mcp_form::{ServerForm, ServerSecrets};
 
 /// How long "Test connection" waits by default, and at most.
@@ -744,10 +750,7 @@ impl Extensions for RuntimeExtensions {
                     })
                 })
                 .collect();
-            let title = |s: &dshx_tools::skill::SkillSummary| {
-                skill_files::frontmatter_title(&s.path)
-                    .unwrap_or_else(|| skill_files::title(None, &s.name))
-            };
+            let title = skill_title;
             let mut seen = HashSet::new();
             let mut out = Vec::new();
             for s in skills.candidates(&cwd) {
