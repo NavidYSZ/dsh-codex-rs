@@ -1,0 +1,60 @@
+/* Skills tab (components/skills.js): system font, readable titles, the
+   slug as a small mono hint, two-line descriptions. */
+
+.sk-list { display: flex; flex-direction: column; border-radius: 12px; background: var(--bg-1); box-shadow: 0 0 0 .5px var(--line-3); overflow: hidden; }
+.sk-section {
+  padding: 12px 16px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-3);
+  border-top: .5px solid var(--line-2);
+}
+.sk-section:first-child { border-top: 0; }
+.sk-row { display: flex; align-items: center; gap: 4px; padding-right: 10px; border-top: .5px solid var(--line-2); transition: background .12s; }
+.sk-row:first-child, .sk-section + .sk-row { border-top: 0; }
+.sk-row:hover { background: var(--hover); }
+.sk-main {
+  flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 12px 6px 12px 14px;
+  border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 10px;
+}
+.sk-main .plug-logo { width: 32px; height: 32px; border-radius: 8px; font-size: 12.5px; letter-spacing: .02em; margin-top: 1px; }
+.sk-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sk-titleline { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.sk-title { flex: 0 1 auto; min-width: 0; font: 600 14px/20px var(--font); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sk-slug { flex: 0 1 auto; min-width: 0; font: 400 12px/18px var(--mono); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sk-desc {
+  font: 400 13px/1.45 var(--font); color: var(--ink-2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.sk-warn { display: flex; align-items: flex-start; gap: 5px; margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--warn); }
+.sk-warn .icon { flex: none; margin-top: 1px; }
+.sk-note { margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.sk-side { flex: none; display: flex; align-items: center; gap: 10px; }
+.sk-side .pill { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.sk-switch { display: inline-flex; }
+.sk-row.is-off :is(.sk-titleline, .sk-desc, .sk-note, .plug-logo) { opacity: .55; }
+.sk-menu .menu-hint { white-space: normal; max-width: 260px; }
+.sk-new-menu { min-width: 280px; }
+.sk-new-menu .menu-label { flex-direction: column; align-items: flex-start; }
+
+.sk-skeleton:hover { background: none; }
+.sk-ghost { background: var(--hover); }
+.sk-bar { display: block; height: 10px; margin: 5px 0; border-radius: 5px; background: var(--hover); animation: pulse 1.2s ease-in-out infinite; }
+
+/* drawer content */
+.sk-doc { font-size: 13.5px; line-height: 1.6; margin: 0; }
+.sk-doc h1 { font-size: 18px; }
+.sk-doc h2 { font-size: 15.5px; }
+.sk-doc h3 { font-size: 14px; }
+.sk-files { margin: 0; padding: 4px; list-style: none; border-radius: 10px; background: var(--bg-module); }
+.sk-file { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 0 8px 0 calc(8px + var(--depth, 0) * 16px); font-size: 12.5px; }
+.sk-file-icon { flex: none; display: inline-flex; color: var(--ink-3); }
+.sk-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); text-align: left; font-size: 12.5px; }
+.sk-file-name.link-btn { color: var(--link); font-weight: 400; }
+.sk-file-size { flex: none; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.sk-files .sk-note { padding: 4px 8px; }
+.sk-textarea { height: auto; min-height: 64px; padding: 7px 10px; line-height: 1.5; resize: vertical; font-family: var(--font); }
+
+@media (max-width: 640px) {
+  .sk-row { flex-wrap: wrap; padding: 0 8px 10px 0; }
+  .sk-main { flex-basis: 100%; padding-bottom: 6px; }
+  .sk-side { width: 100%; justify-content: flex-end; padding-left: 58px; }
+  .sk-side .pill { margin-right: auto; }
+}

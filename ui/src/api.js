@@ -4,6 +4,7 @@
 // knows whether it talks to dshx-server or replays ui/fixtures/<name>.json.
 import { t } from './i18n.js';
 import { fixtureFs } from './fixture-fs.js';
+import { fixtureExt } from './fixture-ext.js';
 import { fixtureComposer } from './fixture-composer.js';
 
 export class ApiError extends Error {
@@ -124,6 +125,25 @@ class HttpApi {
   removeMcpServer(name) { return this.req('DELETE', `/api/mcp/servers/${enc(name)}`); }
   mcpToken(name, token) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/token`, { token }); }
   connectors() { return this.req('GET', '/api/connectors'); }
+  // Skills and MCP pages: skill detail, blank skills, server forms, test, log.
+  skill(name, cwd, path) { return this.req('GET', `/api/skills/${enc(name)}?${new URLSearchParams({ ...(cwd ? { cwd } : {}), ...(path ? { path } : {}) })}`); }
+  createSkill(body) { return this.req('POST', '/api/skills', body); }
+  /** `{enabled?, model?}` (the runtime side comes with package C). */
+  skillSettings(name, patch) { return this.req('PUT', `/api/skills/${enc(name)}/settings`, patch); }
+  mcpServer(name) { return this.req('GET', `/api/mcp/servers/${enc(name)}`); }
+  updateMcpServer(name, body) { return this.req('PUT', `/api/mcp/servers/${enc(name)}`, body); }
+  testMcpServer(body) { return this.req('POST', '/api/mcp/test', body); }
+  mcpServerLog(name) { return this.req('GET', `/api/mcp/servers/${enc(name)}/log`); }
+  /** `{always?, disabledTools?}` (the runtime side comes with package C). */
+  mcpSettings(name, patch) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/settings`, patch); }
+  /**
+   * Whether this server has the route `path`: a PUT-only route answers a GET
+   * with 405, one with a GET answers JSON (or 404 for the placeholder name);
+   * unknown paths get the app shell.
+   */
+  async hasRoute(path) {
+    try { return (await this.req('GET', path)) != null; } catch (e) { return e?.status === 405 || e?.status === 404; }
+  }
 
   // Models page: providers, keys (write only) and provider model lists.
   providers() { return this.req('GET', '/api/providers'); }
@@ -158,8 +178,6 @@ class HttpApi {
   updateQueue(id, item, body) { return this.req('POST', `/api/sessions/${enc(id)}/queue/${enc(item)}`, body); }
   /** Any file → `{path, name, bytes, sha256}`, stored read-only by the server. */
   uploadFile(file) { return this.req('POST', `/api/files?name=${enc(file.name || 'file')}`, undefined, file); }
-  skillSettings(name, body) { return this.req('PUT', `/api/skills/${enc(name)}/settings`, body); }
-  mcpSettings(name, body) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/settings`, body); }
   /** The session log (JSONL) as a Blob. */
   async exportLog(id) {
     const headers = this.token ? { Authorization: `Bearer ${this.token}` } : {};
@@ -591,12 +609,26 @@ class FixtureApi {
     return { base: 'fixtures/files/', root: this.sessionData?.header.cwd ?? '' };
   }
 
-  // Fixtures have no plugins, automations or teams.
+  // Fixtures have no plugins, automations or teams; skills, MCP servers
+  // and connectors come from fixtures/extensions.json (fixture-ext.js).
   async plugins() { return []; }
   async marketplaces() { return []; }
-  async skills() { return []; }
-  async mcpServers() { return []; }
-  async connectors() { return []; }
+  skills(cwd) { return fixtureExt.skills(cwd); }
+  skill(name, cwd, path) { return fixtureExt.skill(name, path); }
+  createSkill(body) { return fixtureExt.createSkill(body); }
+  skillSettings(name, patch) { return fixtureExt.skillSettings(name, patch); }
+  mcpServers() { return fixtureExt.servers(); }
+  mcpServer(name) { return fixtureExt.server(name); }
+  addMcpServer(body) { return fixtureExt.addServer(body); }
+  updateMcpServer(name, body) { return fixtureExt.updateServer(name, body); }
+  testMcpServer(body) { return fixtureExt.testServer(body); }
+  mcpServerLog(name) { return fixtureExt.log(name); }
+  mcpAction(name, action) { return fixtureExt.action(name, action); }
+  removeMcpServer(name) { return fixtureExt.removeServer(name); }
+  mcpToken(name, token) { return fixtureExt.token(name, token); }
+  mcpSettings(name, patch) { return fixtureExt.serverSettings(name, patch); }
+  async hasRoute() { return true; }
+  connectors() { return fixtureExt.connectors(); }
   async schedules() { return []; }
   async goal() { return { goal: null }; }
   async team() { throw new ApiError(404, 'team'); }
@@ -636,8 +668,6 @@ class FixtureApi {
   updateQueue(id, item, body) { return fixtureComposer.updateQueue(this, id, item, body); }
   uploadFile(file) { return fixtureComposer.uploadFile(this, file); }
   exportLog(id) { return fixtureComposer.exportLog(this, id); }
-  async skillSettings(name, body) { return { name, ...body }; }
-  async mcpSettings(name, body) { return { name, ...body }; }
 
   // Models page: DeepSeek plus an Anthropic route, kept in memory.
   async providers() {

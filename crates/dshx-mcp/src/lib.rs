@@ -10,7 +10,9 @@
 //! The server set can change at runtime: [`McpHandle::apply`] starts new
 //! and changed servers and stops removed ones, leaving the rest connected.
 //! HTTP servers log in through [`OAuthManager`] (see [`oauth`]); the
-//! built-in [`catalog`] lists well-known remote servers.
+//! built-in [`catalog`] lists well-known remote servers. Each server keeps
+//! a short log ([`McpHandle::log`]), and [`probe`] tries a configuration
+//! once without keeping the connection.
 //!
 //! ```no_run
 //! # async fn demo(config: &dshx_core::config::Config) -> anyhow::Result<()> {
@@ -26,18 +28,20 @@
 //! # Ok(()) }
 //! ```
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use dshx_core::Tool;
 use dshx_core::config::{Config, McpServerConfig};
 use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::{oneshot, watch};
 
 pub mod catalog;
 mod config;
 mod error;
 mod http;
+mod log;
 mod names;
 pub mod oauth;
 mod peer;
@@ -48,11 +52,13 @@ mod stdio;
 mod tools;
 
 pub use error::McpError;
+pub use log::{LOG_LINES, LogLine};
 pub use names::{is_server_name, public_tool_name};
 pub use oauth::{AuthChallenge, CallbackParams, LoginRequest, LoginStatus, OAuthManager};
 pub use resources::ResourceTool;
 pub use tools::McpTool;
 
+use log::ServerLog;
 use server::{Phase, Server};
 
 /// dsh `getSectionOrder('MCP_SERVERS')`.
@@ -136,6 +142,8 @@ pub struct McpHandle {
     invalid: RwLock<BTreeMap<String, String>>,
     /// Serializes `apply` and `restart`.
     reconcile: tokio::sync::Mutex<()>,
+    /// Logs by server name; they outlive restarts and config changes.
+    logs: Mutex<BTreeMap<String, Arc<ServerLog>>>,
 }
 
 impl McpHandle {
@@ -154,7 +162,43 @@ impl McpHandle {
             oauth,
             invalid: RwLock::new(BTreeMap::new()),
             reconcile: tokio::sync::Mutex::new(()),
+            logs: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    fn log_of(&self, name: &str) -> Arc<ServerLog> {
+        self.logs
+            .lock()
+            .unwrap()
+            .entry(name.to_owned())
+            .or_default()
+            .clone()
+    }
+
+    /// The last [`LOG_LINES`] lines of a server, oldest first: its stderr,
+    /// failed HTTP requests and connection events.
+    pub fn log(&self, name: &str) -> Vec<LogLine> {
+        self.logs
+            .lock()
+            .unwrap()
+            .get(name)
+            .map(|log| log.lines())
+            .unwrap_or_default()
+    }
+
+    /// The input schemas of a server's current tools, by the server's own
+    /// tool names.
+    pub fn tool_schemas(&self, name: &str) -> Vec<(String, Value)> {
+        self.current()
+            .iter()
+            .find(|s| s.name() == name)
+            .map(|s| {
+                s.tools()
+                    .into_iter()
+                    .map(|t| (t.raw.name, t.raw.input_schema))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn oauth(&self) -> Option<&Arc<OAuthManager>> {
@@ -374,10 +418,15 @@ impl McpHandle {
                         strict_errors.push(e.clone());
                     }
                     tracing::error!("{e}; server skipped");
+                    self.log_of(name).error(e.clone());
                     invalid.insert(name.clone(), e);
                 }
             }
         }
+        self.logs
+            .lock()
+            .unwrap()
+            .retain(|name, _| servers.contains_key(name));
         let current = self.current();
         let (keep, stop): (Vec<_>, Vec<_>) = current
             .into_iter()
@@ -389,7 +438,9 @@ impl McpHandle {
                 continue;
             }
             let strict = spec.fail_on_startup_error;
-            let (server, first) = Server::start(spec, self.changes.clone(), self.oauth.as_ref());
+            let log = self.log_of(&spec.name);
+            let (server, first) =
+                Server::start(spec, self.changes.clone(), self.oauth.as_ref(), log);
             startups.push((server.clone(), strict, first));
             next.push(server);
         }
@@ -422,8 +473,13 @@ impl McpHandle {
             anyhow::bail!("no running MCP server named {name}");
         };
         old.dispose().await;
-        let (server, first) =
-            Server::start(old.spec.clone(), self.changes.clone(), self.oauth.as_ref());
+        old.log.info("restarted");
+        let (server, first) = Server::start(
+            old.spec.clone(),
+            self.changes.clone(),
+            self.oauth.as_ref(),
+            old.log.clone(),
+        );
         {
             let mut servers = self.servers.write().unwrap();
             for slot in servers.iter_mut() {
@@ -464,6 +520,94 @@ pub fn uses_oauth(name: &str, config: &McpServerConfig) -> bool {
             ..
         })
     )
+}
+
+/// A tool a [`probe`] found.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ProbeTool {
+    /// The server's own name.
+    pub name: String,
+    pub description: String,
+}
+
+/// Outcome of [`probe`].
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Probe {
+    /// Handshake and `tools/list` succeeded.
+    pub ok: bool,
+    pub tools: Vec<ProbeTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// The server answered with an authorization challenge.
+    pub needs_login: bool,
+    /// What a stdio server wrote to stderr meanwhile (last lines).
+    pub stderr: Vec<String>,
+    pub elapsed_ms: u64,
+}
+
+/// stderr lines a probe reports.
+const PROBE_STDERR_LINES: usize = 40;
+
+/// Connects one server configuration once, as a start would (handshake and
+/// `tools/list`), without retries and without keeping the connection: a
+/// stdio server is stopped with its process group afterwards. `timeout`
+/// bounds the whole attempt.
+pub async fn probe(
+    name: &str,
+    config: &McpServerConfig,
+    oauth: Option<&Arc<OAuthManager>>,
+    timeout: Duration,
+) -> Probe {
+    let started = Instant::now();
+    let failed = |error: String| Probe {
+        ok: false,
+        tools: Vec::new(),
+        error: Some(error),
+        needs_login: false,
+        stderr: Vec::new(),
+        elapsed_ms: started.elapsed().as_millis() as u64,
+    };
+    let mut spec = match config::resolve(name, config) {
+        Ok(spec) => spec,
+        Err(e) => return failed(e),
+    };
+    spec.reconnect.enabled = false;
+    let log = Arc::new(ServerLog::default());
+    let changes = Arc::new(watch::channel(0).0);
+    let (server, first) = Server::start(spec, changes, oauth, log.clone());
+    let outcome = match tokio::time::timeout(timeout, first).await {
+        Ok(Ok(outcome)) => outcome,
+        Ok(Err(_)) => Err("connection supervisor stopped".into()),
+        Err(_) => Err(format!(
+            "no answer within {} s",
+            timeout.as_secs_f32().round()
+        )),
+    };
+    let needs_login = server.phase() == Phase::NeedsLogin;
+    let tools = server
+        .tools()
+        .into_iter()
+        .map(|t| ProbeTool {
+            name: t.raw.name,
+            description: t.raw.description,
+        })
+        .collect();
+    server.dispose().await;
+    if outcome.is_err() {
+        // A crashing server's last words arrive just after its exit.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+    let mut stderr = log.stderr();
+    stderr.drain(..stderr.len().saturating_sub(PROBE_STDERR_LINES));
+    Probe {
+        ok: outcome.is_ok(),
+        tools,
+        error: outcome.err(),
+        needs_login,
+        stderr,
+        elapsed_ms: started.elapsed().as_millis() as u64,
+    }
 }
 
 type Startup = (Arc<Server>, bool, oneshot::Receiver<Result<(), String>>);

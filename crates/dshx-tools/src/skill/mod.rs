@@ -34,8 +34,8 @@ pub use catalog::{
     invocation_messages, invoked_skill_names, render_skill_content,
 };
 pub use discovery::{
-    PROVIDER, ResourceBase, SkillConfig, SkillDefinition, SkillRegistry, SkillSnapshot,
-    SkillSummary, discover_dir, is_skill_name,
+    PROVIDER, RejectedSkill, ResourceBase, SkillConfig, SkillDefinition, SkillRegistry,
+    SkillSnapshot, SkillSummary, discover_dir, is_skill_name, split_frontmatter,
 };
 
 /// Description of the `skill` tool, verbatim from dsh 0.2.0-rc.2.

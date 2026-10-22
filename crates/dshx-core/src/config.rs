@@ -288,6 +288,10 @@ pub struct McpServerConfig {
     /// stdio: variables merged over the parent environment (which loses
     /// credential-like names and `DSH_*`).
     pub env: BTreeMap<String, String>,
+    /// stdio: parent variables passed through even when their names look
+    /// like credentials (Codex `env_vars`); unset ones are skipped.
+    #[serde(alias = "envVars", skip_serializing_if = "Vec::is_empty")]
+    pub env_vars: Vec<String>,
     /// stdio: working directory; `None` = the process's.
     pub cwd: Option<PathBuf>,
     /// Streamable HTTP endpoint; plain `http://` only for loopback hosts.
@@ -350,6 +354,7 @@ impl Default for McpServerConfig {
             command: None,
             args: Vec::new(),
             env: BTreeMap::new(),
+            env_vars: Vec::new(),
             cwd: None,
             url: None,
             headers: BTreeMap::new(),

@@ -118,10 +118,17 @@ pub(crate) fn resolve(name: &str, config: &McpServerConfig) -> Result<ServerSpec
             .clone()
             .filter(|c| !c.is_empty())
             .ok_or_else(|| fail("stdio servers need a command".into()))?;
+        // Passed-through variables join the configured ones (which win).
+        let mut env = config.env.clone();
+        for name in &config.env_vars {
+            if let (false, Ok(value)) = (env.contains_key(name), std::env::var(name)) {
+                env.insert(name.clone(), value);
+            }
+        }
         TransportSpec::Stdio {
             command,
             args: config.args.clone(),
-            env: config.env.clone(),
+            env,
             cwd: config.cwd.clone().filter(|c| !c.as_os_str().is_empty()),
         }
     } else {

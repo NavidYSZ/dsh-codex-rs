@@ -7,6 +7,11 @@
 //! the skill registry sees new folders at the next step, the MCP handle
 //! starts and stops only what changed, and open agents pick up the new
 //! tools through [`Runtime::refresh_agent`].
+//!
+//! Secret values of config servers (environment, headers, bearer tokens
+//! entered on the MCP page) live in `credentials.toml` ([`mcp_form`]); the
+//! Skills page reads skill folders and creates blank skills
+//! ([`skill_files`]).
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,9 +23,18 @@ use dshx_mcp::catalog;
 use dshx_mcp::{CallbackParams, LoginRequest, ServerInfo};
 use dshx_plugins::{InstallRecord, Marketplace, MarketplaceRecord, Plugin, PluginHome, plugin_id};
 use dshx_server::{Extensions, NotFound, OAuthCallback};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use super::Runtime;
+
+mod mcp_form;
+mod skill_files;
+
+use mcp_form::{ServerForm, ServerSecrets};
+
+/// How long "Test connection" waits by default, and at most.
+const PROBE_WAIT: Duration = Duration::from_secs(30);
+const PROBE_WAIT_MAX: Duration = Duration::from_secs(120);
 
 /// How long a change waits for the first connection attempt of the
 /// servers it (re)started.
@@ -71,6 +85,15 @@ struct ServerEntry {
     /// Why it cannot run (unsupported transport, name taken).
     error: Option<String>,
     warnings: Vec<String>,
+    /// Values from `credentials.toml` (config servers only).
+    secrets: ServerSecrets,
+}
+
+impl ServerEntry {
+    /// The config the server runs with: its table plus its secrets.
+    fn effective(&self) -> McpServerConfig {
+        self.secrets.apply(&self.config)
+    }
 }
 
 /// Config servers first, then the servers of enabled plugins; a plugin
@@ -86,6 +109,7 @@ fn server_entries(config: &Config, plugins: &[Plugin]) -> Vec<ServerEntry> {
             original_name: None,
             error: None,
             warnings: Vec::new(),
+            secrets: ServerSecrets::default(),
         })
         .collect();
     for plugin in enabled(config, plugins) {
@@ -107,6 +131,7 @@ fn server_entries(config: &Config, plugins: &[Plugin]) -> Vec<ServerEntry> {
                 original_name: Some(server.original_name.clone()),
                 error: server.error.clone().or(taken),
                 warnings: server.warnings.clone(),
+                secrets: ServerSecrets::default(),
             });
         }
     }
@@ -117,7 +142,7 @@ fn runnable(entries: &[ServerEntry]) -> BTreeMap<String, McpServerConfig> {
     entries
         .iter()
         .filter(|e| e.error.is_none())
-        .map(|e| (e.name.clone(), e.config.clone()))
+        .map(|e| (e.name.clone(), e.effective()))
         .collect()
 }
 
@@ -164,6 +189,19 @@ impl Runtime {
             .collect()
     }
 
+    /// Config and plugin servers with the secrets of the config servers.
+    async fn entries_now(&self, config: &Config, plugins: &[Plugin]) -> Vec<ServerEntry> {
+        let credentials = self.credentials.clone();
+        let mut secrets = tokio::task::spawn_blocking(move || mcp_form::load(&credentials))
+            .await
+            .unwrap_or_default();
+        let mut entries = server_entries(config, plugins);
+        for entry in entries.iter_mut().filter(|e| e.plugin.is_none()) {
+            entry.secrets = secrets.remove(&entry.name).unwrap_or_default();
+        }
+        entries
+    }
+
     /// Re-reads the plugins and applies the skill folders and MCP servers
     /// of the config and the enabled plugins. `wait` bounds the wait for
     /// started servers (`None` = until their first attempt finished).
@@ -171,7 +209,7 @@ impl Runtime {
         let config = self.config();
         let plugins = self.plugins_now().await;
         self.skills.set_custom_dirs(skill_dirs(&config, &plugins));
-        let entries = server_entries(&config, &plugins);
+        let entries = self.entries_now(&config, &plugins).await;
         for entry in entries.iter().filter(|e| e.error.is_some()) {
             tracing::warn!(
                 "MCP server {} skipped: {}",
@@ -220,7 +258,9 @@ impl RuntimeExtensions {
     async fn entry(&self, name: &str) -> anyhow::Result<ServerEntry> {
         let config = self.rt.config();
         let plugins = self.rt.plugins_now().await;
-        server_entries(&config, &plugins)
+        self.rt
+            .entries_now(&config, &plugins)
+            .await
             .into_iter()
             .find(|e| e.name == name)
             .ok_or_else(|| NotFound(format!("MCP server {name}")).into())
@@ -233,18 +273,21 @@ impl RuntimeExtensions {
 
     fn server_json(&self, entry: &ServerEntry, statuses: &[ServerInfo]) -> Value {
         let cfg = &entry.config;
+        let secrets = &entry.secrets;
         let status = statuses.iter().find(|s| s.name == entry.name);
         let url = cfg.url.as_deref().and_then(|u| url::Url::parse(u).ok());
         let login = match (&url, self.rt.mcp.oauth()) {
             (Some(url), Some(oauth)) => oauth.status(url),
             _ => None,
         };
-        let oauth = dshx_mcp::uses_oauth(&entry.name, cfg);
+        let oauth = dshx_mcp::uses_oauth(&entry.name, &entry.effective());
+        // Per-chat settings (`always`, `disabled_tools`): the config table,
+        // for plugin servers the plugin's table.
+        let availability = self.rt.config().mcp_availability(&entry.name);
         let connector = catalog::connectors()
             .into_iter()
             .find(|c| cfg.url.as_deref() == Some(c.url.as_str()))
             .map(|c| c.id);
-        let availability = self.rt.config().mcp_availability(&entry.name);
         let state = match (status, &entry.error) {
             (_, Some(_)) => "error",
             (Some(s), None) => s.status,
@@ -262,8 +305,20 @@ impl RuntimeExtensions {
             "url": cfg.url,
             "command": cfg.command,
             "args": cfg.args,
-            // Header values may be secrets; the page only needs the names.
-            "headers": cfg.headers.keys().collect::<Vec<_>>(),
+            "cwd": cfg.cwd,
+            "envVars": cfg.env_vars,
+            "bearerTokenEnvVar": cfg.bearer_token_env_var,
+            // Values may be secrets; the page only needs the names.
+            "env": mcp_form::names(&cfg.env, &secrets.env),
+            "headers": mcp_form::names(&cfg.headers, &secrets.headers),
+            "secrets": {
+                "env": secrets.env.keys().collect::<Vec<_>>(),
+                "headers": secrets.headers.keys().collect::<Vec<_>>(),
+                "bearerToken": secrets.bearer_token.is_some(),
+            },
+            "oauthEnabled": cfg.oauth.as_ref().is_none_or(|o| o.enabled),
+            "always": availability.always,
+            "disabledTools": availability.disabled_tools,
             "auth": { "oauth": oauth, "login": login },
             "status": state,
             "error": entry.error.clone().or_else(|| status.and_then(|s| s.error.clone())),
@@ -271,8 +326,6 @@ impl RuntimeExtensions {
             "challenge": status.and_then(|s| s.challenge.clone()),
             "warnings": entry.warnings,
             "tools": status.map(|s| s.tools.clone()).unwrap_or_default(),
-            "always": availability.always,
-            "disabledTools": availability.disabled_tools,
         })
     }
 
@@ -385,6 +438,21 @@ impl RuntimeExtensions {
         self.rt.reload_extensions(Some(APPLY_WAIT)).await
     }
 
+    async fn save_secrets(&self, name: &str, secrets: Option<ServerSecrets>) -> anyhow::Result<()> {
+        let credentials = self.rt.credentials.clone();
+        let name = name.to_owned();
+        blocking(move || mcp_form::save(&credentials, &name, secrets.as_ref())).await
+    }
+
+    /// A config server that the page may edit.
+    async fn config_entry(&self, name: &str) -> anyhow::Result<ServerEntry> {
+        let entry = self.entry(name).await?;
+        if let Some(plugin) = &entry.plugin {
+            anyhow::bail!("{name} belongs to the plugin {plugin}; change it in the plugin");
+        }
+        Ok(entry)
+    }
+
     async fn restart(&self, name: &str) {
         if let Err(e) = self.rt.mcp.restart(name, Some(APPLY_WAIT)).await {
             tracing::debug!("restart of {name} skipped: {e}");
@@ -398,7 +466,7 @@ impl RuntimeExtensions {
             anyhow::bail!("{name}: {e}");
         }
         anyhow::ensure!(
-            dshx_mcp::uses_oauth(name, &entry.config),
+            dshx_mcp::uses_oauth(name, &entry.effective()),
             "{name} does not log in through OAuth (stdio, an Authorization header or bearer_token_env_var)"
         );
         let url = url::Url::parse(entry.config.url.as_deref().unwrap_or_default())?;
@@ -663,6 +731,23 @@ impl Extensions for RuntimeExtensions {
             let owners: Vec<(PathBuf, String)> = enabled(&config, &plugins)
                 .flat_map(|p| p.skill_dirs.iter().map(|d| (canonical(d), p.id.clone())))
                 .collect();
+            let logos: BTreeMap<&str, String> = plugins
+                .iter()
+                .filter_map(|p| {
+                    let path = p.interface.get("logo").and_then(Value::as_str)?;
+                    let local = !path.contains("://") && !path.starts_with("data:");
+                    local.then(|| {
+                        (
+                            p.id.as_str(),
+                            format!("/api/plugins/{}/assets/{path}", p.id),
+                        )
+                    })
+                })
+                .collect();
+            let title = |s: &dshx_tools::skill::SkillSummary| {
+                skill_files::frontmatter_title(&s.path)
+                    .unwrap_or_else(|| skill_files::title(None, &s.name))
+            };
             let mut seen = HashSet::new();
             let mut out = Vec::new();
             for s in skills.candidates(&cwd) {
@@ -672,6 +757,8 @@ impl Extensions for RuntimeExtensions {
                     .map(|(_, id)| id.clone());
                 out.push(json!({
                     "name": s.name,
+                    "title": title(&s),
+                    "logoUrl": plugin.as_deref().and_then(|id| logos.get(id)),
                     "description": s.description,
                     "whenToUse": s.when_to_use,
                     "source": if plugin.is_some() { "plugin" } else { s.source.as_str() },
@@ -696,6 +783,8 @@ impl Extensions for RuntimeExtensions {
                 {
                     out.push(json!({
                         "name": s.name,
+                        "title": title(&s),
+                        "logoUrl": logos.get(p.id.as_str()),
                         "description": s.description,
                         "whenToUse": s.when_to_use,
                         "source": "plugin",
@@ -709,6 +798,36 @@ impl Extensions for RuntimeExtensions {
                     }));
                 }
             }
+            // Skill files that are no skill (yet): shown with their problem,
+            // never invocable.
+            for r in skills.rejected(&cwd) {
+                let folder = match r.path.file_name().and_then(|f| f.to_str()) {
+                    Some("SKILL.md") => r.path.parent().and_then(Path::file_name),
+                    _ => r.path.file_stem(),
+                };
+                let name = folder
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let plugin = owners
+                    .iter()
+                    .find(|(dir, _)| r.path.starts_with(dir))
+                    .map(|(_, id)| id.clone());
+                out.push(json!({
+                    "name": name,
+                    "title": skill_files::title(None, &name),
+                    "description": "",
+                    "source": if plugin.is_some() { "plugin" } else { r.source.as_str() },
+                    "plugin": plugin,
+                    "path": r.path,
+                    "active": false,
+                    "invalid": true,
+                    "error": r.reason,
+                    "modelInvocable": false,
+                    "userInvocable": false,
+                    "enabled": config.skills.enabled(&name),
+                    "model": false,
+                }));
+            }
             Ok(Value::Array(out))
         })
         .await
@@ -719,7 +838,9 @@ impl Extensions for RuntimeExtensions {
         let plugins = self.rt.plugins_now().await;
         let statuses = self.rt.mcp.status();
         Ok(Value::Array(
-            server_entries(&config, &plugins)
+            self.rt
+                .entries_now(&config, &plugins)
+                .await
                 .iter()
                 .map(|e| self.server_json(e, &statuses))
                 .collect(),
@@ -736,26 +857,29 @@ impl Extensions for RuntimeExtensions {
         let name = body
             .get("name")
             .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
             .map(str::to_owned)
             .or_else(|| connector.as_ref().map(|c| c.id.clone()))
             .ok_or_else(|| anyhow::anyhow!("name is required"))?;
-        let mut fields = match body.get("config") {
-            Some(Value::Object(map)) => map.clone(),
-            Some(Value::Null) | None => Map::new(),
-            Some(_) => anyhow::bail!("config must be an object"),
-        };
-        if let Some(c) = &connector {
+        let mut body = body.clone();
+        if let Some(c) = &connector
+            && let Some(fields) = body
+                .as_object_mut()
+                .map(|b| b.entry("config").or_insert_with(|| json!({})))
+                .and_then(Value::as_object_mut)
+        {
             fields
                 .entry("url")
                 .or_insert_with(|| Value::String(c.url.clone()));
         }
-        let cfg: McpServerConfig = serde_json::from_value(Value::Object(fields))
-            .map_err(|e| anyhow::anyhow!("invalid server config: {e}"))?;
-        dshx_mcp::check_server(&name, &cfg).map_err(|e| anyhow::anyhow!(e))?;
+        let (cfg, secrets) = ServerForm::parse(&body)?.merge(None)?;
+        dshx_mcp::check_server(&name, &secrets.apply(&cfg)).map_err(|e| anyhow::anyhow!(e))?;
         let _ops = self.rt.ext.ops.lock().await;
         if self.entry(&name).await.is_ok() {
             anyhow::bail!("an MCP server named {name} already exists");
         }
+        self.save_secrets(&name, Some(secrets)).await?;
         let key = name.clone();
         self.change_config(|c| {
             c.mcp_servers.insert(key, cfg);
@@ -775,6 +899,7 @@ impl Extensions for RuntimeExtensions {
             c.mcp_servers.remove(&key);
         })
         .await?;
+        self.save_secrets(name, None).await?;
         // Its tokens go with it.
         if let (Some(url), Ok(oauth)) = (
             entry
@@ -847,6 +972,7 @@ impl Extensions for RuntimeExtensions {
     async fn start_login(&self, server: &str, redirect_uri: &str) -> anyhow::Result<Value> {
         let (entry, url) = self.login_target(server).await?;
         let oauth_config = entry.config.oauth.clone().unwrap_or_default();
+        let headers = entry.effective().headers;
         let challenge = self.rt.mcp.challenge(server);
         let authorization_url = self
             .oauth()?
@@ -854,7 +980,7 @@ impl Extensions for RuntimeExtensions {
                 server,
                 url: &url,
                 oauth: &oauth_config,
-                headers: &entry.config.headers,
+                headers: &headers,
                 challenge: challenge.as_ref(),
                 redirect_uri,
             })
@@ -893,5 +1019,141 @@ impl Extensions for RuntimeExtensions {
         self.oauth()?.set_token(&url, token.as_deref())?;
         self.restart(server).await;
         self.server_value(server).await
+    }
+
+    async fn mcp_server(&self, name: &str) -> anyhow::Result<Value> {
+        let entry = self.entry(name).await?;
+        let mut value = self.server_json(&entry, &self.rt.mcp.status());
+        let schemas: BTreeMap<String, Value> = self.rt.mcp.tool_schemas(name).into_iter().collect();
+        if let Some(Value::Array(tools)) = value.get_mut("tools") {
+            for tool in tools {
+                let raw = tool["rawName"].as_str().unwrap_or_default();
+                if let Some(schema) = schemas.get(raw) {
+                    tool["inputSchema"] = schema.clone();
+                }
+            }
+        }
+        Ok(value)
+    }
+
+    async fn update_mcp_server(&self, name: &str, body: Value) -> anyhow::Result<Value> {
+        let form = ServerForm::parse(&body)?;
+        let _ops = self.rt.ext.ops.lock().await;
+        let entry = self.config_entry(name).await?;
+        let (cfg, secrets) = form.merge(Some((&entry.config, &entry.secrets)))?;
+        dshx_mcp::check_server(name, &secrets.apply(&cfg)).map_err(|e| anyhow::anyhow!(e))?;
+        self.save_secrets(name, Some(secrets)).await?;
+        let key = name.to_owned();
+        self.change_config(|c| {
+            c.mcp_servers.insert(key, cfg);
+        })
+        .await?;
+        self.server_value(name).await
+    }
+
+    async fn test_mcp_server(&self, body: Value) -> anyhow::Result<Value> {
+        let name = body
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .unwrap_or("test")
+            .to_owned();
+        let form = ServerForm::parse(&body)?;
+        // Testing an edited server: masked values come from its secrets.
+        let current = self.entry(&name).await.ok().filter(|e| e.plugin.is_none());
+        let (cfg, secrets) = form.merge(current.as_ref().map(|e| (&e.config, &e.secrets)))?;
+        let wait = body
+            .get("timeoutMs")
+            .and_then(Value::as_u64)
+            .map_or(PROBE_WAIT, Duration::from_millis)
+            .clamp(Duration::from_secs(1), PROBE_WAIT_MAX);
+        let probe = dshx_mcp::probe(&name, &secrets.apply(&cfg), self.rt.mcp.oauth(), wait).await;
+        Ok(serde_json::to_value(probe)?)
+    }
+
+    async fn mcp_server_log(&self, name: &str) -> anyhow::Result<Value> {
+        self.entry(name).await?;
+        Ok(json!({ "name": name, "lines": self.rt.mcp.log(name) }))
+    }
+
+    async fn skill(
+        &self,
+        name: &str,
+        cwd: Option<String>,
+        path: Option<String>,
+    ) -> anyhow::Result<Value> {
+        // Only skills the page lists can be read.
+        let rows = self.skills(cwd).await?;
+        let mut row = rows
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|r| {
+                r["name"] == name
+                    && path
+                        .as_deref()
+                        .is_none_or(|p| r["path"].as_str() == Some(p))
+            })
+            .cloned()
+            .ok_or_else(|| NotFound(format!("skill {name}")))?;
+        let file = PathBuf::from(row["path"].as_str().unwrap_or_default());
+        let detail = blocking(move || skill_files::detail(&file)).await?;
+        if let (Some(row), Value::Object(detail)) = (row.as_object_mut(), detail) {
+            row.extend(detail);
+        }
+        Ok(row)
+    }
+
+    async fn create_skill(&self, body: Value) -> anyhow::Result<Value> {
+        let text = |key: &str| {
+            body.get(key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_owned()
+        };
+        let (name, description, cwd) = (text("name"), text("description"), text("cwd"));
+        let cwd = (!cwd.is_empty()).then_some(cwd);
+        let dir = match body
+            .get("scope")
+            .and_then(Value::as_str)
+            .unwrap_or("personal")
+        {
+            "personal" => self
+                .rt
+                .skills
+                .config()
+                .agents_home
+                .ok_or_else(|| anyhow::anyhow!("no home folder for personal skills"))?
+                .join("skills"),
+            "project" => {
+                let cwd = cwd
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("a project skill needs the project folder"))?;
+                skill_files::project_root(Path::new(cwd)).join(".agents/skills")
+            }
+            other => anyhow::bail!("unknown scope {other:?} (personal or project)"),
+        };
+        let rows = self.skills(cwd.clone()).await?;
+        if let Some(other) = rows
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|r| r["name"] == name.as_str() && r["invalid"] != true)
+        {
+            anyhow::bail!(
+                "a skill named {name} already exists ({})",
+                other["path"].as_str().unwrap_or_default()
+            );
+        }
+        let (folder, skill) = (dir, name.clone());
+        let file = blocking(move || {
+            let file = skill_files::create(&folder, &skill, &description)?;
+            Ok(file.canonicalize().unwrap_or(file))
+        })
+        .await?;
+        self.skill(&name, cwd, Some(file.display().to_string()))
+            .await
     }
 }

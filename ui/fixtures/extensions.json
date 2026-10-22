@@ -1,0 +1,1206 @@
+{
+ "description": "Skills, MCP servers, their logs and the connector catalog for the Skills and MCP pages in fixture mode. ?ext=empty shows the empty states, ?ext=many 200 skills and a server with 50 tools, ?ext=error the error states.",
+ "skills": [
+  {
+   "name": "visual-brand-foundation",
+   "title": "Visual Brand Foundation",
+   "description": "Develop a coherent visual brand identity and an applied brand or CI sheet from an existing product, brief, or reference. Use for typography, colour roles, logo direction and representative applications.",
+   "whenToUse": null,
+   "source": "user-agents",
+   "plugin": null,
+   "path": "/Users/alex/.agents/skills/visual-brand-foundation/SKILL.md",
+   "active": true,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": true,
+   "model": false
+  },
+  {
+   "name": "release-notes",
+   "title": "Release Notes",
+   "description": "Write release notes from the merged pull requests since the last tag, grouped by user impact.",
+   "whenToUse": null,
+   "source": "project-agents",
+   "plugin": null,
+   "path": "/Users/alex/code/storefront/.agents/skills/release-notes/SKILL.md",
+   "active": true,
+   "modelInvocable": true,
+   "userInvocable": true,
+   "enabled": true,
+   "model": true
+  },
+  {
+   "name": "deploy-check",
+   "title": "Deploy Check",
+   "description": "Check a deployment: health endpoints, error rates and the last five log lines of every service.",
+   "whenToUse": null,
+   "source": "project-dsh",
+   "plugin": null,
+   "path": "/Users/alex/code/storefront/.dsh/skills/deploy-check/SKILL.md",
+   "active": true,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": false,
+   "model": false
+  },
+  {
+   "name": "skill-creator",
+   "title": "Skill Creator",
+   "description": "Create new skills, improve existing ones and measure how well they trigger.",
+   "whenToUse": null,
+   "source": "user-agents",
+   "plugin": null,
+   "path": "/Users/alex/.agents/skills/skill-creator/SKILL.md",
+   "active": true,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": true,
+   "model": false
+  },
+  {
+   "name": "seo-template-minimal",
+   "title": "SEO Report Template",
+   "description": "Minimal monochrome HTML reports for SEO audits, keyword maps and client roadmaps.",
+   "whenToUse": null,
+   "source": "user-dsh-codex",
+   "plugin": null,
+   "path": "/Users/alex/.dsh-codex/skills/seo-template-minimal/SKILL.md",
+   "active": true,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": true,
+   "model": false
+  },
+  {
+   "name": "pdf",
+   "title": "PDF",
+   "description": "Read, merge, split, fill and create PDF files, including OCR for scanned pages.",
+   "whenToUse": null,
+   "source": "plugin",
+   "plugin": "document-skills@anthropic-agent-skills",
+   "path": "/Users/alex/.dsh-codex/plugins/anthropic-agent-skills/document-skills/skills/pdf/SKILL.md",
+   "active": true,
+   "modelInvocable": true,
+   "userInvocable": true,
+   "enabled": true,
+   "model": true
+  },
+  {
+   "name": "xlsx",
+   "title": "Excel (XLSX)",
+   "description": "Spreadsheets: open, clean, chart and write .xlsx, .csv and .tsv files.",
+   "whenToUse": null,
+   "source": "plugin",
+   "plugin": "document-skills@anthropic-agent-skills",
+   "path": "/Users/alex/.dsh-codex/plugins/anthropic-agent-skills/document-skills/skills/xlsx/SKILL.md",
+   "active": true,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": true,
+   "model": false
+  },
+  {
+   "name": "linear-triage",
+   "title": "Linear Triage",
+   "description": "Triage new Linear issues: label, estimate and assign them to the current cycle.",
+   "whenToUse": null,
+   "source": "plugin",
+   "plugin": "linear@curated",
+   "path": "/Users/alex/.dsh-codex/plugins/curated/linear/skills/linear-triage/SKILL.md",
+   "active": false,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": true,
+   "model": false
+  },
+  {
+   "name": "dsh-guide",
+   "title": "dsh-codex Guide",
+   "description": "How dsh-codex works: modes, skills, MCP servers, goals and automations.",
+   "whenToUse": null,
+   "source": "bundled",
+   "plugin": null,
+   "path": "/opt/dsh-codex/skills/dsh-guide/SKILL.md",
+   "active": true,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": true,
+   "model": false
+  },
+  {
+   "name": "release-notes",
+   "title": "Release Notes",
+   "description": "An older personal copy of the release notes skill.",
+   "whenToUse": null,
+   "source": "user-agents",
+   "plugin": null,
+   "path": "/Users/alex/.agents/skills/release-notes/SKILL.md",
+   "active": false,
+   "modelInvocable": false,
+   "userInvocable": true,
+   "enabled": true,
+   "model": false
+  },
+  {
+   "name": "api-docs",
+   "title": "Api Docs",
+   "description": "",
+   "source": "project-agents",
+   "plugin": null,
+   "path": "/Users/alex/code/storefront/.agents/skills/api-docs/SKILL.md",
+   "active": false,
+   "invalid": true,
+   "error": "invalid YAML frontmatter: mapping values are not allowed in this context at line 2 column 23",
+   "modelInvocable": false,
+   "userInvocable": false
+  }
+ ],
+ "skillDocs": {
+  "visual-brand-foundation": {
+   "content": "---\nname: visual-brand-foundation\ndescription: Develop a coherent visual brand identity and an applied brand or CI sheet.\nlicense: MIT\n---\n\n# Visual Brand Foundation\n\nBuild a brand system that holds together across product, print and social. Start from what exists; do not invent a new brand when the brief asks for a refresh.\n\n## When to use\n\n- A product needs a **CI sheet**: logo direction, typography, colour roles, motifs.\n- An existing identity feels inconsistent and needs rules.\n\n## Steps\n\n1. Collect references: the product, competitors, the brief.\n2. Define **colour roles** (primary, surface, ink, accent) before picking hex values.\n3. Pick two type families at most; set a scale with `clamp()`.\n4. Apply everything to three representative screens.\n\n| Role | Light | Dark |\n|---|---|---|\n| Surface | `#ffffff` | `#181818` |\n| Ink | `#1a1c1f` | `#ffffff` |\n| Accent | `#0285ff` | `#339cff` |\n\n```css\n:root { --accent: #0285ff; --radius: 12px; }\n```\n\nSee `references/typography.md` for the type scale.\n",
+   "files": [
+    {
+     "path": "assets",
+     "dir": true
+    },
+    {
+     "path": "assets/ci-sheet-template.html",
+     "size": 18342
+    },
+    {
+     "path": "assets/logo-grid.svg",
+     "size": 2210
+    },
+    {
+     "path": "references",
+     "dir": true
+    },
+    {
+     "path": "references/color-roles.md",
+     "size": 5120
+    },
+    {
+     "path": "references/typography.md",
+     "size": 7340
+    },
+    {
+     "path": "SKILL.md",
+     "size": 1011
+    }
+   ]
+  }
+ },
+ "servers": [
+  {
+   "name": "github",
+   "origin": "config",
+   "plugin": null,
+   "originalName": null,
+   "connector": null,
+   "enabled": true,
+   "transport": "stdio",
+   "url": null,
+   "command": "npx",
+   "args": [
+    "-y",
+    "@modelcontextprotocol/server-github"
+   ],
+   "cwd": null,
+   "envVars": [],
+   "bearerTokenEnvVar": null,
+   "env": [
+    "GITHUB_PERSONAL_ACCESS_TOKEN"
+   ],
+   "headers": [],
+   "secrets": {
+    "env": [
+     "GITHUB_PERSONAL_ACCESS_TOKEN"
+    ],
+    "headers": [],
+    "bearerToken": false
+   },
+   "oauthEnabled": true,
+   "always": false,
+   "disabledTools": [
+    "delete_file"
+   ],
+   "auth": {
+    "oauth": false,
+    "login": null
+   },
+   "status": "connected",
+   "error": null,
+   "retrying": false,
+   "warnings": [],
+   "tools": [
+    {
+     "name": "mcp__github__search_repositories",
+     "rawName": "search_repositories",
+     "description": "Search for GitHub repositories.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "query": {
+        "type": "string",
+        "description": "Search query"
+       },
+       "page": {
+        "type": "number",
+        "description": "Page number"
+       }
+      },
+      "required": [
+       "query"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__get_file_contents",
+     "rawName": "get_file_contents",
+     "description": "Get the contents of a file or directory from a repository.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Repository owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository name"
+       },
+       "path": {
+        "type": "string",
+        "description": "Path to the file"
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "path"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__create_issue",
+     "rawName": "create_issue",
+     "description": "Create a new issue in a repository.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "title": {
+        "type": "string",
+        "description": "Issue title"
+       },
+       "body": {
+        "type": "string",
+        "description": "Issue body"
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "title"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__list_issues",
+     "rawName": "list_issues",
+     "description": "List issues with filters for state, labels and sort order.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "state": {
+        "type": "string",
+        "enum": [
+         "open",
+         "closed",
+         "all"
+        ]
+       }
+      },
+      "required": [
+       "owner",
+       "repo"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__create_pull_request",
+     "rawName": "create_pull_request",
+     "description": "Create a pull request.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "title": {
+        "type": "string",
+        "description": "Title"
+       },
+       "head": {
+        "type": "string",
+        "description": "Branch with the changes"
+       },
+       "base": {
+        "type": "string",
+        "description": "Target branch"
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "title",
+       "head",
+       "base"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__get_pull_request",
+     "rawName": "get_pull_request",
+     "description": "Get the details of a pull request.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "pull_number": {
+        "type": "number",
+        "description": "Number"
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "pull_number"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__merge_pull_request",
+     "rawName": "merge_pull_request",
+     "description": "Merge a pull request.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "pull_number": {
+        "type": "number",
+        "description": "Number"
+       },
+       "merge_method": {
+        "type": "string",
+        "enum": [
+         "merge",
+         "squash",
+         "rebase"
+        ]
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "pull_number"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__push_files",
+     "rawName": "push_files",
+     "description": "Push several files in a single commit.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "branch": {
+        "type": "string",
+        "description": "Branch"
+       },
+       "message": {
+        "type": "string",
+        "description": "Commit message"
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "branch",
+       "message"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__create_branch",
+     "rawName": "create_branch",
+     "description": "Create a new branch.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "branch": {
+        "type": "string",
+        "description": "New branch"
+       },
+       "from_branch": {
+        "type": "string",
+        "description": "Source branch"
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "branch"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__list_commits",
+     "rawName": "list_commits",
+     "description": "List the commits of a branch.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "sha": {
+        "type": "string",
+        "description": "Branch or commit"
+       }
+      },
+      "required": [
+       "owner",
+       "repo"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__search_code",
+     "rawName": "search_code",
+     "description": "Search code across GitHub repositories.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "q": {
+        "type": "string",
+        "description": "Search query"
+       }
+      },
+      "required": [
+       "q"
+      ]
+     }
+    },
+    {
+     "name": "mcp__github__delete_file",
+     "rawName": "delete_file",
+     "description": "Delete a file from a repository.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string",
+        "description": "Owner"
+       },
+       "repo": {
+        "type": "string",
+        "description": "Repository"
+       },
+       "path": {
+        "type": "string",
+        "description": "Path"
+       },
+       "message": {
+        "type": "string",
+        "description": "Commit message"
+       }
+      },
+      "required": [
+       "owner",
+       "repo",
+       "path",
+       "message"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "linear",
+   "origin": "config",
+   "plugin": null,
+   "originalName": null,
+   "connector": "linear",
+   "enabled": true,
+   "transport": "streamable-http",
+   "url": "https://mcp.linear.app/mcp",
+   "command": null,
+   "args": [],
+   "cwd": null,
+   "envVars": [],
+   "bearerTokenEnvVar": null,
+   "env": [],
+   "headers": [],
+   "secrets": {
+    "env": [],
+    "headers": [],
+    "bearerToken": false
+   },
+   "oauthEnabled": true,
+   "always": true,
+   "disabledTools": [],
+   "auth": {
+    "oauth": true,
+    "login": {
+     "kind": "oauth",
+     "issuer": "https://mcp.linear.app",
+     "scope": "read write",
+     "expiresIn": 518400000,
+     "refreshable": true
+    }
+   },
+   "status": "connected",
+   "error": null,
+   "retrying": false,
+   "warnings": [],
+   "tools": [
+    {
+     "name": "mcp__linear__list_issues",
+     "rawName": "list_issues",
+     "description": "List issues in the workspace, filtered by team, state, assignee or cycle.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "team": {
+        "type": "string",
+        "description": "Team key"
+       },
+       "assignee": {
+        "type": "string",
+        "description": "User or \"me\""
+       }
+      },
+      "required": []
+     }
+    },
+    {
+     "name": "mcp__linear__get_issue",
+     "rawName": "get_issue",
+     "description": "Get an issue with its comments and attachments.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "description": "Issue id, e.g. ENG-123"
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    },
+    {
+     "name": "mcp__linear__create_issue",
+     "rawName": "create_issue",
+     "description": "Create an issue.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "team": {
+        "type": "string",
+        "description": "Team key"
+       },
+       "title": {
+        "type": "string",
+        "description": "Title"
+       },
+       "description": {
+        "type": "string",
+        "description": "Markdown description"
+       }
+      },
+      "required": [
+       "team",
+       "title"
+      ]
+     }
+    },
+    {
+     "name": "mcp__linear__update_issue",
+     "rawName": "update_issue",
+     "description": "Update an issue: state, assignee, estimate, labels.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "description": "Issue id"
+       },
+       "state": {
+        "type": "string",
+        "description": "Workflow state"
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    },
+    {
+     "name": "mcp__linear__list_projects",
+     "rawName": "list_projects",
+     "description": "List projects with their status and lead.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+     }
+    },
+    {
+     "name": "mcp__linear__list_cycles",
+     "rawName": "list_cycles",
+     "description": "List the cycles of a team.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "team": {
+        "type": "string",
+        "description": "Team key"
+       }
+      },
+      "required": [
+       "team"
+      ]
+     }
+    },
+    {
+     "name": "mcp__linear__create_comment",
+     "rawName": "create_comment",
+     "description": "Comment on an issue.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "issueId": {
+        "type": "string",
+        "description": "Issue id"
+       },
+       "body": {
+        "type": "string",
+        "description": "Markdown"
+       }
+      },
+      "required": [
+       "issueId",
+       "body"
+      ]
+     }
+    },
+    {
+     "name": "mcp__linear__search_documentation",
+     "rawName": "search_documentation",
+     "description": "Search Linear's documentation.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "query": {
+        "type": "string",
+        "description": "Search query"
+       }
+      },
+      "required": [
+       "query"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "filesystem",
+   "origin": "config",
+   "plugin": null,
+   "originalName": null,
+   "connector": null,
+   "enabled": true,
+   "transport": "stdio",
+   "url": null,
+   "command": "npx",
+   "args": [
+    "-y",
+    "@modelcontextprotocol/server-filesystem",
+    "~/notes",
+    "~/Projects/private"
+   ],
+   "cwd": "/Users/alex/notes",
+   "envVars": [
+    "HOME_TOKEN"
+   ],
+   "bearerTokenEnvVar": null,
+   "env": [],
+   "headers": [],
+   "secrets": {
+    "env": [],
+    "headers": [],
+    "bearerToken": false
+   },
+   "oauthEnabled": true,
+   "always": false,
+   "disabledTools": [],
+   "auth": {
+    "oauth": false,
+    "login": null
+   },
+   "status": "error",
+   "error": "connection failed: server process exited (exit status: 1)",
+   "retrying": true,
+   "warnings": [],
+   "tools": []
+  },
+  {
+   "name": "sentry",
+   "origin": "config",
+   "plugin": null,
+   "originalName": null,
+   "connector": "sentry",
+   "enabled": true,
+   "transport": "streamable-http",
+   "url": "https://mcp.sentry.dev/mcp",
+   "command": null,
+   "args": [],
+   "cwd": null,
+   "envVars": [],
+   "bearerTokenEnvVar": null,
+   "env": [],
+   "headers": [],
+   "secrets": {
+    "env": [],
+    "headers": [],
+    "bearerToken": false
+   },
+   "oauthEnabled": true,
+   "always": false,
+   "disabledTools": [],
+   "auth": {
+    "oauth": true,
+    "login": null
+   },
+   "status": "needs-login",
+   "error": "authorization required",
+   "retrying": false,
+   "warnings": [],
+   "tools": []
+  },
+  {
+   "name": "context7",
+   "origin": "plugin",
+   "plugin": "context7@curated",
+   "originalName": "context7",
+   "connector": null,
+   "enabled": true,
+   "transport": "streamable-http",
+   "url": "https://mcp.context7.com/mcp",
+   "command": null,
+   "args": [],
+   "cwd": null,
+   "envVars": [],
+   "bearerTokenEnvVar": null,
+   "env": [],
+   "headers": [],
+   "secrets": {
+    "env": [],
+    "headers": [],
+    "bearerToken": false
+   },
+   "oauthEnabled": false,
+   "always": false,
+   "disabledTools": [],
+   "auth": {
+    "oauth": false,
+    "login": null
+   },
+   "status": "connected",
+   "error": null,
+   "retrying": false,
+   "warnings": [],
+   "tools": [
+    {
+     "name": "mcp__context7__resolve_library_id",
+     "rawName": "resolve-library-id",
+     "description": "Resolve a package name to a Context7 library id.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "libraryName": {
+        "type": "string",
+        "description": "Library name"
+       }
+      },
+      "required": [
+       "libraryName"
+      ]
+     }
+    },
+    {
+     "name": "mcp__context7__get_library_docs",
+     "rawName": "get-library-docs",
+     "description": "Fetch up-to-date documentation for a library.",
+     "inputSchema": {
+      "type": "object",
+      "properties": {
+       "context7CompatibleLibraryID": {
+        "type": "string",
+        "description": "Library id"
+       },
+       "topic": {
+        "type": "string",
+        "description": "Topic"
+       },
+       "tokens": {
+        "type": "number",
+        "description": "Maximum tokens"
+       }
+      },
+      "required": [
+       "context7CompatibleLibraryID"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "postgres",
+   "origin": "config",
+   "plugin": null,
+   "originalName": null,
+   "connector": null,
+   "enabled": false,
+   "transport": "stdio",
+   "url": null,
+   "command": "uvx",
+   "args": [
+    "mcp-server-postgres",
+    "postgresql://localhost/shop"
+   ],
+   "cwd": null,
+   "envVars": [],
+   "bearerTokenEnvVar": null,
+   "env": [
+    "PGPASSWORD"
+   ],
+   "headers": [],
+   "secrets": {
+    "env": [
+     "PGPASSWORD"
+    ],
+    "headers": [],
+    "bearerToken": false
+   },
+   "oauthEnabled": true,
+   "always": false,
+   "disabledTools": [],
+   "auth": {
+    "oauth": false,
+    "login": null
+   },
+   "status": "disabled",
+   "error": null,
+   "retrying": false,
+   "warnings": [],
+   "tools": []
+  }
+ ],
+ "logs": {
+  "github": [
+   {
+    "ago": 2460000,
+    "kind": "info",
+    "text": "starting npx -y @modelcontextprotocol/server-github"
+   },
+   {
+    "ago": 2458200,
+    "kind": "stderr",
+    "text": "GitHub MCP Server running on stdio"
+   },
+   {
+    "ago": 2458300,
+    "kind": "info",
+    "text": "connected, 12 tools"
+   },
+   {
+    "ago": 420000,
+    "kind": "stderr",
+    "text": "Warning: rate limit 4,812/5,000 remaining"
+   }
+  ],
+  "linear": [
+   {
+    "ago": 2460000,
+    "kind": "info",
+    "text": "connecting to https://mcp.linear.app/mcp"
+   },
+   {
+    "ago": 2459100,
+    "kind": "info",
+    "text": "connected, 8 tools"
+   },
+   {
+    "ago": 720000,
+    "kind": "error",
+    "text": "tools/call: HTTP 502 Bad Gateway"
+   },
+   {
+    "ago": 719600,
+    "kind": "info",
+    "text": "tool list changed"
+   }
+  ],
+  "filesystem": [
+   {
+    "ago": 180000,
+    "kind": "info",
+    "text": "starting npx -y @modelcontextprotocol/server-filesystem ~/notes ~/Projects/private"
+   },
+   {
+    "ago": 177900,
+    "kind": "stderr",
+    "text": "Error accessing directory /Users/alex/Projects/private: Error: ENOENT: no such file or directory, stat '/Users/alex/Projects/private'"
+   },
+   {
+    "ago": 177950,
+    "kind": "error",
+    "text": "connection failed: server process exited (exit status: 1)"
+   },
+   {
+    "ago": 178000,
+    "kind": "info",
+    "text": "next attempt in 4000 ms (3/5)"
+   }
+  ],
+  "sentry": [
+   {
+    "ago": 2460000,
+    "kind": "info",
+    "text": "connecting to https://mcp.sentry.dev/mcp"
+   },
+   {
+    "ago": 2459400,
+    "kind": "error",
+    "text": "initialize: authorization required (HTTP 401)"
+   },
+   {
+    "ago": 2459410,
+    "kind": "info",
+    "text": "sign-in required"
+   }
+  ]
+ },
+ "catalog": [
+  {
+   "id": "linear",
+   "name": "Linear",
+   "description": "Issues, projects and cycles in Linear.",
+   "url": "https://mcp.linear.app/mcp",
+   "auth": "oauth",
+   "category": "Productivity",
+   "website": "https://linear.app",
+   "brandColor": "#5E6AD2"
+  },
+  {
+   "id": "notion",
+   "name": "Notion",
+   "description": "Search, read and edit Notion pages and databases.",
+   "url": "https://mcp.notion.com/mcp",
+   "auth": "oauth",
+   "category": "Productivity",
+   "website": "https://www.notion.com",
+   "brandColor": "#000000"
+  },
+  {
+   "id": "sentry",
+   "name": "Sentry",
+   "description": "Errors, issues and releases from Sentry.",
+   "url": "https://mcp.sentry.dev/mcp",
+   "auth": "oauth",
+   "category": "Developer tools",
+   "website": "https://sentry.io",
+   "brandColor": "#362D59"
+  },
+  {
+   "id": "atlassian",
+   "name": "Atlassian",
+   "description": "Jira and Confluence (Atlassian Rovo MCP server).",
+   "url": "https://mcp.atlassian.com/v1/mcp/authv2",
+   "auth": "oauth",
+   "category": "Productivity",
+   "website": "https://www.atlassian.com",
+   "brandColor": "#0052CC"
+  },
+  {
+   "id": "cloudflare",
+   "name": "Cloudflare",
+   "description": "The Cloudflare API: Workers, DNS, R2, D1 and more.",
+   "url": "https://mcp.cloudflare.com/mcp",
+   "auth": "oauth",
+   "category": "Developer tools",
+   "website": "https://www.cloudflare.com",
+   "brandColor": "#F38020"
+  },
+  {
+   "id": "canva",
+   "name": "Canva",
+   "description": "Create, find and edit Canva designs.",
+   "url": "https://mcp.canva.com/mcp",
+   "auth": "oauth",
+   "category": "Design",
+   "website": "https://www.canva.com",
+   "brandColor": "#00C4CC"
+  },
+  {
+   "id": "huggingface",
+   "name": "Hugging Face",
+   "description": "Models, datasets, Spaces and papers on the Hugging Face Hub.",
+   "url": "https://huggingface.co/mcp?login",
+   "auth": "oauth",
+   "category": "AI",
+   "website": "https://huggingface.co",
+   "brandColor": "#FFD21E"
+  },
+  {
+   "id": "exa",
+   "name": "Exa",
+   "description": "Web and code search by Exa.",
+   "url": "https://mcp.exa.ai/mcp",
+   "auth": "none",
+   "category": "Search",
+   "website": "https://exa.ai",
+   "brandColor": "#1F40ED"
+  },
+  {
+   "id": "context7",
+   "name": "Context7",
+   "description": "Up-to-date library documentation for coding.",
+   "url": "https://mcp.context7.com/mcp",
+   "auth": "none",
+   "category": "Developer tools",
+   "website": "https://context7.com",
+   "brandColor": "#059669"
+  },
+  {
+   "id": "stripe",
+   "name": "Stripe",
+   "description": "Customers, payments, invoices and docs in Stripe.",
+   "url": "https://mcp.stripe.com",
+   "auth": "oauth",
+   "category": "Finance",
+   "website": "https://stripe.com",
+   "brandColor": "#635BFF"
+  },
+  {
+   "id": "supabase",
+   "name": "Supabase",
+   "description": "Projects, databases, migrations and logs in Supabase.",
+   "url": "https://mcp.supabase.com/mcp",
+   "auth": "oauth",
+   "category": "Developer tools",
+   "website": "https://supabase.com",
+   "brandColor": "#3ECF8E"
+  },
+  {
+   "id": "neon",
+   "name": "Neon",
+   "description": "Serverless Postgres projects, branches and queries.",
+   "url": "https://mcp.neon.tech/mcp",
+   "auth": "oauth",
+   "category": "Developer tools",
+   "website": "https://neon.com",
+   "brandColor": "#00E599"
+  },
+  {
+   "id": "netlify",
+   "name": "Netlify",
+   "description": "Sites, deploys and extensions on Netlify.",
+   "url": "https://netlify-mcp.netlify.app/mcp",
+   "auth": "oauth",
+   "category": "Developer tools",
+   "website": "https://www.netlify.com",
+   "brandColor": "#00C7B7"
+  },
+  {
+   "id": "zapier",
+   "name": "Zapier",
+   "description": "Actions in thousands of apps through Zapier.",
+   "url": "https://mcp.zapier.com/api/mcp/mcp",
+   "auth": "oauth",
+   "category": "Automation",
+   "website": "https://zapier.com",
+   "brandColor": "#FF4F00"
+  },
+  {
+   "id": "github",
+   "name": "GitHub",
+   "description": "Repositories, issues and pull requests. GitHub offers no dynamic client registration: enter a personal access token or set the client_id of your own OAuth app.",
+   "url": "https://api.githubcopilot.com/mcp/",
+   "auth": "token",
+   "category": "Developer tools",
+   "website": "https://github.com",
+   "brandColor": "#181717",
+   "tokenHelp": "https://github.com/settings/personal-access-tokens"
+  }
+ ]
+}
