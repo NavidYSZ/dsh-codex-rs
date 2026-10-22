@@ -384,8 +384,8 @@ const DE = {
     mac: 'Steuert den Mac', skill: 'Lädt Skill', tools: 'Ruft Tools auf', mcp: (s) => `Nutzt ${s}`,
   },
   workPrepare: {
-    read: 'Bereitet Lesen vor', readImage: 'Bereitet Lesen der Bilder vor', search: 'Bereitet die Suche vor',
-    edit: 'Bereitet Bearbeiten vor', write: 'Bereitet Schreiben vor', commands: 'Bereitet vor, Befehle auszuführen',
+    read: 'Bereitet das Lesen vor', readImage: 'Bereitet das Lesen der Bilder vor', search: 'Bereitet die Suche vor',
+    edit: 'Bereitet Änderungen vor', write: 'Bereitet das Schreiben vor', commands: 'Bereitet vor, Befehle auszuführen',
     code: 'Bereitet vor, Code auszuführen', webSearch: 'Bereitet die Websuche vor', webFetch: 'Bereitet den Seitenaufruf vor',
     subagents: 'Bereitet Subagenten vor', plan: 'Bereitet den Plan vor', questions: 'Bereitet Rückfragen vor',
     browser: 'Bereitet die Browser-Bedienung vor', mac: 'Bereitet die Mac-Steuerung vor', skill: 'Bereitet den Skill vor',
