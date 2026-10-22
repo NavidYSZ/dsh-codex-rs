@@ -108,7 +108,16 @@ impl Runtime {
 
     /// Why a prompt for `reference` cannot be sent, if it cannot.
     pub fn model_ready(&self, reference: &str) -> Result<(), String> {
-        let (provider, _) = self.split_model(reference);
+        let (provider, model) = self.split_model(reference);
+        // `gone/model` of a removed provider must not reach DeepSeek as a model id.
+        if provider == PROVIDER
+            && let Some((prefix, _)) = reference.split_once('/')
+            && self.router.deepseek().config().model(&model).is_none()
+        {
+            return Err(format!(
+                "The model provider \"{prefix}\" is not configured. Pick another model or add it in Settings → Models."
+            ));
+        }
         if provider == PROVIDER {
             return if self.api_key_configured() {
                 Ok(())

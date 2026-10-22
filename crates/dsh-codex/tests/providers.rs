@@ -412,4 +412,17 @@ async fn providers_routes_and_a_chat_across_three_routes() {
     assert_eq!(list["providers"].as_array().unwrap().len(), 2);
     let (status, _) = server.call(Method::DELETE, "/providers/relay", None).await;
     assert_eq!(status, 404);
+    // Its models are refused up front instead of reaching DeepSeek.
+    let (status, err) = server
+        .call(
+            Method::POST,
+            &format!("/sessions/{id}/prompt"),
+            Some(prompt("again", "relay/glm-5.3")),
+        )
+        .await;
+    assert_eq!(status, 400);
+    assert!(
+        err["error"].as_str().unwrap().contains("not configured"),
+        "{err}"
+    );
 }
