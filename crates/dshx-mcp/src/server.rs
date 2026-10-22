@@ -414,10 +414,8 @@ impl Server {
                     env,
                     cwd,
                 } => {
-                    self.log.info(format!(
-                        "starting {}",
-                        [&[command.clone()], &args[..]].concat().join(" ")
-                    ));
+                    self.log
+                        .info(format!("starting {command} {}", args.join(" ")).trim_end());
                     let (t, inbox) = StdioTransport::spawn(
                         command,
                         args,

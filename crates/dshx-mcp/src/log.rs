@@ -96,7 +96,7 @@ mod tests {
         assert_eq!(log.stderr().len(), LOG_LINES / 2);
         assert!(log.stderr().iter().all(|l| {
             let n: usize = l.trim_start_matches("line ").parse().unwrap();
-            n % 2 == 0
+            n.is_multiple_of(2)
         }));
     }
 

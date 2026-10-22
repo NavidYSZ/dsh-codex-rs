@@ -73,6 +73,36 @@ impl Extensions for FakeExt {
         self.log(format!("token {server} {token:?}"));
         Ok(json!({ "name": server }))
     }
+    async fn mcp_server(&self, name: &str) -> anyhow::Result<Value> {
+        match name {
+            "fx" => Ok(json!({ "name": name })),
+            _ => Err(NotFound(name.into()).into()),
+        }
+    }
+    async fn update_mcp_server(&self, name: &str, body: Value) -> anyhow::Result<Value> {
+        self.log(format!("update {name} {body}"));
+        Ok(json!({ "name": name }))
+    }
+    async fn test_mcp_server(&self, body: Value) -> anyhow::Result<Value> {
+        self.log(format!("test {body}"));
+        Ok(json!({ "ok": true, "tools": [] }))
+    }
+    async fn mcp_server_log(&self, name: &str) -> anyhow::Result<Value> {
+        Ok(json!({ "name": name, "lines": [] }))
+    }
+    async fn skill(
+        &self,
+        name: &str,
+        cwd: Option<String>,
+        path: Option<String>,
+    ) -> anyhow::Result<Value> {
+        self.log(format!("skill {name} {cwd:?} {path:?}"));
+        Ok(json!({ "name": name }))
+    }
+    async fn create_skill(&self, body: Value) -> anyhow::Result<Value> {
+        self.log(format!("create skill {body}"));
+        Ok(json!({ "name": body["name"] }))
+    }
 }
 
 fn event(seq: u64, kind: &str) -> SessionEvent {
@@ -397,6 +427,65 @@ async fn serves_ui_with_csp_and_accepts_after_minus_one() {
     let first: Value =
         serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
     assert_eq!(first["event"]["seq"], 0);
+}
+
+#[tokio::test]
+async fn skill_and_mcp_page_routes_map_to_extensions() {
+    let ext = Arc::new(FakeExt::default());
+    let (addr, _) = start_with(Some(ext.clone())).await;
+    let http = reqwest::Client::new();
+    let url = |p: &str| format!("http://{addr}/api{p}");
+    let send = |r: reqwest::RequestBuilder| async move {
+        let r = r.bearer_auth("secret").send().await.unwrap();
+        (
+            r.status().as_u16(),
+            r.json::<Value>().await.unwrap_or(Value::Null),
+        )
+    };
+    let (status, body) = send(http.get(url("/mcp/servers/fx"))).await;
+    assert_eq!((status, body["name"].as_str()), (200, Some("fx")));
+    assert_eq!(send(http.get(url("/mcp/servers/nope"))).await.0, 404);
+    let (status, _) = send(
+        http.put(url("/mcp/servers/fx"))
+            .json(&json!({ "config": { "url": "https://x/mcp" } })),
+    )
+    .await;
+    assert_eq!(status, 200);
+    let (_, probe) = send(http.post(url("/mcp/test")).json(&json!({ "config": {} }))).await;
+    assert_eq!(probe["ok"], true);
+    let (_, log) = send(http.get(url("/mcp/servers/fx/log"))).await;
+    assert_eq!(log["lines"], json!([]));
+    send(http.get(url("/skills/brand-kit?cwd=/w&path=/w/SKILL.md"))).await;
+    let (_, made) = send(
+        http.post(url("/skills"))
+            .json(&json!({ "name": "notes", "scope": "personal" })),
+    )
+    .await;
+    assert_eq!(made["name"], "notes");
+    let calls = ext.calls.lock().unwrap().clone();
+    let has = |c: &str| calls.iter().any(|x| x == c);
+    assert!(
+        has("update fx {\"config\":{\"url\":\"https://x/mcp\"}}"),
+        "{calls:?}"
+    );
+    assert!(
+        has("skill brand-kit Some(\"/w\") Some(\"/w/SKILL.md\")"),
+        "{calls:?}"
+    );
+    assert!(
+        calls.iter().any(|c| c.starts_with("create skill ")),
+        "{calls:?}"
+    );
+    // Without extensions the new routes are 404 as well.
+    let (addr, _) = start_with(None).await;
+    let r = http
+        .post(format!("http://{addr}/api/mcp/test"))
+        .bearer_auth("secret")
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
 }
 
 #[tokio::test]
