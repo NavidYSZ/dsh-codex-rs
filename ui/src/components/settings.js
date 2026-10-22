@@ -12,7 +12,7 @@ import { ModeSetting } from './modes.js';
 import { AppearanceCard } from './worklog.js';
 import { UsageCard } from './usage.js';
 import { ModelsSection, ModelSelect } from './models.js';
-import { confirmFullAccess } from './confirm.js';
+import { confirmFullAccess, FullAccessSetting } from './confirm.js';
 
 export function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
@@ -84,6 +84,7 @@ export function Settings() {
           }}
             options=${Object.entries(t.access).map(([k, v]) => [k, v[0]])} />
         </${Field}>
+        <${FullAccessSetting} />
         <${Field} label=${t.approval}>
           <select class="select" value=${s.approval ?? 'ask'} aria-label=${t.approval} onChange=${(e) => updateSettings({ approval: e.currentTarget.value })}>
             ${Object.entries(t.approvals).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}

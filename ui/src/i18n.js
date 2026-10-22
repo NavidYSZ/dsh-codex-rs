@@ -349,7 +349,7 @@ const EN = {
   // message actions (dsh message.branch*, Codex)
   resend: 'Send again', editResend: 'Edit and send again', editResendHint: 'Opens the prompt in a new chat that branches off right before it',
   branch: 'Branch into a new conversation', branchUnavailable: 'Available only on the last message of a completed turn',
-  branchTitle: (s) => `${s} (branch)`, branchSuffixes: [' (branch)', ' (Abzweig)'], forkFailed: 'Could not branch the conversation. Try again.',
+  branchTitle: (s) => `${s} (branch)`, forkFailed: 'Could not branch the conversation. Try again.',
   // failures with the action that helps (dsh message.failure.*)
   failure: {
     AUTH: ['API key is invalid', 'The provider rejected the key. Check it in the provider’s settings.'],
@@ -381,6 +381,7 @@ const EN = {
   fullAccessText: 'Full access reduces confirmation steps and lets the agent perform more actions directly, including sensitive operations, file changes, or external commands. Only use it when you trust the current task.',
   fullAccessTextDefaults: 'Full access lets new chats reduce confirmation steps and perform more actions directly, including sensitive operations, file changes, or external commands. Only use it when you trust the tasks ahead.',
   fullAccessAck: 'I understand the risks and want to continue', fullAccessDontAsk: 'Don’t ask again', fullAccessEnable: 'Enable Full access',
+  fullAccessAsk: 'Ask before Full access', fullAccessAskHint: 'A question with the risks before an agent may act without asking',
   // sidebar view options (dsh viewOptions.*, groupBy.*, orderBy.*)
   viewOptions: 'View options', groupBy: 'Group by', groupProjects: 'Project', groupFlat: 'In one list',
   orderBy: 'Order by', orderActivity: 'Last activity', orderCreated: 'Created',
@@ -395,7 +396,6 @@ const EN = {
     rename: 'Rename chat', find: 'Find in chat', send: 'Send', newline: 'New line', other: 'Queue or add now (the other way)',
     close: 'Close menu, dialog or search',
   },
-  nothingWaiting: 'No chat needs you right now', noChatOpen: 'Open a chat first',
 };
 
 const DE = {
@@ -748,6 +748,7 @@ const DE = {
   fullAccessText: 'Mit vollem Zugriff fragt der Agent seltener nach und führt mehr Aktionen direkt aus – auch heikle Vorgänge, Dateiänderungen und externe Befehle. Schalte ihn nur ein, wenn du der aktuellen Aufgabe vertraust.',
   fullAccessTextDefaults: 'Mit vollem Zugriff fragen neue Chats seltener nach und führen mehr Aktionen direkt aus – auch heikle Vorgänge, Dateiänderungen und externe Befehle. Schalte ihn nur ein, wenn du den kommenden Aufgaben vertraust.',
   fullAccessAck: 'Ich verstehe das Risiko', fullAccessDontAsk: 'Nicht mehr fragen', fullAccessEnable: 'Vollen Zugriff einschalten',
+  fullAccessAsk: 'Vor vollem Zugriff fragen', fullAccessAskHint: 'Eine Rückfrage mit den Risiken, bevor ein Agent ohne Nachfrage handeln darf',
   viewOptions: 'Ansicht', groupBy: 'Gruppieren', groupProjects: 'Nach Projekt', groupFlat: 'Eine Liste',
   orderBy: 'Sortieren', orderActivity: 'Letzte Aktivität', orderCreated: 'Erstellt',
   archivedFilter: 'Archivierte Chats', archivedHide: 'Ausblenden', archivedShow: 'Einblenden', archivedOnly: 'Nur archivierte',
@@ -760,7 +761,6 @@ const DE = {
     rename: 'Chat umbenennen', find: 'Im Chat suchen', send: 'Senden', newline: 'Neue Zeile', other: 'Einreihen oder sofort einbringen (das andere)',
     close: 'Menü, Dialog oder Suche schließen',
   },
-  nothingWaiting: 'Gerade braucht dich kein Chat', noChatOpen: 'Öffne zuerst einen Chat',
 };
 
 export const t = de ? DE : EN;

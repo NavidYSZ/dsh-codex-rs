@@ -8,6 +8,7 @@ import { useStore } from '../store.js';
 import { store } from '../state.js';
 import { Dialog } from './models.js';
 import { setUiPref } from './worklog.js';
+import { Field, Segmented } from './settings.js';
 
 let answer = null;
 
@@ -47,6 +48,15 @@ function Body({ scope }) {
         <span>${t.fullAccessDontAsk}</span></label>
     </form>
   </${Dialog}>`;
+}
+
+/** Settings: the way back after "Don't ask again". */
+export function FullAccessSetting() {
+  const on = useStore(store, (s) => s.info?.ui?.confirmFullAccess !== false);
+  return html`<${Field} label=${t.fullAccessAsk} hint=${t.fullAccessAskHint}>
+    <${Segmented} label=${t.fullAccessAsk} value=${on ? 'on' : 'off'} onChange=${(v) => setUiPref({ confirmFullAccess: v === 'on' })}
+      options=${[['on', t.on], ['off', t.off]]} />
+  </${Field}>`;
 }
 
 /** Mounted once by the app shell. */

@@ -6,7 +6,7 @@ import { html } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
 import {
-  store, openSession, setArchived, setPinned, startRename, markAllRead, toast,
+  store, openSession, setArchived, setPinned, startRename, markAllRead,
 } from '../state.js';
 import { Dialog } from './models.js';
 import { openFind } from './find.js';
@@ -51,13 +51,12 @@ function nextAttention() {
     .sort((a, b) => rank(a) - rank(b) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   const pick = live.find((s) => s.status === 'waiting-approval') ?? live.find((s) => s.unread);
   if (pick) openSession(pick.id);
-  else toast(t.nothingWaiting);
 }
 
 /** The open chat's sidebar row, or null when there is none. */
 function openChat() {
   const s = store.get();
-  if (s.view !== 'chat' || !s.activeId) { toast(t.noChatOpen); return null; }
+  if (s.view !== 'chat' || !s.activeId) return null;
   return s.sessions.find((x) => x.id === s.activeId) ?? null;
 }
 
