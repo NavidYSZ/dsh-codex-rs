@@ -113,17 +113,12 @@ export function useLoginWait(done) {
 const routes = new Map();
 
 /**
- * Whether the server has the write-only route `path` (cached per page
- * load); `null` while checking. Per-chat settings of skills and MCP
- * servers need routes that older servers lack.
+ * Whether the server has the write-only route `path`: the UI ships with
+ * its server, so yes, until a write answered 404/405 ([`routeMissing`]).
+ * No probe: it cost a 405 and a console error on every visit.
  */
 export function useRoute(path) {
-  const [ok, setOk] = useState(routes.get(path) ?? null);
-  useEffect(() => {
-    if (routes.has(path)) return;
-    api.hasRoute(path).then((v) => { routes.set(path, v); setOk(v); }, () => setOk(false));
-  }, [path]);
-  return ok;
+  return routes.get(path) ?? true;
 }
 
 /** Remembers that a settings route answered 404/405 after all. */

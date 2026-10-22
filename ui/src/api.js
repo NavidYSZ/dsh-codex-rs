@@ -136,14 +136,6 @@ class HttpApi {
   mcpServerLog(name) { return this.req('GET', `/api/mcp/servers/${enc(name)}/log`); }
   /** `{always?, disabledTools?}` (the runtime side comes with package C). */
   mcpSettings(name, patch) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/settings`, patch); }
-  /**
-   * Whether this server has the route `path`: a PUT-only route answers a GET
-   * with 405, one with a GET answers JSON (or 404 for the placeholder name);
-   * unknown paths get the app shell.
-   */
-  async hasRoute(path) {
-    try { return (await this.req('GET', path)) != null; } catch (e) { return e?.status === 405 || e?.status === 404; }
-  }
 
   // Models page: providers, keys (write only) and provider model lists.
   providers() { return this.req('GET', '/api/providers'); }
@@ -628,7 +620,6 @@ class FixtureApi {
   removeMcpServer(name) { return fixtureExt.removeServer(name); }
   mcpToken(name, token) { return fixtureExt.token(name, token); }
   mcpSettings(name, patch) { return fixtureExt.serverSettings(name, patch); }
-  async hasRoute() { return true; }
   connectors() { return fixtureExt.connectors(); }
   async schedules() { return []; }
   async goal() { return { goal: null }; }
