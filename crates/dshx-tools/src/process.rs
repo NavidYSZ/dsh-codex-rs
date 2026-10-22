@@ -103,7 +103,7 @@ pub fn signal_name(signal: i32) -> String {
 }
 
 /// Node's spelling of a failed spawn (`spawn bash ENOENT`).
-fn spawn_error_text(program: &str, error: &std::io::Error) -> String {
+pub(crate) fn spawn_error_text(program: &str, error: &std::io::Error) -> String {
     let code = match error.raw_os_error() {
         Some(libc::ENOENT) => Some("ENOENT"),
         Some(libc::EACCES) => Some("EACCES"),
@@ -118,7 +118,7 @@ fn spawn_error_text(program: &str, error: &std::io::Error) -> String {
     }
 }
 
-fn signal_group(pid: i32, signal: i32) -> bool {
+pub(crate) fn signal_group(pid: i32, signal: i32) -> bool {
     // SAFETY: plain kill(2) on our own child's process group; failures (ESRCH)
     // are reported through the return value only.
     unsafe { libc::kill(-pid, signal) == 0 }

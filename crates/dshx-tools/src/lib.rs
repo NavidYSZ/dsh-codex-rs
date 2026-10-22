@@ -1,6 +1,7 @@
 //! The model-facing tools of dsh-codex (SPEC §5.3): `bash`, `job_list`,
 //! `job_output`, `job_kill`, `read`, `write`, `edit`, `read_image`, `glob`,
-//! `grep`, `todo_write`, `web_fetch`, `web_search`.
+//! `grep`, `todo_write`, `web_fetch`, `web_search`, plus the persistent
+//! `bash` of dsh's Minimal agent preset ([`persistent_bash`]).
 //!
 //! Names, descriptions and argument schemas are byte-identical to dsh
 //! 0.2.0-rc.2, and the text each tool returns matches dsh's tool, so the model
@@ -36,6 +37,7 @@ pub mod fs;
 mod html;
 pub mod jobs;
 pub mod output;
+pub mod persistent_bash;
 pub mod process;
 pub mod sandbox;
 mod schemas;

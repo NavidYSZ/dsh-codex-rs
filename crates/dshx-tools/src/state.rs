@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use dshx_core::{ToolContext, ToolError};
 
 use crate::jobs::JobRegistry;
+use crate::persistent_bash::Shells;
 use crate::spill::SpillStore;
 
 /// What a session last saw of a file (dsh `FsObservation`).
@@ -18,7 +19,8 @@ pub enum Observation {
 }
 
 /// Shared state of one session's tools: the fs observation gate (read before
-/// write/edit), the job registry, the spill store and the current model name.
+/// write/edit), the job registry, the spill store, the persistent shells and
+/// the current model name.
 ///
 /// Build one per session and put it into every `ToolContext` of that session:
 ///
@@ -34,6 +36,7 @@ pub struct ToolState {
     spill: SpillStore,
     observations: Mutex<HashMap<PathBuf, Observation>>,
     model: Mutex<Option<String>>,
+    shells: Shells,
 }
 
 impl Default for ToolState {
@@ -55,6 +58,7 @@ impl ToolState {
             spill,
             observations: Mutex::new(HashMap::new()),
             model: Mutex::new(None),
+            shells: Shells::default(),
         }
     }
 
@@ -73,6 +77,12 @@ impl ToolState {
 
     pub fn spill(&self) -> &SpillStore {
         &self.spill
+    }
+
+    /// The persistent `bash` shells (Minimal preset); the agent closes them
+    /// when it is disposed.
+    pub fn shells(&self) -> &Shells {
+        &self.shells
     }
 
     /// Records the active model id; `read_image` names it in its refusal for
