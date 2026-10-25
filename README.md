@@ -51,8 +51,9 @@ parallel agents, many short jobs, and on small machines.
   limit (about 678K of DeepSeek's 1M tokens), mid-turn. dsh-codex also
   compacts when a turn ends, from 200K tokens by default or after every turn
   (Settings → Context, `[codex.compaction]`), while DeepSeek still caches the
-  prefix. Summaries are written before oversized tool results are pruned, so
-  the summarizer reads the cached prefix; only the kept tail is pruned. The
+  prefix. Summaries are written before oversized tool results are pruned and
+  with the chat's reasoning effort (DeepSeek's prefix depends on it), so the
+  summarizer reads the cached prefix; only the kept tail is pruned. The
   checkpoint carries the open `todo_write` list.
 - Not ported: web search, workflows/`run_code`, voice, office documents, the
   Electron app. Goals, schedules and Agent Teams are ported (see

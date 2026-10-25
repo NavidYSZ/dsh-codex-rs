@@ -677,6 +677,16 @@ async fn summarize_and_commit(
         let c = inner.config.lock().unwrap();
         (c.model.clone(), c.provider.clone())
     };
+    // dsh-codex: on the conversation's own model the summarizer also takes
+    // its reasoning effort. DeepSeek's prompt prefix depends on it, so a
+    // different effort (dsh sends none, i.e. the default) misses the cache.
+    let effort = match configured_model {
+        Some(_) => None,
+        None => header
+            .as_ref()
+            .and_then(|h| h["config"]["reasoningEffort"].as_str())
+            .map(str::to_owned),
+    };
     let (model, route) = match configured_model {
         Some(model) => (model, current().1),
         None => header
@@ -694,7 +704,7 @@ async fn summarize_and_commit(
         messages.push(Message::user_text(INSTRUCTION));
         let request = GenerateRequest {
             model: model.clone(),
-            reasoning_effort: None,
+            reasoning_effort: effort.clone(),
             messages,
             tools: tools.clone(),
             max_tokens: Some(max_tokens),

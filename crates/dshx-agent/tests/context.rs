@@ -539,7 +539,10 @@ async fn turn_end_compaction_condenses_at_the_threshold() {
             text(M, "third"),
         ],
         vec![],
-        |c, _| c.compaction.turn_end = TurnEndCompaction::Threshold(50_000),
+        |c, _| {
+            c.compaction.turn_end = TurnEndCompaction::Threshold(50_000);
+            c.effort = Some("max".into());
+        },
     );
     let (early, late) = ("x".repeat(8_000), "y".repeat(48_000));
     h.agent
@@ -573,6 +576,9 @@ async fn turn_end_compaction_condenses_at_the_threshold() {
         let requests = h.llm.requests.lock().unwrap();
         let n = summarize.messages.len() - 1;
         assert_eq!(summarize.messages[..n], requests[1].messages[..n]);
+        // Same effort as the conversation: DeepSeek's cached prefix depends on it.
+        assert_eq!(summarize.reasoning_effort.as_deref(), Some("max"));
+        assert_eq!(requests[1].reasoning_effort.as_deref(), Some("max"));
         assert!(summarize.messages.iter().any(|m| m.plain_text() == early));
         assert!(!summarize.messages.iter().any(|m| m.plain_text() == late));
     }

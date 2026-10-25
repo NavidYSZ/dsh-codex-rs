@@ -176,6 +176,10 @@
   the summary request missed DeepSeek's cache. Now the summarizer replays the
   cached prefix and only the kept tail is pruned; pruning alone still runs
   when nothing can be summarized.
+- The summary request takes the conversation's reasoning effort instead of
+  the adapter default. DeepSeek's prompt prefix depends on it: measured with
+  a 19K-token chat at `max` (and at `off`), the default-effort summary reused
+  384 cached tokens, the same-effort one 98 % of them.
 - The system prompt carries DSH's file-reference guidance; MCP server
   instructions moved out of it (only `always` servers keep theirs there), so
   existing chats see one prompt-cache rebuild on their next request.
