@@ -47,6 +47,13 @@ parallel agents, many short jobs, and on small machines.
 - **No JS plugins.** Extensions are skills, MCP servers and plugins in the
   Codex/Claude formats (skills and MCP servers; hooks, commands and agents
   are not loaded).
+- **Compaction between turns.** DSH condenses history only near the context
+  limit (about 678K of DeepSeek's 1M tokens), mid-turn. dsh-codex also
+  compacts when a turn ends, from 200K tokens by default or after every turn
+  (Settings → Context, `[codex.compaction]`), while DeepSeek still caches the
+  prefix. Summaries are written before oversized tool results are pruned, so
+  the summarizer reads the cached prefix; only the kept tail is pruned. The
+  checkpoint carries the open `todo_write` list.
 - Not ported: web search, workflows/`run_code`, voice, office documents, the
   Electron app. Goals, schedules and Agent Teams are ported (see
   [Configuration](#configuration)).
@@ -205,6 +212,19 @@ max_tasks = 256
 max_pending_messages_per_member = 64
 max_message_bytes = 65536
 ```
+
+When a chat condenses older history between turns (Settings → Context in the
+web UI; open chats follow a change at once):
+
+```toml
+[codex.compaction]
+mode = "threshold"                     # "threshold", "every-turn" or "off"
+threshold_tokens = 200000              # context size that triggers it; a fifth stays verbatim
+```
+
+`every-turn` keeps only the final answer verbatim and skips turns that added
+less than about 10,000 tokens. `off` leaves DSH's own compaction near the
+context limit, which stays on in every mode. Minimal chats never compact.
 
 Reminders live in `~/.dsh-codex/storages/schedule.json`. The web server
 exposes them, the session goal and the Team under `/api/schedules`,

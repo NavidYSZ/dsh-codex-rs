@@ -36,7 +36,7 @@ pub use compaction::Compacted;
 pub use config::{
     AgentConfig, ApprovalPolicy, CompactionConfig, ExtraSection, InstructionsConfig,
     MINIMAL_PERSONA, Preset, PromptConfig, PrunerConfig, RepeatReminderConfig, RouteCapabilities,
-    TitleConfig, ToolUpdate,
+    TitleConfig, ToolUpdate, TurnEndCompaction,
 };
 pub use events::{CancelCause, TurnEndReason, TurnOutcome};
 pub use hooks::{PreStep, PreStepHook};

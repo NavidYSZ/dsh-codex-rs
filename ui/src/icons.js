@@ -63,3 +63,4 @@ export const Mark = ({ size = 36 }) => html`<svg class="mark" width=${size} heig
 export const IconInfo = icon(html`<circle cx="8" cy="8" r="6.25" ...${S}/><path d="M8 7.25v3.75" ...${S}/><circle cx="8" cy="5" r=".8" fill="currentColor"/>`);
 export const IconChart = icon(html`<path d="M2.25 13.75h11.5" ...${S}/><rect x="3.25" y="8" width="2.5" height="4" rx=".6" ...${S}/><rect x="6.75" y="3.75" width="2.5" height="8.25" rx=".6" ...${S}/><rect x="10.25" y="6" width="2.5" height="6" rx=".6" ...${S}/>`);
 export const IconCube = icon(html`<path d="M8 1.9 13.6 5v6L8 14.1 2.4 11V5L8 1.9Z" ...${S}/><path d="M2.6 5.1 8 8.1l5.4-3M8 8.1v5.8" ...${S}/>`);
+export const IconContext = icon(html`<path d="M2.75 4.25h10.5M2.75 8h10.5M2.75 11.75h6" ...${S}/><path d="m11 10.25 1.75 1.5L11 13.25" ...${S}/>`);

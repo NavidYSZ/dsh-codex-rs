@@ -761,6 +761,26 @@ roots = ["/srv/work"]
     }
 
     #[test]
+    fn compaction_settings_keep_the_rest_of_the_file() {
+        use dshx_core::config::CompactionMode;
+        let out = change(COMMENTED, |c| {
+            c.codex.compaction.mode = CompactionMode::EveryTurn
+        });
+        let (gone, new) = changed_lines(COMMENTED, &out);
+        assert!(gone.is_empty(), "{out}");
+        assert_eq!(
+            new,
+            ["[codex.compaction]", "mode = \"every-turn\""],
+            "{out}"
+        );
+        let limit = change(&out, |c| c.codex.compaction.threshold_tokens = 150_000);
+        assert_eq!(
+            changed_lines(&out, &limit),
+            (vec![], vec!["threshold_tokens = 150000".to_owned()])
+        );
+    }
+
+    #[test]
     fn inline_tables_are_rewritten_whole() {
         let text = "skills = { catalog = \"auto\" }\n";
         let out = change(text, |c| {

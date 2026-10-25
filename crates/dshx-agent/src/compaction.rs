@@ -1,5 +1,6 @@
-//! Pressure compaction, overflow recovery and tool-result pruning (dsh
-//! `compaction-basic`, `compaction-tool-result-pruner`, `token-meter`).
+//! Pressure compaction, overflow recovery, tool-result pruning (dsh
+//! `compaction-basic`, `compaction-tool-result-pruner`, `token-meter`) and
+//! dsh-codex's compaction after a completed turn.
 use std::sync::Arc;
 
 use dshx_core::{
@@ -10,6 +11,7 @@ use futures::StreamExt;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
+use crate::TurnEndCompaction;
 use crate::agent::Inner;
 use crate::events::{Aborted, LlmError, error_chain, event, message_json, surface_replace};
 use crate::journal::{event_message, is_surface_type};
@@ -452,25 +454,24 @@ pub(crate) async fn compact_if_needed(
     if m.total_tokens < threshold {
         return Ok(false);
     }
-    prune_session(inner).await?;
-    m = measure_now();
-    if m.total_tokens < threshold {
-        return Ok(false);
-    }
     let retries = inner.config.lock().unwrap().compaction.compaction_retries;
     let mut done = false;
     for _ in 0..=retries {
-        let Some(range) = inner
+        // dsh-codex: summarize before pruning. The summarizer replays the
+        // prefix the provider still caches; pruning first rewrites it from
+        // the first oversized result on, usually near the start. Only the
+        // retained tail is pruned afterwards, and it is re-read anyway.
+        let range = inner
             .journal
-            .read(|events, _| select_range(events, &m, retain))
-        else {
-            return Ok(done);
-        };
-        compact_region(inner, range, Some(turn), cancel).await?;
-        done = true;
+            .read(|events, _| select_range(events, &m, retain));
+        if let Some(range) = range {
+            compact_region(inner, range, Some(turn), cancel).await?;
+            done = true;
+        }
+        prune_session(inner).await?;
         m = measure_now();
-        if m.total_tokens < threshold {
-            return Ok(true);
+        if m.total_tokens < threshold || range.is_none() {
+            return Ok(done);
         }
     }
     anyhow::bail!(
@@ -478,6 +479,60 @@ pub(crate) async fn compact_if_needed(
         retries + 1,
         m.total_tokens
     )
+}
+
+/// New history an every-turn compaction needs, in estimated tokens beside
+/// earlier checkpoints: less is not worth a summary call.
+const MIN_EVERY_TURN_TOKENS: u64 = 8_000;
+
+/// dsh-codex: condenses history once a turn completed, between turns
+/// (`turn: null`, like `/compact`). The last request's prefix is still
+/// cached, so the summarizer reads it at cache price. Returns whether a
+/// summary replaced history.
+pub(crate) async fn compact_after_turn(
+    inner: &Arc<Inner>,
+    policy: TurnEndCompaction,
+    cancel: &CancellationToken,
+) -> anyhow::Result<bool> {
+    if inner.journal.request_header().is_none() || compaction_open(inner) {
+        return Ok(false);
+    }
+    let range = inner.journal.read(|events, _| {
+        let m = measure(events);
+        let retain = match policy {
+            TurnEndCompaction::Off => return None,
+            TurnEndCompaction::Threshold(tokens) if m.total_tokens < tokens => return None,
+            TurnEndCompaction::Threshold(tokens) => tokens / 5,
+            TurnEndCompaction::EveryTurn => 0,
+        };
+        let range = select_range(events, &m, retain)?;
+        let worth = policy != TurnEndCompaction::EveryTurn
+            || new_tokens(events, &m, range) >= MIN_EVERY_TURN_TOKENS;
+        worth.then_some(range)
+    });
+    let Some(range) = range else {
+        return Ok(false);
+    };
+    compact_region(inner, range, None, cancel).await?;
+    prune_session(inner).await?;
+    Ok(true)
+}
+
+/// Estimated tokens of the surface span `(start, end)` without checkpoints.
+fn new_tokens(events: &[SessionEvent], m: &Measurement, (start, end): (u64, u64)) -> u64 {
+    let at = |seq: u64| m.nodes.iter().position(|(s, _)| *s == seq);
+    let (Some(si), Some(ei)) = (at(start), at(end)) else {
+        return 0;
+    };
+    m.nodes[si..=ei]
+        .iter()
+        .filter(|(seq, _)| {
+            !events
+                .get(*seq as usize)
+                .is_some_and(|e| e.data["source"]["kind"] == "compact-checkpoint")
+        })
+        .map(|(_, tokens)| tokens)
+        .sum()
 }
 
 fn compaction_open(inner: &Inner) -> bool {
@@ -698,6 +753,9 @@ async fn summarize_and_commit(
     ))];
     framed.extend(summary.iter().cloned());
     framed.push(ContentBlock::text(CLOSE_TAG));
+    if let Some(todos) = shadowed_todos(inner, &shadowed) {
+        framed.push(ContentBlock::text(todos));
+    }
     let checkpoint = Message {
         id: dshx_core::new_id(),
         role: Role::User,
@@ -745,6 +803,38 @@ async fn summarize_and_commit(
         ))
         .await?;
     Ok(())
+}
+
+/// dsh-codex: the latest todo list unless the model still sees it after
+/// this compaction, so it keeps the exact list the app shows. A `todo/write`
+/// event directly precedes its call's result. Lists without open items are
+/// left out.
+fn shadowed_todos(inner: &Inner, shadowed: &[u64]) -> Option<String> {
+    inner.journal.read(|events, surface| {
+        let latest = events.iter().rev().find(|e| e.kind == kinds::TODO_WRITE)?;
+        let result = events[latest.seq as usize..]
+            .iter()
+            .find(|e| e.kind == kinds::TOOL_RESULT)?;
+        let todos = latest.data["todos"].as_array()?;
+        let visible = surface.nodes.contains(&result.seq) && !shadowed.contains(&result.seq);
+        if visible || todos.iter().all(|t| t["status"] == "completed") {
+            return None;
+        }
+        let items: Vec<String> = todos
+            .iter()
+            .map(|t| {
+                format!(
+                    "- [{}] {}",
+                    t["status"].as_str().unwrap_or("pending"),
+                    t["content"].as_str().unwrap_or_default()
+                )
+            })
+            .collect();
+        Some(format!(
+            "\n\nYour current todo list, as last written with todo_write:\n{}",
+            items.join("\n")
+        ))
+    })
 }
 
 #[cfg(test)]

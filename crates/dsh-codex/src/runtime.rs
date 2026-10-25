@@ -10,9 +10,9 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak};
 use anyhow::Context as _;
 use dshx_agent::{
     Agent, AgentConfig, AgentDeps, AgentObserver, ExtraSection, PreStep, PreStepHook, Preset,
-    RouteCapabilities,
+    RouteCapabilities, TurnEndCompaction,
 };
-use dshx_core::config::Config;
+use dshx_core::config::{CompactionMode, CompactionSettings, Config};
 use dshx_core::{
     ApprovalDecision, Approver, AttachmentStore, ImageAttachmentRef, LlmClient, Message,
     SessionEvent, SessionLog, Tool, ToolRegistry,
@@ -442,6 +442,7 @@ impl Runtime {
         let (provider, model) = self.split_model(&reference);
         core.model = model;
         let mut config = AgentConfig::from_core(&core, cwd);
+        config.compaction.turn_end = turn_end_compaction(&core.codex.compaction);
         config.route = Some(self.route(&reference));
         config.title.model = self
             .router
@@ -591,6 +592,15 @@ impl PreStepHook for SkillsHook {
         *entering = dshx_tools::skill::apply_catalog(batch, snapshot, max, &history);
         entering.extend(invocations);
         Ok(())
+    }
+}
+
+/// The agent's turn-end compaction for `[codex.compaction]`.
+pub fn turn_end_compaction(settings: &CompactionSettings) -> TurnEndCompaction {
+    match settings.mode {
+        CompactionMode::Threshold => TurnEndCompaction::Threshold(settings.threshold_tokens),
+        CompactionMode::EveryTurn => TurnEndCompaction::EveryTurn,
+        CompactionMode::Off => TurnEndCompaction::Off,
     }
 }
 

@@ -227,6 +227,8 @@ pub struct CompactionConfig {
     pub max_tokens: Option<u32>,
     pub compaction_retries: u32,
     pub max_overflow_retries: u32,
+    /// Compaction once a turn completed (dsh-codex); needs `auto`.
+    pub turn_end: TurnEndCompaction,
 }
 
 impl Default for CompactionConfig {
@@ -241,8 +243,25 @@ impl Default for CompactionConfig {
             max_tokens: None,
             compaction_retries: 1,
             max_overflow_retries: 1,
+            turn_end: TurnEndCompaction::Off,
         }
     }
+}
+
+/// When a completed turn condenses history (dsh-codex). dsh compacts only
+/// under pressure, mid-turn; this runs between turns, while the provider
+/// still caches the prefix, and prompts sent meanwhile wait for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TurnEndCompaction {
+    /// Only dsh's pressure compaction and overflow recovery.
+    #[default]
+    Off,
+    /// Once the context reached this many tokens; a fifth of it in
+    /// estimated tokens (about a quarter in real ones) stays verbatim.
+    Threshold(u64),
+    /// After every turn that added enough history; only the newest item
+    /// stays verbatim, like `/compact`.
+    EveryTurn,
 }
 
 /// Model-free head/tail pruning of oversized tool results (dsh `compaction-tool-result-pruner`).
@@ -408,6 +427,7 @@ impl AgentConfig {
         self.prompt.extra_context.clear();
         self.instructions.enabled = false;
         self.compaction.auto = false;
+        self.compaction.turn_end = TurnEndCompaction::Off;
         self.pruner.enabled = false;
     }
 

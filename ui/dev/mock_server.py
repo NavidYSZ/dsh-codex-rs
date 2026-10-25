@@ -27,7 +27,8 @@ INFO = {
         {'id': 'deepseek-v4-pro', 'name': 'deepseek-v4-pro', 'contextWindow': 1000000, 'inputModalities': ['text'],
          'reasoningEfforts': ['off', 'low', 'high', 'max'], 'defaultReasoningEffort': 'high'},
     ],
-    'settings': {'model': 'deepseek-flash', 'effort': 'high', 'sandbox': 'workspace-write', 'approval': 'ask'},
+    'settings': {'model': 'deepseek-flash', 'effort': 'high', 'sandbox': 'workspace-write', 'approval': 'ask',
+                 'compaction': {'mode': 'threshold', 'thresholdTokens': 200000}},
     'apiKeyConfigured': False,
     'tools': {'browser': True, 'app': sys.platform == 'darwin', 'computer': sys.platform == 'darwin'},
 }
@@ -186,6 +187,8 @@ class Handler(SimpleHTTPRequestHandler):
             patch = json.loads(self.body() or b'{}')
             if patch.pop('apiKey', None):
                 INFO['apiKeyConfigured'] = True
+            if isinstance(patch.get('compaction'), dict):
+                patch['compaction'] = {**INFO['settings'].get('compaction', {}), **patch['compaction']}
             INFO['settings'].update({k: v for k, v in patch.items() if v is not None})
             return self.send_json(200, self.info())
         if p == ['workspaces']:

@@ -83,7 +83,7 @@ const allTokens = (u) => inputOf(u) + (u?.outputTokens ?? 0);
 export const statsFeed = createStore({ id: null, stats: null });
 
 const RELEVANT = new Set(['assistant/message', 'turn/start', 'turn/end', 'compaction/summary', 'compaction/end']);
-let tracked = { id: null, seq: -1, loaded: false };
+let tracked = { id: null, seq: -1, loaded: false, rule: undefined };
 let timer = 0;
 let pendingFrom = null;
 
@@ -120,12 +120,17 @@ store.subscribe(() => {
   if (!id || s.header?.id !== id) return;
   const events = s.events;
   const last = events.length ? events[events.length - 1].seq : -1;
+  // A changed compaction setting changes the rule the ring shows.
+  const rule = JSON.stringify(s.info?.settings?.compaction ?? null);
+  const ruleChanged = tracked.rule !== undefined && rule !== tracked.rule;
+  tracked.rule = rule;
   if (!tracked.loaded) {
     tracked.loaded = true;
     tracked.seq = last;
     schedule(id, null, 0);
     return;
   }
+  if (ruleChanged) schedule(id, null, 0);
   if (last <= tracked.seq) return;
   let relevant = false;
   let ended = false;
@@ -237,26 +242,41 @@ function Ring({ ratio }) {
 const CacheIcon = () => html`<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5.25" ry="2.25" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M2.75 4v8c0 1.25 2.35 2.25 5.25 2.25s5.25-1 5.25-2.25V4M2.75 8c0 1.25 2.35 2.25 5.25 2.25S13.25 9.25 13.25 8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`;
 const CoinIcon = () => html`<svg class="icon" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9.9 5.9c-.3-.7-1-1.1-1.9-1.1-1.1 0-1.9.6-1.9 1.5 0 2 3.9 1.1 3.9 3.3 0 .9-.9 1.6-2 1.6-.9 0-1.7-.5-2-1.2M8 3.6v1.2m0 6.4v1.2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 
+/** What the chat's compaction rule does, in one sentence. */
+function compactionRule(auto) {
+  if (!auto) return '';
+  if (!auto.auto) return t.ctxAutoOff;
+  const pressure = percent(auto.thresholdPercent / 100);
+  if (auto.mode === 'threshold' && auto.turnEndTokens) return t.ctxTurnEnd(shortTokens(auto.turnEndTokens));
+  if (auto.mode === 'every-turn') return t.ctxEveryTurn;
+  if (auto.mode === 'off') return t.ctxOffTurns(pressure);
+  return t.ctxAuto(pressure);
+}
+
 function ContextChip({ stats }) {
   const c = stats.context;
   if (!c?.contextWindow) return null;
-  const ratio = c.usedTokens / c.contextWindow;
+  const auto = c.compaction;
+  // With a compaction limit the ring fills up to it, not to the whole window.
+  const limit = auto?.auto && auto.mode === 'threshold' ? auto.turnEndTokens : null;
+  const scale = limit || c.contextWindow;
+  const ratio = c.usedTokens / scale;
   const p = percent(ratio);
+  const aria = limit ? t.ctxAriaLimit(p) : t.ctxAria(p);
   const b = c.breakdown ?? {};
   const estimate = (b.systemTokens ?? 0) + (b.toolsTokens ?? 0) + (b.messageTokens ?? 0);
   // dsh scales the heuristic composition to the measured occupancy.
   const parts = [['system', t.ctxSystem, b.systemTokens], ['tools', t.ctxTools, b.toolsTokens], ['messages', t.ctxMessages, b.messageTokens]]
     .map(([key, name, n]) => ({ key, name, tokens: estimate ? Math.round((c.usedTokens * (n ?? 0)) / estimate) : 0 }));
-  const auto = c.compaction;
-  return html`<${Pop} label=${t.ctxAria(p)} title=${t.ctxAria(p)} trigger=${html`<${Ring} ratio=${ratio} /><span>${p}</span>`}>
-    <div class="ub-head"><span class="ub-head-title"><${Ring} ratio=${ratio} />${t.ctxUsed(p, shortTokens(c.contextWindow))}</span>
+  return html`<${Pop} label=${aria} title=${aria} trigger=${html`<${Ring} ratio=${ratio} /><span>${p}</span>`}>
+    <div class="ub-head"><span class="ub-head-title"><${Ring} ratio=${ratio} />${limit ? t.ctxUntil(p, shortTokens(limit)) : t.ctxUsed(p, shortTokens(c.contextWindow))}</span>
       <span class="ub-head-value">${shortTokens(c.usedTokens)}</span></div>
     <div class="ub-meter" aria-hidden="true">${parts.map((x) => (x.tokens > 0
-    ? html`<span class=${`ub-seg ub-seg-${x.key}`} style=${`width:${Math.max(0.6, (x.tokens / c.contextWindow) * 100)}%`} />` : null))}</div>
+    ? html`<span class=${`ub-seg ub-seg-${x.key}`} style=${`width:${Math.min(100, Math.max(0.6, (x.tokens / scale) * 100))}%`} />` : null))}</div>
     <dl class="ub-rows ub-legend">${parts.map((x) => html`<dt><span class=${`ub-swatch ub-seg-${x.key}`} />${x.name}</dt><dd>${shortTokens(x.tokens)}</dd>`)}</dl>
-    <p class="ub-foot">${c.estimated ? t.ctxAfterCompaction : t.ctxEstimate}
-      ${auto ? ` ${auto.auto ? t.ctxAuto(percent(auto.thresholdPercent / 100)) : t.ctxAutoOff}` : ''}</p>
+    <p class="ub-foot">${c.estimated ? t.ctxAfterCompaction : t.ctxEstimate} ${compactionRule(auto)}</p>
     ${auto ? html`<${CompactNow} />` : null}
+    ${auto?.mode ? html`<button type="button" class="ub-link" onClick=${() => openSettings('context')}>${t.ctxSettings}<${IconChevronRight} size=${12} /></button>` : null}
   </${Pop}>`;
 }
 

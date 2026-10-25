@@ -253,7 +253,10 @@ const DEFAULT_INFO = {
     })),
   ],
   providers: [{ id: 'deepseek-official', name: 'DeepSeek', available: true }, { id: 'anthropic', name: 'Anthropic', available: true }],
-  settings: { model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask', defaultPreset: 'standard' },
+  settings: {
+    model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask', defaultPreset: 'standard',
+    compaction: { mode: 'threshold', thresholdTokens: 200000 },
+  },
   presets: [{ id: 'standard', name: 'Standard' }, { id: 'minimal', name: 'Minimal' }],
   apiKeyConfigured: true,
   tools: { browser: true, app: true, computer: true },
@@ -368,8 +371,9 @@ class FixtureApi {
 
   async updateSettings(patch) {
     await this.ready;
-    const { apiKey, ui, ...rest } = patch;
+    const { apiKey, ui, compaction, ...rest } = patch;
     this.infoData.settings = { ...this.infoData.settings, ...rest };
+    if (compaction) this.infoData.settings.compaction = { ...this.infoData.settings.compaction, ...compaction };
     if (ui) this.infoData.ui = { ...this.infoData.ui, ...ui };
     if (apiKey) this.infoData.apiKeyConfigured = true;
     return clone(this.infoData);
@@ -631,7 +635,15 @@ class FixtureApi {
     const s = this.fx.stats;
     if (!s) throw new ApiError(404, 'stats');
     const ended = new Set(this.history.filter((e) => e.type === 'turn/end').map((e) => e.data?.turn));
-    return clone({ ...s, turns: s.turns.filter((x) => ended.has(x.turn) && (fromTurn == null || x.turn >= fromTurn)) });
+    const out = clone({ ...s, turns: s.turns.filter((x) => ended.has(x.turn) && (fromTurn == null || x.turn >= fromTurn)) });
+    // Like the server: the chat's rule follows Settings → Context.
+    const rule = out.context?.compaction;
+    const setting = this.infoData.settings.compaction;
+    if (rule && setting) {
+      rule.mode = rule.auto ? setting.mode : 'off';
+      if (rule.auto && setting.mode === 'threshold') rule.turnEndTokens = setting.thresholdTokens;
+    }
+    return out;
   }
 
   /** `_shared.json` holds a 7- and a 30-day report with days counted back from today. */

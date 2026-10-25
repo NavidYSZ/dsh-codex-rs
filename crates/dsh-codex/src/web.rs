@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use dshx_agent::{Agent, AgentObserver, AgentStatus, StreamDelta};
+use dshx_agent::{Agent, AgentObserver, AgentStatus, Preset, StreamDelta};
+use dshx_core::config::CompactionSettings;
 use dshx_core::{
     ApprovalDecision, Approver, AttachmentStore, ContentBlock, ImageAttachmentRef, Message,
     MessageSource, NewImage, Role, SandboxMode, SessionEvent, SessionLog, now_ms,
@@ -243,6 +244,10 @@ impl WebBackend {
                 "sandbox": config.sandbox,
                 "approval": config.approval,
                 "defaultPreset": crate::presets::default_of(&config).id(),
+                "compaction": {
+                    "mode": config.codex.compaction.mode,
+                    "thresholdTokens": config.codex.compaction.threshold_tokens,
+                },
             },
             "presets": crate::presets::catalog(),
             "apiKeyConfigured": self.runtime.any_model_ready(),
@@ -274,6 +279,36 @@ fn workspace_row(path: &str, last_used: u64) -> Value {
     json!({ "path": path, "name": name, "lastUsed": last_used })
 }
 
+/// Bounds of `thresholdTokens`: below, nearly every turn would compact; above,
+/// dsh's pressure compaction always comes first.
+const COMPACTION_THRESHOLD_RANGE: std::ops::RangeInclusive<u64> = 20_000..=1_000_000;
+
+/// A `compaction` settings patch (`mode`, `thresholdTokens`) over `current`.
+fn parse_compaction(
+    patch: &Value,
+    current: &CompactionSettings,
+) -> anyhow::Result<CompactionSettings> {
+    let mut next = current.clone();
+    if let Some(mode) = patch.get("mode") {
+        next.mode = serde_json::from_value(mode.clone()).map_err(|_| {
+            anyhow::anyhow!("compaction mode must be one of threshold, every-turn, off")
+        })?;
+    }
+    if let Some(tokens) = patch.get("thresholdTokens") {
+        next.threshold_tokens = tokens
+            .as_u64()
+            .filter(|t| COMPACTION_THRESHOLD_RANGE.contains(t))
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "thresholdTokens must be a whole number from {} to {}",
+                    COMPACTION_THRESHOLD_RANGE.start(),
+                    COMPACTION_THRESHOLD_RANGE.end()
+                )
+            })?;
+    }
+    Ok(next)
+}
+
 fn parse_sandbox(v: Option<&str>) -> anyhow::Result<Option<SandboxMode>> {
     v.map(|s| {
         serde_json::from_value(Value::String(s.to_owned()))
@@ -301,7 +336,14 @@ impl Backend for WebBackend {
             .and_then(Value::as_str)
             .map(crate::presets::parse)
             .transpose()?;
+        let compaction = patch
+            .get("compaction")
+            .map(|p| parse_compaction(p, &self.runtime.config().codex.compaction))
+            .transpose()?;
         self.runtime.update_config(|c| {
+            if let Some(s) = &compaction {
+                c.codex.compaction = s.clone();
+            }
             if let Some(p) = preset {
                 c.default_preset = Some(p.id().to_owned());
             }
@@ -318,6 +360,16 @@ impl Backend for WebBackend {
                 c.approval = a.to_owned();
             }
         })?;
+        // Open chats follow at once; Minimal chats never compact.
+        if let Some(s) = &compaction {
+            let turn_end = crate::runtime::turn_end_compaction(s);
+            for open in self.open.lock().await.values() {
+                if open.agent.config().preset == Preset::Standard {
+                    open.agent
+                        .update_config(|c| c.compaction.turn_end = turn_end);
+                }
+            }
+        }
         Ok(self.info_value())
     }
 
@@ -741,14 +793,22 @@ impl Backend for WebBackend {
     }
 
     async fn session_stats(&self, id: &str, from_turn: Option<u64>) -> anyhow::Result<Value> {
-        let (events, cwd) = match self.open.lock().await.get(id) {
-            Some(s) => (s.log.events(), s.cwd.clone()),
+        // The chat's own compaction: an open agent's, else its preset's.
+        let (events, cwd, compaction) = match self.open.lock().await.get(id) {
+            Some(s) => (
+                s.log.events(),
+                s.cwd.clone(),
+                Ok(s.agent.config().compaction),
+            ),
             None => {
                 if self.runtime.store.locate(id)?.is_none() {
                     return Err(NotFound(id.to_owned()).into());
                 }
                 let stored = self.runtime.store.read(id)?;
-                (stored.events, PathBuf::from(stored.header.cwd))
+                let preset = Preset::of_session(
+                    dshx_session::agent_preset(&stored.header, &stored.events).as_deref(),
+                );
+                (stored.events, PathBuf::from(stored.header.cwd), Err(preset))
             }
         };
         let runtime = self.runtime.clone();
@@ -756,13 +816,18 @@ impl Backend for WebBackend {
         let id = id.to_owned();
         tokio::task::spawn_blocking(move || {
             let prices = usage::price_book_at(&runtime.home, &runtime.config(), now_ms());
-            let agent = runtime.agent_config(&cwd, &Overrides::default());
+            let mut agent = runtime.agent_config(&cwd, &Overrides::default());
+            match compaction {
+                Ok(c) => agent.compaction = c,
+                Err(preset) => agent.apply_preset(preset),
+            }
             let route = runtime.route(&agent.model);
             let rule = usage::CompactionRule {
                 auto: agent.compaction.auto,
                 threshold_ratio: agent.compaction.threshold_ratio,
                 headroom_tokens: agent.compaction.headroom_tokens,
                 default_max_tokens: route.default_max_tokens.into(),
+                turn_end: agent.compaction.turn_end,
             };
             let stats = usage::session_stats(
                 &events,

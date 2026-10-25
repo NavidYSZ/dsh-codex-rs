@@ -13,7 +13,7 @@ use futures::StreamExt;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::config::{AgentConfig, ApprovalPolicy, sandbox_str};
+use crate::config::{AgentConfig, ApprovalPolicy, TurnEndCompaction, sandbox_str};
 use crate::events::{
     Aborted, CancelCause, LlmError, TurnEndReason, TurnOutcome, error_chain, event, message_json,
     surface_append, surface_replace,
@@ -91,6 +91,8 @@ pub(crate) struct LoopState {
     pub open_turn: Option<(u64, u64)>,
     /// Whether this session already has a title (skips the per-request scan).
     pub titled: bool,
+    /// Cancels the compaction that runs after a completed turn.
+    pub compacting: Option<CancellationToken>,
 }
 
 impl LoopState {
@@ -246,6 +248,7 @@ impl Agent {
                 own_prompt: None,
                 open_turn: None,
                 titled: false,
+                compacting: None,
             }),
             driver: tokio::sync::Mutex::new(()),
             inbox_lock: tokio::sync::Mutex::new(()),
@@ -609,6 +612,9 @@ impl Agent {
             }
             r.cancel.cancel();
         }
+        if let Some(c) = &st.compacting {
+            c.cancel();
+        }
     }
 
     /// Stops background work (title generation, the session's jobs and
@@ -904,6 +910,15 @@ impl Inner {
             let mut st = self.state.lock().unwrap();
             st.overflow_retries = 0;
         }
+        if matches!(
+            &outcome,
+            Ok(TurnOutcome {
+                reason: TurnEndReason::Completed,
+                ..
+            })
+        ) {
+            self.compact_after_turn().await;
+        }
         match &outcome {
             Ok(TurnOutcome {
                 reason: TurnEndReason::Error { error },
@@ -917,6 +932,37 @@ impl Inner {
             _ => self.set_status(AgentStatus::Idle),
         }
         outcome
+    }
+
+    /// dsh-codex: the configured turn-end compaction, still under the
+    /// driver lock (prompts sent meanwhile wait, like `/compact`) and
+    /// while the status reads running. Subagents end with their turn and
+    /// skip it. A failure leaves the history as it was.
+    async fn compact_after_turn(self: &Arc<Self>) {
+        let policy = {
+            let c = self.config.lock().unwrap();
+            if c.compaction.auto {
+                c.compaction.turn_end
+            } else {
+                TurnEndCompaction::Off
+            }
+        };
+        if policy == TurnEndCompaction::Off || self.journal.header().delegation_depth > 0 {
+            return;
+        }
+        let cancel = self.lifetime.child_token();
+        self.state.lock().unwrap().compacting = Some(cancel.clone());
+        let result = crate::compaction::compact_after_turn(self, policy, &cancel).await;
+        self.state.lock().unwrap().compacting = None;
+        match result {
+            Err(e) if !is_aborted(&e) && !cancel.is_cancelled() => {
+                tracing::warn!("turn-end compaction failed: {e:#}")
+            }
+            _ => {}
+        }
+        if let Err(e) = self.journal.flush().await {
+            tracing::warn!("flushing after the turn-end compaction failed: {e:#}");
+        }
     }
 
     async fn turn(self: &Arc<Self>, target: Target) -> anyhow::Result<TurnOutcome> {

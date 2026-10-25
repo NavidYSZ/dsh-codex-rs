@@ -301,8 +301,8 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin, personalSkills}}` (`personalSkills`: the personal skills folder, `~`-relative); each model row adds `{provider, providerName, model, maxTokens, available, cost?, offPeakCost?}` (DeepSeek rows: `cost` at peak hours and `offPeakCost`, both from the usage price book) and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
-| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, ui?: {workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?, sidebarArchived?, confirmFullAccess?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
+| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset, compaction:{mode, thresholdTokens}}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin, personalSkills}}` (`personalSkills`: the personal skills folder, `~`-relative); each model row adds `{provider, providerName, model, maxTokens, available, cost?, offPeakCost?}` (DeepSeek rows: `cost` at peak hours and `offPeakCost`, both from the usage price book) and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
+| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, compaction?: {mode?, thresholdTokens?}, ui?: {workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?, sidebarArchived?, confirmFullAccess?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `compaction` → `[codex.compaction]`, `mode` one of `threshold`, `every-turn`, `off`, `thresholdTokens` 20000–1000000, else 400, and open Standard chats follow at once; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
 | POST | `/api/workspaces` | `{path}` → workspace |
 | GET | `/api/fs/dirs?path=&hidden=` | → `{path, parent, root, home, roots, git, entries:[{name, path, git, hidden}], truncated}`: subfolders only, sorted by name, at most 500; `path` empty = home (or the first root), `~/…` allowed; `hidden=1` adds dot folders (and Finder-hidden ones on macOS). Only inside `Backend::folder_roots` (home, `[folders] roots`, the parent of every project except `/`); outside → 403 `outside-roots`, missing → 404 `not-found`, unreadable → 403 `permission-denied`, no roots → 404 `unsupported` (errors are `{error, code}`) |
@@ -499,9 +499,11 @@ adds flat prices of other providers; a model without a price counts tokens only 
 - `SessionStats`: `{currency: "USD", provider, model, turnCount, totals: Tally, timings: Timings, lastRequest:
   {seq, time, turn, provider, model, ...Tally} | null, turns: [{turn, start, end, status, ...Tally, routes:
   ["provider/model"], timings: Timings}], context: {contextWindow, usedTokens, estimated, percent, breakdown:
-  {systemTokens, toolsTokens, messageTokens}, compaction: {auto, thresholdTokens, thresholdPercent} | null},
+  {systemTokens, toolsTokens, messageTokens}, compaction: {auto, thresholdTokens, thresholdPercent, mode, turnEndTokens?} | null},
   subagents?: {sessions, ...Tally}}`. `usedTokens` = input and output of the last request (after a compaction the
   heuristic estimate, `estimated: true`); `breakdown` is dsh's four-characters-per-token estimate of the history.
+  `compaction.thresholdTokens` is dsh's mid-turn pressure trigger; `mode` is the chat's compaction between
+  turns (`threshold` with `turnEndTokens`, `every-turn`, or `off`, also whenever `auto` is false).
 - `Timings` (dsh `sessionStats`): `{steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens, avgTtftMs,
   tokensPerSecond}`: model time `step/start` → `assistant/message`, first token = first non-empty stream delta,
   decode = first token → message on steps with output tokens, tool time `tool/call` → `tool/result`.

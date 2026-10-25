@@ -5,7 +5,7 @@ mod common;
 
 use common::*;
 use dshx_agent::testing::text;
-use dshx_agent::{AgentConfig, Preset, PromptConfig, render_system_prompt};
+use dshx_agent::{AgentConfig, Preset, PromptConfig, TurnEndCompaction, render_system_prompt};
 use dshx_core::Role;
 use serde_json::json;
 
@@ -43,6 +43,7 @@ fn standard_changes_nothing() {
 #[test]
 fn minimal_prompt_is_the_fixed_persona_for_any_tools() {
     let mut config = AgentConfig::new("deepseek-flash", "/w");
+    config.compaction.turn_end = TurnEndCompaction::EveryTurn;
     config.apply_preset(Preset::Minimal);
     for tools in [
         vec![],
@@ -61,6 +62,7 @@ fn minimal_prompt_is_the_fixed_persona_for_any_tools() {
     }
     assert!(!config.instructions.enabled);
     assert!(!config.compaction.auto);
+    assert_eq!(config.compaction.turn_end, TurnEndCompaction::Off);
     assert!(!config.pruner.enabled);
     assert!(config.title.enabled, "titles are a host service in dsh");
     assert!(

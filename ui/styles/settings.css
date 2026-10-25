@@ -27,6 +27,9 @@
 .st-pane-head .settings-title { margin: 0; }
 .st-pane-head .page-lead { max-width: 60ch; }
 
+/* Context: the mode switch and the limit keep their width; the hint wraps. */
+.st-context .field-control { flex-shrink: 0; }
+
 .st-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 16px; }
 .st-empty p { margin: 0; color: var(--ink-2); }
 .st-empty .icon { color: var(--ink-3); }

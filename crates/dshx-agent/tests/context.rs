@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use common::*;
 use dshx_agent::testing::{FakeTool, Response, failure, offload_failure, text, tool_calls};
 use dshx_agent::{
-    ApprovalPolicy, PromptConfig, RouteCapabilities, TurnEndReason, render_system_prompt,
+    ApprovalPolicy, PromptConfig, RouteCapabilities, TurnEndCompaction, TurnEndReason,
+    render_system_prompt,
 };
 use dshx_core::{
     ApprovalDecision, ContentBlock, SandboxMode, SessionEvent, SessionLog, TokenUsage, Tool,
@@ -434,6 +435,227 @@ async fn oversized_tool_results_are_pruned_under_pressure() {
     assert_eq!(
         text.chars().count(),
         4096 + 1024 + "\n\n[... tool result middle pruned ...]\n\n".len()
+    );
+    validate(&h.log);
+}
+
+/// `r` reporting `input` prompt tokens.
+fn with_usage(r: Response, input: u64) -> Response {
+    let Response::Chunks(mut c) = r else {
+        return r;
+    };
+    for chunk in &mut c {
+        if let dshx_core::StreamChunk::Usage(u) = chunk {
+            u.input_tokens = input;
+            u.total_tokens = Some(input + u.output_tokens);
+        }
+    }
+    Response::Chunks(c)
+}
+
+fn summarizer_requests(h: &Harness) -> Vec<dshx_core::GenerateRequest> {
+    h.llm
+        .side_requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|r| {
+            r.messages
+                .last()
+                .unwrap()
+                .plain_text()
+                .contains("compaction engine")
+        })
+        .cloned()
+        .collect()
+}
+
+#[tokio::test]
+async fn pressure_compaction_summarizes_before_pruning_the_kept_tail() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let big = "y".repeat(20_000);
+    let h = harness(
+        vec![
+            tool_calls(M, &[("c1", "bash", "{}")]),
+            text(M, "first"),
+            with_usage(tool_calls(M, &[("c2", "bash", "{}")]), 70_100),
+            text(M, "done"),
+        ],
+        vec![echo_tool("bash", false, &big, events)],
+        |c, _| small_window(c),
+    );
+    h.agent
+        .run_turn(vec![ContentBlock::text("look")])
+        .await
+        .unwrap();
+    h.agent
+        .run_turn(vec![ContentBlock::text("again")])
+        .await
+        .unwrap();
+    let k = kinds(&h.log);
+    let start = k
+        .iter()
+        .position(|x| x == "compaction/start")
+        .expect("compaction ran");
+    // Summary first; only the kept tail's oversized result is pruned after it.
+    assert!(!k[..start].iter().any(|x| x == "compaction/prune"));
+    assert_eq!(
+        &k[start..start + 6],
+        [
+            "compaction/start",
+            "compaction/summary",
+            "user/message",
+            "compaction/end",
+            "compaction/prune",
+            "tool/result"
+        ]
+    );
+    let results = of_kind(&h.log, "tool/result");
+    let prune = &of_kind(&h.log, "compaction/prune")[0];
+    assert_eq!(prune.data["shadowedSeqs"], json!([results[1].seq]));
+    // The summarizer read the condensed result unpruned: the cached prefix.
+    let summarize = &summarizer_requests(&h)[0];
+    assert!(
+        summarize
+            .messages
+            .iter()
+            .any(|m| m.role == dshx_core::Role::Tool && m.plain_text() == big)
+    );
+    let requests = h.llm.requests.lock().unwrap();
+    assert!(requests.last().unwrap().messages.iter().any(|m| {
+        m.plain_text()
+            .contains("[... tool result middle pruned ...]")
+    }));
+    drop(requests);
+    validate(&h.log);
+}
+
+#[tokio::test]
+async fn turn_end_compaction_condenses_at_the_threshold() {
+    let h = harness(
+        vec![
+            text(M, "first"),
+            text_with_usage("second", 60_000),
+            text(M, "third"),
+        ],
+        vec![],
+        |c, _| c.compaction.turn_end = TurnEndCompaction::Threshold(50_000),
+    );
+    let (early, late) = ("x".repeat(8_000), "y".repeat(48_000));
+    h.agent
+        .run_turn(vec![ContentBlock::text(early.clone())])
+        .await
+        .unwrap();
+    assert!(of_kind(&h.log, "compaction/start").is_empty());
+    h.agent
+        .run_turn(vec![ContentBlock::text(late.clone())])
+        .await
+        .unwrap();
+    let k = kinds(&h.log);
+    let end = k.iter().rposition(|x| x == "turn/end").unwrap();
+    assert_eq!(
+        &k[end + 1..],
+        [
+            "compaction/start",
+            "compaction/summary",
+            "user/message",
+            "compaction/end"
+        ]
+    );
+    assert_eq!(
+        of_kind(&h.log, "compaction/start")[0].data["turn"],
+        Value::Null
+    );
+    // The summarizer replayed a prefix of the last request, then the instruction;
+    // a fifth of the threshold (the long second prompt) stayed verbatim.
+    {
+        let summarize = &summarizer_requests(&h)[0];
+        let requests = h.llm.requests.lock().unwrap();
+        let n = summarize.messages.len() - 1;
+        assert_eq!(summarize.messages[..n], requests[1].messages[..n]);
+        assert!(summarize.messages.iter().any(|m| m.plain_text() == early));
+        assert!(!summarize.messages.iter().any(|m| m.plain_text() == late));
+    }
+    h.agent
+        .run_turn(vec![ContentBlock::text("go on")])
+        .await
+        .unwrap();
+    let requests = h.llm.requests.lock().unwrap();
+    let third = &requests[2].messages;
+    assert!(
+        third[1]
+            .plain_text()
+            .starts_with("This is an automatically generated checkpoint")
+    );
+    assert!(third.iter().any(|m| m.plain_text() == late));
+    assert!(!third.iter().any(|m| m.plain_text() == early));
+    drop(requests);
+    validate(&h.log);
+}
+
+#[tokio::test]
+async fn every_turn_compaction_keeps_the_answer_and_skips_short_turns() {
+    let h = harness(vec![text(M, "first"), text(M, "ok")], vec![], |c, _| {
+        c.compaction.turn_end = TurnEndCompaction::EveryTurn
+    });
+    let long = "x".repeat(40_000);
+    h.agent
+        .run_turn(vec![ContentBlock::text(long.clone())])
+        .await
+        .unwrap();
+    assert_eq!(of_kind(&h.log, "compaction/summary").len(), 1);
+    h.agent
+        .run_turn(vec![ContentBlock::text("thanks")])
+        .await
+        .unwrap();
+    // Too little new history beside the checkpoint: no second summary.
+    assert_eq!(of_kind(&h.log, "compaction/summary").len(), 1);
+    let requests = h.llm.requests.lock().unwrap();
+    let second = &requests[1].messages;
+    assert!(
+        second[1]
+            .plain_text()
+            .starts_with("This is an automatically generated checkpoint")
+    );
+    assert_eq!(second[2].plain_text(), "first");
+    assert!(!second.iter().any(|m| m.plain_text() == long));
+    drop(requests);
+    validate(&h.log);
+}
+
+#[tokio::test]
+async fn checkpoint_carries_the_open_todo_list() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let todos = json!({"todos": [
+        {"content": "Read the config", "status": "completed"},
+        {"content": "Add the setting", "status": "in_progress"},
+    ]})
+    .to_string();
+    let h = harness(
+        vec![
+            tool_calls(M, &[("c1", "todo_write", &todos)]),
+            text(M, "first"),
+        ],
+        vec![echo_tool("todo_write", false, "ok", events)],
+        |c, _| c.compaction.turn_end = TurnEndCompaction::EveryTurn,
+    );
+    h.agent
+        .run_turn(vec![ContentBlock::text("x".repeat(40_000))])
+        .await
+        .unwrap();
+    let summary = &of_kind(&h.log, "compaction/summary")[0];
+    let checkpoint = &h.log.events()[summary.seq as usize + 1];
+    let text: String = checkpoint.data["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|b| b["text"].as_str())
+        .collect();
+    assert!(
+        text.ends_with(
+            "</compacted-summary>\n\nYour current todo list, as last written with todo_write:\n- [completed] Read the config\n- [in_progress] Add the setting"
+        ),
+        "{text}"
     );
     validate(&h.log);
 }

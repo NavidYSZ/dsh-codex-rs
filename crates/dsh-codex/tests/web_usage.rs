@@ -216,3 +216,135 @@ async fn web_prices_chats_and_keeps_display_preferences() {
         serde_json::from_slice(&std::fs::read(home.path().join("ui-state.json")).unwrap()).unwrap();
     assert_eq!(state["ui"]["workDetails"], "compact");
 }
+
+impl Server {
+    /// Sends `text` and waits until the chat logged `kind` `count` times.
+    async fn prompt_until(&self, id: &str, text: &str, kind: &str, count: usize) -> Vec<Value> {
+        let (status, _) = self
+            .call(
+                reqwest::Method::POST,
+                &format!("/sessions/{id}/prompt"),
+                Some(json!({ "text": text })),
+            )
+            .await;
+        assert_eq!(status, 202);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            let s = self.get(&format!("/sessions/{id}")).await;
+            let events = s["events"].as_array().cloned().unwrap_or_default();
+            if events.iter().filter(|e| e["type"] == kind).count() >= count {
+                return events;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "no {kind} #{count}: {s}"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+}
+
+/// Settings → Context: `[codex.compaction]` through /api/settings, applied to
+/// an open chat at once and reported in its stats.
+#[tokio::test(flavor = "multi_thread")]
+async fn web_compaction_setting_reaches_open_chats() {
+    let mock = MockDeepSeek::start().await;
+    mock.set_responder(|r| {
+        if r.system().is_some_and(|s| s.contains("concise title")) {
+            return Reply::text("Titel");
+        }
+        let last = r
+            .messages()
+            .last()
+            .map(Value::to_string)
+            .unwrap_or_default();
+        let text = if last.contains("compaction engine") {
+            "## Primary Request and Intent\n- summary"
+        } else {
+            "Done."
+        };
+        Reply::stream().text(text).usage(1000, 20).into()
+    });
+    let home = tempfile::tempdir().unwrap();
+    let ws = tempfile::tempdir().unwrap();
+    let server = start(&mock, home.path());
+
+    let info = server.get("/info").await;
+    assert_eq!(
+        info["settings"]["compaction"],
+        json!({"mode": "threshold", "thresholdTokens": 200000})
+    );
+    let (_, created) = server
+        .call(
+            reqwest::Method::POST,
+            "/sessions",
+            Some(json!({"cwd": ws.path()})),
+        )
+        .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    // The first turn opens the chat's agent; far below 200K nothing compacts.
+    server.prompt_until(&id, "hello", "turn/end", 1).await;
+
+    let (status, info) = server
+        .call(
+            reqwest::Method::PUT,
+            "/settings",
+            Some(json!({"compaction": {"mode": "every-turn"}})),
+        )
+        .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        info["settings"]["compaction"],
+        json!({"mode": "every-turn", "thresholdTokens": 200000})
+    );
+    for bad in [json!({"mode": "sometimes"}), json!({"thresholdTokens": 5})] {
+        let (status, _) = server
+            .call(
+                reqwest::Method::PUT,
+                "/settings",
+                Some(json!({ "compaction": bad })),
+            )
+            .await;
+        assert_eq!(status, 400, "{bad}");
+    }
+    let config: toml::Value =
+        toml::from_str(&std::fs::read_to_string(home.path().join("config.toml")).unwrap()).unwrap();
+    assert_eq!(
+        config["codex"]["compaction"]["mode"].as_str(),
+        Some("every-turn")
+    );
+
+    // The open chat now compacts after its next turn, between turns.
+    let events = server
+        .prompt_until(&id, &"x".repeat(40_000), "compaction/end", 1)
+        .await;
+    let kinds: Vec<&str> = events.iter().filter_map(|e| e["type"].as_str()).collect();
+    let end = kinds.iter().rposition(|k| *k == "turn/end").unwrap();
+    let start = kinds.iter().position(|k| *k == "compaction/start").unwrap();
+    assert!(start > end, "{kinds:?}");
+    assert!(events[start]["data"]["turn"].is_null());
+    let end_event = events
+        .iter()
+        .find(|e| e["type"] == "compaction/end")
+        .unwrap();
+    assert!(end_event["data"].get("error").is_none(), "{end_event}");
+    let stats = server.get(&format!("/sessions/{id}/stats")).await;
+    assert_eq!(stats["context"]["compaction"]["mode"], "every-turn");
+    assert!(
+        stats["context"]["compaction"]
+            .get("turnEndTokens")
+            .is_none()
+    );
+
+    let (status, _) = server
+        .call(
+            reqwest::Method::PUT,
+            "/settings",
+            Some(json!({"compaction": {"mode": "threshold", "thresholdTokens": 50000}})),
+        )
+        .await;
+    assert_eq!(status, 200);
+    let stats = server.get(&format!("/sessions/{id}/stats")).await;
+    assert_eq!(stats["context"]["compaction"]["mode"], "threshold");
+    assert_eq!(stats["context"]["compaction"]["turnEndTokens"], 50000);
+}

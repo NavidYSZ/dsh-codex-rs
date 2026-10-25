@@ -9,7 +9,7 @@ import { t } from '../i18n.js';
 import { useStore } from '../store.js';
 import { store, api, send, openSession, refreshSessions, setDraft, newChat, fail } from '../state.js';
 import { copyText } from '../markdown.js';
-import { IconCopy, IconCheck, IconRefresh, IconPencil, IconAlert, IconChevronRight, IconExternal } from '../icons.js';
+import { IconCopy, IconCheck, IconRefresh, IconPencil, IconAlert, IconChevronRight, IconExternal, IconContext } from '../icons.js';
 import { Shimmer } from './common.js';
 import { Markdown } from './transcript.js';
 import { useSelection } from './composer.js';
@@ -21,8 +21,6 @@ const S = { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3, 'stroke-l
 const IconBranch = ({ size = 14 }) => html`<svg class="icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true">
   <circle cx="4.5" cy="3.5" r="1.6" ...${S}/><circle cx="4.5" cy="12.5" r="1.6" ...${S}/><circle cx="11.5" cy="5" r="1.6" ...${S}/>
   <path d="M4.5 5.1v5.8M11.5 6.6c0 2.7-2.3 3.6-5.6 4.6" ...${S}/></svg>`;
-const IconContext = ({ size = 14 }) => html`<svg class="icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true">
-  <path d="M2.75 4.25h10.5M2.75 8h10.5M2.75 11.75h6" ...${S}/><path d="m11 10.25 1.75 1.5L11 13.25" ...${S}/></svg>`;
 
 // ---- what the chat can do -------------------------------------------------------
 
@@ -211,7 +209,7 @@ export function CompactionNotice({ item }) {
   const [open, setOpen] = useState(false);
   if (item.running) {
     return html`<div class="cmp is-running" role="status"><span class="cmp-row">
-      <span class="cmp-icon"><${IconContext} /></span><${Shimmer} active><span class="cmp-title">${t.compactionRunning}</span></${Shimmer}>
+      <span class="cmp-icon"><${IconContext} size=${14} /></span><${Shimmer} active><span class="cmp-title">${t.compactionRunning}</span></${Shimmer}>
     </span></div>`;
   }
   const expandable = !!item.summary;
@@ -222,7 +220,7 @@ export function CompactionNotice({ item }) {
   return html`<div class=${cx('cmp', open && 'is-open', item.error && 'is-failed')}>
     <button type="button" class="cmp-row" disabled=${!expandable} aria-expanded=${expandable ? open : undefined}
       title=${item.error || undefined} onClick=${() => setOpen((v) => !v)}>
-      <span class="cmp-icon"><${IconContext} /></span>
+      <span class="cmp-icon"><${IconContext} size=${14} /></span>
       <span class="cmp-title">${item.error ? t.compactionFailed : t.compaction}</span>
       ${summary ? html`<span class="cmp-sep" aria-hidden="true" /><span class="cmp-summary">${summary}</span>` : null}
       ${expandable ? html`<span class="chev"><${IconChevronRight} size=${12} /></span>` : null}

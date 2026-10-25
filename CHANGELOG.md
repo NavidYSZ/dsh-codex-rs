@@ -159,8 +159,23 @@
   "Plan 2/3". Turns that a finished background job starts show a "Background
   job" line like goal rounds and reminders.
 
+- **Compaction between turns** (Settings → Context, `[codex.compaction]`): a
+  finished turn condenses older history once the context reached a limit
+  (200K tokens by default, 100K–500K in the UI) or after every turn that added
+  at least about 10,000 tokens; `off` keeps DSH's behaviour. It runs while the
+  provider still caches the prefix, prompts sent meanwhile wait for it, Stop
+  cancels it, subagents and `dsh-codex "<task>"` skip it. The checkpoint
+  carries the open `todo_write` list. The context ring fills up to the limit
+  and links to the setting; `/api/info` `settings.compaction`, stats
+  `context.compaction.mode` and `turnEndTokens`.
+
 ### Changed
 
+- DSH's pressure compaction summarizes before it prunes oversized tool
+  results: pruning first rewrote the prefix from the first such result on, so
+  the summary request missed DeepSeek's cache. Now the summarizer replays the
+  cached prefix and only the kept tail is pruned; pruning alone still runs
+  when nothing can be summarized.
 - The system prompt carries DSH's file-reference guidance; MCP server
   instructions moved out of it (only `always` servers keep theirs there), so
   existing chats see one prompt-cache rebuild on their next request.

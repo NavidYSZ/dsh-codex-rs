@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use dshx_agent::TurnEndCompaction;
 use dshx_core::{ContentBlock, Message, Role, SessionEvent, TokenUsage};
 use dshx_session::{SessionStore, SessionSummary};
 use serde::{Deserialize, Serialize};
@@ -546,6 +547,11 @@ pub struct CompactionStats {
     /// Estimated history size at which the agent compacts before the next step.
     pub threshold_tokens: u64,
     pub threshold_percent: f64,
+    /// Compaction after a completed turn: `threshold`, `every-turn` or `off`.
+    pub mode: &'static str,
+    /// The context size that triggers it in `threshold` mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_end_tokens: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -569,6 +575,8 @@ pub struct CompactionRule {
     pub headroom_tokens: u64,
     /// Output cap of the route when the request header names none.
     pub default_max_tokens: u64,
+    /// dsh-codex's compaction after a completed turn.
+    pub turn_end: TurnEndCompaction,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -881,10 +889,18 @@ pub fn session_stats(
             .unwrap_or(r.default_max_tokens);
         let pressure = w.saturating_sub(reserved).saturating_sub(r.headroom_tokens);
         let threshold = (w as f64 * r.threshold_ratio).min(pressure as f64).floor() as u64;
+        let (mode, turn_end_tokens) = match r.turn_end {
+            _ if !r.auto => ("off", None),
+            TurnEndCompaction::Threshold(tokens) => ("threshold", Some(tokens)),
+            TurnEndCompaction::EveryTurn => ("every-turn", None),
+            TurnEndCompaction::Off => ("off", None),
+        };
         CompactionStats {
             auto: r.auto,
             threshold_tokens: threshold,
             threshold_percent: threshold as f64 / w as f64 * 100.0,
+            mode,
+            turn_end_tokens,
         }
     });
 
@@ -1665,6 +1681,7 @@ mod tests {
             threshold_ratio: 0.8,
             headroom_tokens: 65_536,
             default_max_tokens: 256_000,
+            turn_end: TurnEndCompaction::Threshold(200_000),
         };
         let s = session_stats(&log(base), &PriceBook::deepseek(), Some(rule), None, None);
         assert_eq!(s.turn_count, 1);
@@ -1707,6 +1724,14 @@ mod tests {
         let c = s.context.compaction.as_ref().unwrap();
         assert_eq!(c.threshold_tokens, 678_464);
         assert!(close(c.threshold_percent, 67.8464));
+        assert_eq!((c.mode, c.turn_end_tokens), ("threshold", Some(200_000)));
+        let off = CompactionRule {
+            auto: false,
+            ..rule
+        };
+        let s_off = session_stats(&log(base), &PriceBook::deepseek(), Some(off), None, None);
+        let c = s_off.context.compaction.as_ref().unwrap();
+        assert_eq!((c.mode, c.turn_end_tokens), ("off", None));
         assert_eq!(s.model.as_deref(), Some("deepseek-flash"));
 
         let later = session_stats(&log(base), &PriceBook::deepseek(), None, None, Some(2));

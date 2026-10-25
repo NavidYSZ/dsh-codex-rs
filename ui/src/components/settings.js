@@ -1,7 +1,8 @@
 // Settings: one pane per section behind a navigation like the Codex app's
 // (a rail beside the pane on wide pages, a scrolling tab row on narrow ones),
 // each at `#/settings/<section>`: general, appearance, model providers,
-// defaults for new chats, usage of all chats, archived chats and about.
+// defaults for new chats, context compaction, usage of all chats, archived
+// chats and about.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, age } from '../i18n.js';
@@ -10,12 +11,12 @@ import {
   store, setTheme, updateSettings, closeSettings, toggleSidebar, setArchived, deleteSession, setFollowup, setNotify, openSettings,
 } from '../state.js';
 import {
-  IconChevronLeft, IconSidebar, IconArchive, IconGear, IconSun, IconCube, IconCompose, IconChart, IconInfo,
+  IconChevronLeft, IconSidebar, IconArchive, IconGear, IconSun, IconCube, IconCompose, IconChart, IconInfo, IconContext,
 } from '../icons.js';
 import { workspaceName } from './composer.js';
 import { ModeSetting } from './modes.js';
 import { AppearanceCard } from './worklog.js';
-import { UsageCard } from './usage.js';
+import { UsageCard, shortTokens } from './usage.js';
 import { ModelsSection, ModelSelect, modelHint } from './models.js';
 import { confirmFullAccess, FullAccessSetting } from './confirm.js';
 
@@ -86,6 +87,28 @@ function Defaults() {
   </section>`;
 }
 
+/** Limits offered for `threshold` compaction; a configured other value joins them. */
+const COMPACTION_LIMITS = [100_000, 150_000, 200_000, 300_000, 400_000, 500_000];
+
+/** When chats condense older history between turns (`[codex.compaction]`). */
+function Context() {
+  const c = useStore(store, (s) => s.info?.settings?.compaction) ?? { mode: 'threshold', thresholdTokens: 200_000 };
+  const limits = COMPACTION_LIMITS.includes(c.thresholdTokens)
+    ? COMPACTION_LIMITS : [...COMPACTION_LIMITS, c.thresholdTokens].sort((a, b) => a - b);
+  return html`<section class="card st-context">
+    <${Field} label=${t.compactionSetting} hint=${t.compactionModeHints[c.mode]}>
+      <${Segmented} label=${t.compactionSetting} value=${c.mode} onChange=${(mode) => updateSettings({ compaction: { mode } })}
+        options=${Object.entries(t.compactionModes)} />
+    </${Field}>
+    ${c.mode === 'threshold' ? html`<${Field} label=${t.compactionLimit} hint=${t.compactionLimitHint}>
+      <select class="select" value=${c.thresholdTokens} aria-label=${t.compactionLimit}
+        onChange=${(e) => updateSettings({ compaction: { thresholdTokens: Number(e.currentTarget.value) } })}>
+        ${limits.map((n) => html`<option key=${n} value=${n}>${t.compactionLimitValue(shortTokens(n))}</option>`)}
+      </select>
+    </${Field}>` : null}
+  </section>`;
+}
+
 function Archived() {
   const sessions = useStore(store, (s) => s.sessions);
   const list = sessions.filter((s) => s.archived).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
@@ -123,6 +146,7 @@ const SECTIONS = [
   ['appearance', IconSun, () => html`<${AppearanceCard} titled=${false} />`],
   ['models', IconCube, () => html`<${ModelsSection} titled=${false} />`],
   ['defaults', IconCompose, Defaults],
+  ['context', IconContext, Context],
   ['usage', IconChart, () => html`<${UsageCard} titled=${false} />`],
   ['archived', IconArchive, Archived],
   ['about', IconInfo, About],

@@ -3,7 +3,8 @@
 //! The `[codex]` table carries the settings of the original plugin bundle
 //! (`computerUse`, `apps`, `browser`, `mini`), with the same keys and defaults,
 //! plus the dsh automation features (`goal`, `schedule`, `time_context`,
-//! `team`) with dsh 0.2.0-rc.2's defaults.
+//! `team`) with dsh 0.2.0-rc.2's defaults and dsh-codex's own `compaction`
+//! between turns.
 //! `[mcp_servers.<name>]` tables configure MCP servers (dsh `mcp-client`),
 //! `[plugins."<name>@<marketplace>"]` tables switch installed plugins on,
 //! `[providers.<id>]` tables add model providers besides the built-in
@@ -468,6 +469,39 @@ pub struct CodexConfig {
     #[serde(rename = "time_context", alias = "timeContext")]
     pub time_context: TimeContextConfig,
     pub team: TeamConfig,
+    pub compaction: CompactionSettings,
+}
+
+/// When a chat condenses older history between turns (dsh-codex; dsh's
+/// pressure compaction near the context limit stays on regardless).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct CompactionSettings {
+    pub mode: CompactionMode,
+    /// Context size at which a completed turn compacts in `threshold` mode.
+    #[serde(alias = "thresholdTokens")]
+    pub threshold_tokens: u64,
+}
+
+impl Default for CompactionSettings {
+    fn default() -> Self {
+        CompactionSettings {
+            mode: CompactionMode::Threshold,
+            threshold_tokens: 200_000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CompactionMode {
+    /// After a turn that left the context at `threshold_tokens` or more.
+    #[default]
+    Threshold,
+    /// After every turn that added enough history.
+    EveryTurn,
+    /// Never between turns.
+    Off,
 }
 
 /// Same-session goals (dsh `goal`, `tool-goal`, `goal-round-driver`; on in dsh-base).
@@ -809,10 +843,22 @@ mod tests {
             [codex.team]
             enabled = true
             max_members = 4
+
+            [codex.compaction]
+            mode = "every-turn"
             "#,
         )
         .unwrap();
         let codex = &config.codex;
+        assert_eq!(codex.compaction.mode, CompactionMode::EveryTurn);
+        assert_eq!(codex.compaction.threshold_tokens, 200_000);
+        assert_eq!(
+            Config::default().codex.compaction,
+            CompactionSettings {
+                mode: CompactionMode::Threshold,
+                threshold_tokens: 200_000
+            }
+        );
         assert!(codex.goal.enabled);
         assert_eq!(codex.goal.default_max_goal_rounds, 256);
         assert_eq!(codex.goal.blocked_after_consecutive_rounds, 5);
