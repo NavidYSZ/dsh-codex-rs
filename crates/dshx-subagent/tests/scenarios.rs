@@ -1,6 +1,7 @@
 //! The subagent scenarios recorded from the official dsh 0.2.0-rc.2 (SDK
 //! host against `examples/subagent_mock.rs`), replayed with our runtime: the
-//! assertions pin the event shapes and orders dsh produced.
+//! assertions pin the event shapes and important relative ordering. Inbox
+//! dequeue intentionally follows user/message so accepted input stays durable.
 mod support;
 
 use std::time::Duration;
@@ -8,6 +9,52 @@ use std::time::Duration;
 use dshx_subagent::{DELEGATION_CONTEXT, SubagentSettings};
 use serde_json::{Value, json};
 use support::*;
+
+fn assert_child_admission(events: &[dshx_core::SessionEvent]) {
+    let permission = find(events, "sandbox/mode")[0];
+    let approval = find(events, "approval/policy")[0];
+    let accepted = find(events, "agent/inbox/spliced")
+        .into_iter()
+        .find(|e| {
+            e.data["target"] == "next-turn"
+                && e.data["inserted"].as_array().is_some_and(|a| !a.is_empty())
+        })
+        .unwrap();
+    let input = &accepted.data["inserted"][0];
+    let user = find(events, "user/message")
+        .into_iter()
+        .find(|e| e.data["id"] == input["id"])
+        .unwrap();
+    assert_eq!(user.data["content"], input["content"]);
+    assert_eq!(user.data["source"], input["source"]);
+    let dequeued = find(events, "agent/inbox/spliced")
+        .into_iter()
+        .find(|e| {
+            e.data["target"] == "next-turn"
+                && e.data["removedCount"] == 1
+                && e.data["inserted"] == json!([])
+        })
+        .unwrap();
+    let ordered = [
+        permission,
+        approval,
+        accepted,
+        find(events, "turn/start")[0],
+        find(events, "subagent/descriptor")[0],
+        find(events, "step/start")[0],
+        user,
+        dequeued,
+        find(events, "request/header")[0],
+    ];
+    for pair in ordered.windows(2) {
+        assert!(
+            pair[0].seq < pair[1].seq,
+            "{} must precede {}",
+            pair[0].kind,
+            pair[1].kind
+        );
+    }
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn foreground_spawn_runs_a_one_shot_child() {
@@ -30,18 +77,7 @@ async fn foreground_spawn_runs_a_one_shot_child() {
     assert_eq!(header.extra["parentSession"], json!(h.parent_id()));
     assert_eq!(header.extra["origin"], "subagent");
     assert_eq!(header.cwd, h.cwd.to_str().unwrap());
-    assert_eq!(
-        kinds(&events[..7]),
-        [
-            "sandbox/mode",
-            "approval/policy",
-            "agent/inbox/spliced",
-            "turn/start",
-            "agent/inbox/spliced",
-            "subagent/descriptor",
-            "step/start",
-        ]
-    );
+    assert_child_admission(&events);
     assert_eq!(
         events[0].data,
         json!({"mode": "workspace-write", "source": "delegation"})
@@ -51,7 +87,7 @@ async fn foreground_spawn_runs_a_one_shot_child() {
         json!({"policy": "never", "source": "delegation"})
     );
     assert_eq!(
-        events[5].data,
+        find(&events, "subagent/descriptor")[0].data,
         json!({"version": 3, "mode": "one-shot", "provider": "spawn", "label": "Child beta task"})
     );
     // Delegation statement after the approval sentence of the runtime context.
@@ -220,20 +256,10 @@ async fn fork_children_inherit_completed_turns() {
     let cut = first_end + 1;
     assert_eq!(events[cut].kind, "session/end-seed");
     assert_eq!(events[cut].data, json!({"inherited": true}));
-    assert_eq!(
-        kinds(&events[cut + 1..cut + 8]),
-        [
-            "sandbox/mode",
-            "approval/policy",
-            "agent/inbox/spliced",
-            "turn/start",
-            "agent/inbox/spliced",
-            "subagent/descriptor",
-            "step/start",
-        ]
-    );
-    assert_eq!(events[cut + 4].data["turn"], 2);
-    assert_eq!(events[cut + 6].data["provider"], "fork");
+    let own = &events[cut + 1..];
+    assert_child_admission(own);
+    assert_eq!(find(own, "turn/start")[0].data["turn"], 2);
+    assert_eq!(find(own, "subagent/descriptor")[0].data["provider"], "fork");
     let headers = find(&events, "request/header");
     assert_eq!(headers.last().unwrap().data["reason"], "resume");
     // No second system prompt and no title: both are inherited.
@@ -270,6 +296,45 @@ async fn fork_children_inherit_completed_turns() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn list_interrupt_and_cold_resume() {
     let h = harness().await;
+    // Spawn acknowledges an accepted prompt before its child begins running.
+    // This scenario tests interruption of an executing tool, so synchronize
+    // that state explicitly instead of racing admission's durability flush.
+    struct WaitForChildTool(std::sync::Arc<dshx_subagent::SubagentRuntime>);
+    #[async_trait::async_trait]
+    impl dshx_agent::PreStepHook for WaitForChildTool {
+        async fn pre_step(
+            &self,
+            step: &dshx_agent::PreStep<'_>,
+            _: &mut Vec<dshx_core::Message>,
+        ) -> anyhow::Result<()> {
+            if step.turn != 1 || step.step != 2 {
+                return Ok(());
+            }
+            let id = step.read_history(|events, _| {
+                tool_results(events)
+                    .last()
+                    .unwrap()
+                    .strip_prefix("started subagent ")
+                    .unwrap()
+                    .to_owned()
+            });
+            let child = self.0.child(&id).expect("spawned child remains resident");
+            let mut feed = child.subscribe();
+            tokio::time::timeout(Duration::from_secs(10), async {
+                while !child.events().iter().any(|e| e.kind == "tool/call") {
+                    feed.recv()
+                        .await
+                        .expect("child feed remains live until its tool starts");
+                }
+            })
+            .await
+            .expect("child tool starts before checking its running state");
+            assert!(self.0.is_running(&id));
+            Ok(())
+        }
+    }
+    h.agent
+        .add_pre_step_hook(std::sync::Arc::new(WaitForChildTool(h.runtime.clone())));
     h.prompt("SCENARIO control").await;
     let parent = h.parent_events();
     let [child] = h.children().try_into().unwrap();
