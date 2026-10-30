@@ -1,4 +1,4 @@
-# dsh-codex für macOS (Desktop-App)
+# Aether für macOS (Desktop-App)
 
 Native macOS-App (Swift, AppKit + WKWebView, kein Electron/Tauri) um die
 dsh-codex-Weboberfläche. Sie startet den Agenten lokal auf dem Mac, verbindet
@@ -8,9 +8,10 @@ App ergänzt Fensterrahmen, Menüs, Mitteilungen, Dock-Badge und eine kleine
 JavaScript-Brücke (`window.dshxDesktop`).
 
 ```
-dsh-codex.app/Contents/
+Aether.app/Contents/
   MacOS/dsh-codex-desktop          die App (Swift)
   MacOS/dsh-codex                  Release-Binary aus diesem Repo
+  MacOS/node                       gepinnte Node-Laufzeit für PTC
   Helpers/DSH Computer Use.app     Computer-Use-Helfer aus helper/
   Resources/AppIcon.icns           aus ui/favicon.svg abgeleitet (Tools/make-icon.swift)
 ```
@@ -21,13 +22,14 @@ dsh-codex.app/Contents/
 desktop/build.sh
 ```
 
-Ergebnis: `desktop/build/dsh-codex.app` und `desktop/build/dsh-codex.dmg`.
+Ergebnis: `desktop/build/Aether.app` und `desktop/build/Aether.dmg`.
 
 | Option | Wirkung |
 |---|---|
 | `--skip-cargo` | vorhandenes `target/release/dsh-codex` verwenden |
 | `--no-dmg` | nur das App-Paket bauen |
-| `--no-sign` | ohne Signatur (CI) |
+| `--no-sign` | ohne Signatur |
+| `--ad-hoc` | lokale Signatur ohne Entwickleridentität |
 
 Ablauf: `cargo build --release -p dsh-codex` → `helper/build.sh` (Helfer, gleiche
 Identität) → `xcrun swiftc` (arm64, macOS 14+) → Symbol → Signatur → `hdiutil`.
@@ -37,7 +39,11 @@ mit Hardened Runtime. **Keine Notarisierung**: Auf diesem Mac startet die App
 normal; auf anderen Macs blockiert Gatekeeper sie (Rechtsklick → „Öffnen“ oder
 Developer-ID + Notarisierung nachrüsten). Nur Apple Silicon (arm64).
 
-Installieren: `.dmg` öffnen und `dsh-codex.app` nach „Programme“ ziehen.
+Installieren: `.dmg` öffnen und `Aether.app` nach „Programme“ ziehen.
+
+Node.js 26.13.0 wird mit verifizierter SHA-256 in die App gepackt. Die
+PTC-Laufzeit wird neben der Rust-Binärdatei gefunden und benötigt kein Node
+im PATH des Anwenders. Lizenz: `Contents/Resources/NODE-LICENSE.txt`.
 
 ## Lokaler Server („Dieser Mac“)
 
@@ -73,8 +79,7 @@ ersetzt ihn auf Nachfrage.
 ## Instanzen
 
 Gespeichert in `~/Library/Application Support/dsh-codex/instances.json` (Ordner
-`0700`, Datei `0600`). Fehlt die Datei, legt die App „Dieser Mac“ und „VPS 2“
-an. Bearbeiten über **Instanz → Instanzen bearbeiten …** (Liste, Reihenfolge,
+`0700`, Datei `0600`). Fehlt die Datei, legt die App ausschließlich „Dieser Mac“ an. Bearbeiten über **Instanz → Instanzen bearbeiten …** (Liste, Reihenfolge,
 Hinzufügen/Bearbeiten/Entfernen, Editor für „In Editor öffnen“) oder direkt in
 der Datei (App vorher beenden).
 
@@ -86,9 +91,9 @@ der Datei (App vorher beenden).
   "instances": [
     { "id": "local", "name": "Dieser Mac", "kind": "local" },
     {
-      "id": "vps-02", "name": "VPS 2", "kind": "ssh",
-      "sshConfig": "/Users/yousufzai/Documents/Navid/OracleVPS/ssh_config",
-      "host": "oracle-vps-02", "remotePort": 3080, "localPort": 3082,
+      "id": "server", "name": "Mein Server", "kind": "ssh",
+      "sshConfig": "/Users/you/.ssh/config",
+      "host": "my-server", "remotePort": 3080, "localPort": 3082,
       "tokenCommand": "sudo -n journalctl -u deepseek-harness -b -o cat --no-pager | grep -E '^dsh(-codex)? web: http://127\\.0\\.0\\.1:3080/\\?token=' | tail -n 1"
     },
     { "id": "…", "name": "Labor", "kind": "url", "url": "http://127.0.0.1:3090/", "connectAtLaunch": false }

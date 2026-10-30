@@ -98,11 +98,6 @@ enum Defaults {
     static func seed() -> InstanceFile {
         InstanceFile(current: "local", instances: [
             Instance(id: "local", name: "Dieser Mac", kind: .local),
-            Instance(
-                id: "vps-02", name: "VPS 2", kind: .ssh,
-                sshConfig: "/Users/yousufzai/Documents/Navid/OracleVPS/ssh_config",
-                host: "oracle-vps-02", remotePort: 3080, localPort: 3082,
-                tokenCommand: vpsTokenCommand),
         ])
     }
 }

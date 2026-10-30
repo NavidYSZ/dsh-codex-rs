@@ -191,7 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        let name = "dsh-codex"
+        let name = "Aether"
 
         let app = NSMenu(title: name)
         app.addItem(item("Über \(name)", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "", target: NSApp))
@@ -262,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.addItem(item("Im Dock ablegen", #selector(NSWindow.performMiniaturize(_:)), "m"))
         window.addItem(item("Zoomen", #selector(NSWindow.performZoom(_:)), ""))
         window.addItem(.separator())
-        window.addItem(item("dsh-codex", #selector(showMainWindow(_:)), "0", [.command, .shift]))
+        window.addItem(item("Aether", #selector(showMainWindow(_:)), "0", [.command, .shift]))
         window.addItem(item("Alle nach vorne bringen", #selector(NSApplication.arrangeInFront(_:)), "", target: NSApp))
         NSApp.windowsMenu = window
 

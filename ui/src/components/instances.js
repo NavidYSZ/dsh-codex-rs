@@ -11,6 +11,8 @@ import { store, switchInstance } from '../state.js';
 import { IconChevronDown, IconGear, IconPlus } from '../icons.js';
 import { Menu, ActionItem } from './common.js';
 
+// The Aether mark (brand/aether-mark.svg): a ring with a point on it, one path.
+const MARK = 'M4.1 16A11.9 11.9 0 1 1 27.9 16A11.9 11.9 0 1 1 4.1 16ZM7.1 16A8.9 8.9 0 1 0 24.9 16A8.9 8.9 0 1 0 7.1 16ZM19.354 8.646A4 4 0 1 1 27.354 8.646A4 4 0 1 1 19.354 8.646Z';
 const bridge = () => window.dshxDesktop;
 const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -48,7 +50,8 @@ export function InstanceSwitcher() {
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
   const list = desktop?.instances ?? [];
-  if (!list.length) return html`<span class="brand">${t.brand}</span>`;
+  if (!list.length) return html`<span class="brand"><svg width="18" height="18" viewBox="0 0 32 32" aria-hidden="true"
+    style="vertical-align:-4px;margin-right:7px"><path fill="currentColor" d=${MARK} /></svg>${t.brand}</span>`;
   // `current` is this page's own instance; `active` is the one the window
   // shows or is switching to.
   const current = list.find((i) => i.id === desktop.current) ?? list.find((i) => i.active) ?? list[0];

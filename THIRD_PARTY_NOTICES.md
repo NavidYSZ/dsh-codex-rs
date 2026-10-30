@@ -36,3 +36,9 @@ SOFTWARE.
 
 Preact, htm and marked are vendored in `ui/vendor/`; their licenses are in
 `ui/vendor/licenses/` and listed in `ui/vendor/README.md`.
+
+## Node.js runtime
+
+The macOS app bundles Node.js 26.13.0 from https://nodejs.org/. Its full license
+and bundled dependency notices are included as `Contents/Resources/NODE-LICENSE.txt`.
+The source build verifies the archive checksum pinned in `desktop/fetch-node.py`.

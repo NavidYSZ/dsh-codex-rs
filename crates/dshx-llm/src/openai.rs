@@ -16,7 +16,7 @@ use crate::images::{
     ImagePathResolver, RequestImage, base64_len, offloaded_image_prefix_count,
     request_image_handle_text,
 };
-use crate::provider::{DEFAULT_REQUEST_MAX_TOKENS, ProviderSpec};
+use crate::provider::{DEFAULT_REQUEST_MAX_TOKENS, ProviderSpec, ThinkingFormat};
 use crate::replay::block_type;
 use crate::runner::Translate;
 use crate::transport::labeled_error;
@@ -270,12 +270,38 @@ pub fn serialize(
             })
             .collect();
         body.insert("tools".into(), tools.into());
+        if ctx.spec.compat.tool_stream {
+            body.insert("tool_stream".into(), true.into());
+        }
     }
     body.insert("stream".into(), true.into());
     body.insert("stream_options".into(), json!({"include_usage": true}));
     body.insert(ctx.spec.compat.max_tokens_field.clone(), max_tokens.into());
     if let Some(effort) = model.and_then(|m| m.effort(request.reasoning_effort.as_deref())) {
-        body.insert("reasoning_effort".into(), effort.into());
+        let format = model.map(|m| m.thinking_format).unwrap_or_default();
+        let off = effort == "off";
+        match format {
+            ThinkingFormat::ReasoningEffort => {}
+            ThinkingFormat::DeepSeek => {
+                body.insert(
+                    "thinking".into(),
+                    json!({"type": if off { "disabled" } else { "enabled" }}),
+                );
+            }
+            ThinkingFormat::Zai => {
+                body.insert(
+                    "thinking".into(),
+                    if off {
+                        json!({"type": "disabled"})
+                    } else {
+                        json!({"type": "enabled", "clear_thinking": false})
+                    },
+                );
+            }
+        }
+        if !off || format == ThinkingFormat::ReasoningEffort {
+            body.insert("reasoning_effort".into(), effort.into());
+        }
     }
     if let Some(temperature) = request.temperature {
         let value: f64 = temperature
@@ -333,8 +359,13 @@ fn assistant_message(
     // Reasoning only goes back to the model that wrote it, and only where the server wants it.
     let own = matches!(&message.source, MessageSource::Model { provider, model, .. }
         if *provider == spec.id && *model == request.model);
-    if spec.compat.reasoning_content && own && !reasoning.is_empty() {
-        out.insert("reasoning_content".into(), reasoning.into());
+    if spec.compat.reasoning_content {
+        // DeepSeek/MiMo need the field even after a model switch. Never
+        // replay another model's private reasoning into this route.
+        out.insert(
+            "reasoning_content".into(),
+            if own { reasoning } else { String::new() }.into(),
+        );
     }
     Some(Value::Object(out))
 }

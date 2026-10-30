@@ -161,7 +161,7 @@ final class BridgeHandler: NSObject, WKScriptMessageHandlerWithReply {
         case "notify":
             Notifier.shared.post(
                 title: string("title"), body: string("body"), tag: string("tag"),
-                instanceID: instanceID, instanceName: controller.manager.instance(instanceID)?.name ?? "dsh-codex")
+                instanceID: instanceID, instanceName: controller.manager.instance(instanceID)?.name ?? "Aether")
             replyHandler(true, nil)
         case "setBadge":
             let count = (body["count"] as? NSNumber)?.intValue ?? 0

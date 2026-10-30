@@ -103,6 +103,9 @@ impl StreamMessage {
 #[derive(Debug, Clone, Deserialize)]
 pub struct PromptRequest {
     pub text: String,
+    /// Stable client identity for retrying an unchanged prompt in this session.
+    #[serde(default, rename = "messageId")]
+    pub message_id: Option<String>,
     #[serde(default)]
     pub images: Vec<ImageAttachmentRef>,
     pub model: Option<String>,

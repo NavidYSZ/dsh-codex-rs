@@ -87,7 +87,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
             backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.title = "dsh-codex"
+        window.title = "Aether"
         window.minSize = NSSize(width: 640, height: 420)
         window.isMovableByWindowBackground = false
         window.tabbingMode = .disallowed
@@ -200,7 +200,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
             }
         }
         updateDisplay()
-        if let name = manager.current?.name { window?.title = "dsh-codex – \(name)" }
+        if let name = manager.current?.name { window?.title = "Aether – \(name)" }
         pushState()
         onInstancesChanged?()
     }

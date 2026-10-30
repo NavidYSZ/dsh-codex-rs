@@ -1,7 +1,7 @@
 //! [`ProviderClient`]: one provider route over Anthropic Messages or OpenAI
 //! Chat Completions, with the same streaming contract as
-//! [`crate::DeepSeekClient`]. It sends the route's own headers and nothing
-//! extra (no session id, no harness headers).
+//! [`crate::DeepSeekClient`]. It sends the route's own headers; OpenCode Go
+//! also receives its required conversation-routing header.
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -34,6 +34,8 @@ struct Inner {
     image_path: Option<Arc<ImagePathResolver>>,
     idle: Duration,
     retry_policy: RetryPolicy,
+    /// Stable id for auxiliary requests that have no conversation id.
+    routing_session_id: String,
 }
 
 impl ProviderClient {
@@ -59,6 +61,7 @@ impl ProviderClient {
                 image_path,
                 idle: DEFAULT_STREAM_IDLE_TIMEOUT,
                 retry_policy: RetryPolicy::default(),
+                routing_session_id: dshx_core::new_id(),
             }),
         })
     }
@@ -196,6 +199,18 @@ impl ProviderClient {
             .header("accept", "text/event-stream");
         if spec.api == Api::AnthropicMessages {
             http = http.header("anthropic-version", anthropic::ANTHROPIC_VERSION);
+        }
+        if spec.id == "opencode-go" {
+            // Go requires conversation affinity on every adapter, including
+            // title/summary requests. Use our own identity and session id.
+            http = http.header(
+                "x-opencode-session",
+                request
+                    .session_id
+                    .as_deref()
+                    .filter(|id| !id.is_empty())
+                    .unwrap_or(&inner.routing_session_id),
+            );
         }
         if let Some(key) = &key {
             http = if spec.compat.bearer {

@@ -2,7 +2,6 @@
 // dsh's limits and texts, `image.*`), every other file is stored by the
 // server and referenced as `@path` (dsh file references), folders dropped
 // from the project become `@folder/` references.
-import { useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { store, api } from '../state.js';
@@ -26,8 +25,7 @@ const key = () => Math.random().toString(36).slice(2);
  * Attachment state of one composer. `insert(text)` puts a reference at the
  * caret (dropped folders); `sel` is the composer's model selection.
  */
-export function useAttachments({ sel, insert }) {
-  const [items, setItems] = useState([]);
+export function useAttachments({ sel, insert, items, setItems }) {
   const images = items.filter((i) => i.kind === 'image');
   const files = items.filter((i) => i.kind === 'file');
 

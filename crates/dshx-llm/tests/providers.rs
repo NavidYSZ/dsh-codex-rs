@@ -313,6 +313,81 @@ async fn anthropic_request_golden() {
 }
 
 #[tokio::test]
+async fn original_dsh_providers_dispatch_thinking_and_replay_tool_reasoning() {
+    for (provider, model, effort, thinking, wire_effort) in [
+        (
+            "opencode-go",
+            "deepseek-v4.1-flash",
+            "max",
+            json!({"type": "enabled"}),
+            Some("max"),
+        ),
+        (
+            "opencode-go",
+            "glm-5.3-flash",
+            "low",
+            Value::Null,
+            Some("low"),
+        ),
+        ("opencode-go", "kimi-k3", "high", Value::Null, Some("max")),
+        (
+            "xiaomi-token-plan-ams",
+            "mimo-v2.6-pro",
+            "off",
+            json!({"type": "disabled"}),
+            None,
+        ),
+        (
+            "xiaomi-token-plan-ams",
+            "mimo-v2.6-pro",
+            "max",
+            json!({"type": "enabled"}),
+            Some("high"),
+        ),
+        (
+            "zai",
+            "glm-5.3",
+            "off",
+            json!({"type": "enabled", "clear_thinking": false}),
+            Some("low"),
+        ),
+        (
+            "command-code",
+            "deepseek/deepseek-v4.1-flash",
+            "off",
+            Value::Null,
+            Some("off"),
+        ),
+    ] {
+        let c = client(
+            ProviderSpec::resolve(provider, &ProviderConfig::default()).unwrap(),
+            Some("test-key"),
+        );
+        let r = request(model, effort, history(provider, model));
+        let body = c.build_request(&r).await.unwrap();
+        assert_eq!(body["thinking"], thinking, "{provider}/{model}");
+        assert_eq!(
+            body["reasoning_effort"].as_str(),
+            wire_effort,
+            "{provider}/{model}"
+        );
+        assert_eq!(
+            body["tool_stream"].as_bool(),
+            (provider == "zai").then_some(true)
+        );
+        let assistants: Vec<_> = body["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|m| m["role"] == "assistant")
+            .collect();
+        assert_eq!(assistants[0]["reasoning_content"], "plan");
+        assert_eq!(assistants[1]["reasoning_content"], "");
+        assert!(!body.to_string().contains("foreign thoughts"));
+    }
+}
+
+#[tokio::test]
 async fn openai_request_golden() {
     let c = client(
         relay_spec("openai-completions", "https://relay.example/v1"),
@@ -343,7 +418,7 @@ async fn openai_request_golden() {
     );
     // Same-model reasoning replays as reasoning_content, DeepSeek's does not.
     assert_eq!(messages[2]["reasoning_content"], "plan");
-    assert!(messages[6].get("reasoning_content").is_none());
+    assert_eq!(messages[6]["reasoning_content"], "");
     assert_eq!(body["reasoning_effort"], "high");
     assert_eq!(body["max_tokens"], 131_072);
     assert_eq!(body["stream_options"], json!({"include_usage": true}));
@@ -609,6 +684,44 @@ async fn anthropic_redacted_thinking_refusal_and_overflow() {
 fn chat_chunk(delta: Value, finish: Option<&str>) -> String {
     let chunk = json!({"id": "c", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]});
     format!("data: {chunk}\n\n")
+}
+
+#[tokio::test]
+async fn opencode_go_routes_conversations_and_auxiliary_requests() {
+    let reply =
+        || Reply::RawSse(chat_chunk(json!({"content": "ok"}), Some("stop")) + "data: [DONE]\n\n");
+    let mock = MockDeepSeek::with_script([reply(), reply(), reply(), reply()]).await;
+    let spec = ProviderSpec::resolve(
+        "opencode-go",
+        &ProviderConfig {
+            base_url: Some(format!("http://{}/v1", mock.addr())),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let c = client(spec, Some("sk-go-test"));
+    for session in [Some("session-one"), Some("session-two"), None, None] {
+        let mut r = request("deepseek-v4.1-flash", "low", vec![Message::user_text("hi")]);
+        r.session_id = session.map(str::to_owned);
+        assert_eq!(collect(&c, r).await.1.finish(), FinishReason::Stop);
+    }
+    let requests = mock.requests();
+    assert_eq!(
+        requests[0].header("x-opencode-session"),
+        Some("session-one")
+    );
+    assert_eq!(
+        requests[1].header("x-opencode-session"),
+        Some("session-two")
+    );
+    let fallback = requests[2].header("x-opencode-session").unwrap();
+    assert!(!fallback.is_empty() && fallback != "session-one");
+    assert_eq!(requests[3].header("x-opencode-session"), Some(fallback));
+    assert!(
+        requests
+            .iter()
+            .all(|r| r.header("user-agent").unwrap().starts_with("dsh-codex/"))
+    );
 }
 
 #[tokio::test]

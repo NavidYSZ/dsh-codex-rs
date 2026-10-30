@@ -23,6 +23,7 @@ import { confirmFullAccess } from './confirm.js';
 import { ComposerInput, insertAtCaret } from './composer-input.js';
 import { useAttachments, AttachmentRow } from './composer-attach.js';
 import { ComposerExtras } from './composer-extras.js';
+import { createComposerDrafts } from '../composer-drafts.js';
 
 const ACCESS = ['read-only', 'workspace-write', 'danger-full-access'];
 
@@ -90,38 +91,31 @@ function HeroTray({ sel }) {
   </div>`;
 }
 
-/** Unsent text per chat ('' = the start page), while the page lives. */
-const drafts = new Map();
+/** Unsent text and attachments per chat ('' = the start page). */
+const drafts = createComposerDrafts();
 
 export function Composer({ hero, tx }) {
   const status = useStore(store, (s) => s.status);
   const info = useStore(store, (s) => s.info);
   const activeId = useStore(store, (s) => s.activeId);
   const sel = useSelection(tx);
-  const [text, setText] = useState(() => drafts.get(store.get().activeId ?? '') ?? '');
+  const draftOwner = drafts.forKey(activeId ?? '');
+  const content = useStore(drafts, (s) => s.get(draftOwner));
+  const { text, submission } = content;
+  const setText = (value) => drafts.setText(draftOwner, value);
   const [drag, setDrag] = useState(false);
   const area = useRef(null);
   const file = useRef(null);
   const composing = useRef(false);
-  const att = useAttachments({ sel, insert: (s) => insertAtCaret(area.current, s) });
+  const att = useAttachments({
+    sel, insert: (s) => insertAtCaret(area.current, s), items: content.items,
+    setItems: (change) => drafts.setItems(draftOwner, change),
+  });
 
   const running = status === 'running' || status === 'waiting-approval';
   const noKey = info && !info.apiKeyConfigured;
   const canSend = !noKey && !sel.missing && !att.uploading && (text.trim() || att.items.length);
 
-  // Each chat keeps its own unsent text.
-  const textNow = useRef(text);
-  textNow.current = text;
-  const draftKey = useRef(activeId ?? '');
-  useEffect(() => {
-    const key = activeId ?? '';
-    if (draftKey.current === key) return;
-    if (textNow.current.trim()) drafts.set(draftKey.current, textNow.current);
-    else drafts.delete(draftKey.current);
-    draftKey.current = key;
-    setText(drafts.get(key) ?? '');
-  }, [activeId]);
-  useEffect(() => () => { if (textNow.current.trim()) drafts.set(draftKey.current, textNow.current); }, []);
   useEffect(() => { area.current?.focus({ preventScroll: true }); }, [activeId]);
   // "New automation" and similar hand over a draft once.
   const draft = useStore(store, (s) => s.draft);
@@ -146,16 +140,24 @@ export function Composer({ hero, tx }) {
   // queues as the next turn; ⌘↩ picks the other one for this message.
   const followup = useStore(store, (s) => s.followup);
   const submit = async (other = false) => {
+    // The store guard also catches two submits before Preact has rendered.
+    if (drafts.get().get(draftOwner).submission) return;
     if (running && !canSend) { cancel(); return; }
     if (!canSend) return;
-    const typed = text.trim();
+    const submitted = drafts.begin(draftOwner);
+    if (!submitted) return;
+    const typed = submitted.text.trim();
     const body = att.withFiles(typed);
     const refs = att.refs();
-    setText('');
-    att.clear();
     const steer = running && (followup === 'steer') !== other;
-    const ok = await send(body, refs, { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}), sandbox: sel.sandbox, ...(steer ? { steer } : {}) });
-    if (!ok) { setText(typed); }
+    const ok = await send(body, refs, { messageId: submitted.messageId, model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}), sandbox: sel.sandbox, ...(steer ? { steer } : {}) }, {
+      sessionId: submitted.sessionId,
+      onSession: (id, following) => {
+        drafts.bindSession(submitted, id);
+        if (following) drafts.move(submitted, id);
+      },
+    });
+    drafts.finish(submitted, ok);
   };
 
   const onKey = (e) => {
@@ -170,7 +172,7 @@ export function Composer({ hero, tx }) {
   const minimal = (hero ? stagedMode : chatMode) === 'minimal';
   const placeholder = noKey ? t.placeholderNoKey : hero ? (minimal ? t.placeholderHeroMinimal : t.placeholderHero)
     : running ? t.placeholderRunning[followup] : minimal ? t.placeholderMinimal : t.placeholder;
-  const showStop = running && !canSend;
+  const showStop = running && !canSend && !submission;
   return html`<div class=${cx('composer', drag && 'is-drag')}
       onDragOver=${(e) => { if ([...(e.dataTransfer?.types ?? [])].includes('Files')) { e.preventDefault(); setDrag(true); } }}
       onDragLeave=${() => setDrag(false)}
@@ -196,7 +198,7 @@ export function Composer({ hero, tx }) {
       <${ModelChip} sel=${sel} />
       ${hero ? null : html`<${AccessChip} sel=${sel} />`}
       <span class="spacer" />
-      <button type="button" class=${cx('send', showStop && 'is-stop')} disabled=${!showStop && !canSend}
+      <button type="button" class=${cx('send', showStop && 'is-stop')} disabled=${!!submission || (!showStop && !canSend)} aria-busy=${!!submission}
         aria-label=${showStop ? t.stop : t.send} title=${showStop ? t.stop : t.send} onClick=${() => submit()}>
         ${showStop ? html`<${IconStop} size=${16} />` : html`<${IconArrowUp} size=${16} />`}
       </button>

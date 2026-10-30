@@ -20,8 +20,8 @@ Workers propose changes in their final report instead of editing this file.
    no telemetry. Only what the model request needs.
 
 Non-goals: Cordis/JS plugin compatibility, the official DSH web API, Electron desktop, voice,
-office, workflow/PTC (`run_code`, `workflow`). Goals, schedules (with time context) and Agent
-Teams are ported (§5.9).
+office and the separate `workflow` tool. PTC (`run_code`) is implemented with a
+scoped Node runtime (§5.8a). Goals, schedules and Agent Teams are ported (§5.9).
 
 ## 2. Reference material (read-only)
 
@@ -240,9 +240,9 @@ CLI: `dsh-codex "task"` (headless; flags `--json` NDJSON like dsh, `--session-id
 `initialize`, `session/prompt`, `session/resume`, `session/wait`, `session/working-directory/{get,set}`,
 `shutdown`; notifications `session.event`, `session.status`, `subagent.started`, `subagent.finished`).
 
-### 5.8a Agent presets (modes): Standard and Minimal
+### 5.8a Agent presets (modes): Standard, PTC and Minimal
 dsh's web bundle composes each session from an agent preset (`dsh-web-app/presets/*.patch.yml`).
-We ship two: **Standard** (everything above, unchanged) and **Minimal**
+We ship **Standard** (everything above, unchanged), **PTC** (below), and **Minimal**
 (`presets/minimal.patch.yml`): `dsh-persona` with `complete: true` and `includeRuntimeContext: false`
 (the system prompt is exactly `You are a helpful software engineer assistant.`) plus
 `dsh-tool-bash-persistent` (tool `bash`, the preset's own description, schema `{command}`, 300 s
@@ -255,13 +255,36 @@ minus `dsh_session_log`/`dsh_plugin_packages` (`crates/dsh-codex/tests/presets.r
 
 - The preset is chosen when a session is created and recorded like dsh in the header
   (`agentPreset`); `agent-preset/selected` events are honoured when reading dsh sessions. No record
-  (older sessions, headless runs without `--preset`) and unknown ids (`ptc`, `cordis`) run Standard.
+  (older sessions, headless runs without `--preset`) and unknown ids (for example `cordis`) run Standard.
   A session never changes preset (prompt cache); another mode means a new chat.
 - The persistent shell is one `bash --noprofile --norc` per session reading commands from a pipe
   (stderr folded into stdout, stdin of each command `/dev/null`), wrapped in dsh's start/end
   markers; results, timeout, truncation and reset texts are dsh's. It runs under the session's
   sandbox mode for its life and restarts when the mode changes; it has no escalation arguments.
 - CLI: `dsh-codex --preset minimal "task"` (new sessions only); config `default_preset`.
+
+PTC keeps Standard's capability registry and hooks, but the wire tool set is
+only `run_code`. A deterministic SDK in the system prompt describes the native
+capabilities as TypeScript functions. The SDK uses generic JSON return types
+where a tool has no declared output schema. Each program runs in a fresh Node
+process with an empty environment, a separate length-framed RPC channel and a
+host-enforced deadline (120 s default, 600 s maximum). Only erasable TypeScript
+syntax is supported. The native app bundles pinned Node; CLI/web can use
+`DSHX_NODE` or `node` on PATH.
+
+Nested calls go through the normal scheduler policy, validation, approval,
+timeout and result hooks. Safe calls can overlap; exclusive calls are barriers.
+Only existing `tool/ptc-dispatch-start` / `tool/ptc-dispatch` audit pairs are
+written for nested execution; the model sees the curated outer output plus
+forwarded image/context blocks. Restricted execution fails closed without an
+OS sandbox. Cancellation terminates the process group and drains nested calls.
+
+Prompt acceptance is acknowledged only after inbox persistence succeeds. An
+optional client `messageId` makes retries of identical content idempotent;
+reuse with different content is rejected. Inbox ownership is FIFO, both pending
+targets are visible, and claimed input remains recoverable until its user
+message is committed. Recovery reconciles partial promotion/admission batches
+by message identity. Explicit cancellation/removal remains authoritative.
 
 ### 5.9 Automation: `dshx-goal`, `dshx-schedule`, `dshx-team`
 Ports of the dsh 0.2.0-rc.2 packages, with tool names, descriptions and schemas byte-identical to
@@ -310,13 +333,13 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | POST | `/api/fs/mkdir` | `{path, name}` → 201 `{path}`; `name` is one plain folder name; exists → 409 `exists` |
 | POST | `/api/fs/pick` | `{prompt?, defaultPath?}` → `{path \| null}` (`null` = cancelled) from `osascript` "choose folder"; only on macOS when the server was not started from an SSH session, else 501 `unsupported` (the UI then shows its folder browser); a second dialog → 409 `busy` |
 | GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread, preset?, parentSession?}]` (newest first; `preset` when the session recorded one; `parentSession` for branches; subagent children, header `origin: "subagent"`, are left out) |
-| POST | `/api/sessions` | `{cwd?, preset?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`); `preset` (`standard`, `minimal`, default `settings.defaultPreset`) is fixed for the session and recorded as header `agentPreset`; unknown → 400 |
+| POST | `/api/sessions` | `{cwd?, preset?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`); `preset` (`standard`, `ptc`, `minimal`, default `settings.defaultPreset`) is fixed for the session and recorded as header `agentPreset`; unknown → 400 |
 | GET | `/api/sessions/:id` | → `{header, events:[SessionEvent], status}` |
 | PATCH | `/api/sessions/:id` | `{title?, pinned?, archived?, seen?, unread?}` → list row; kept in `$DSHX_HOME/ui-state.json`, not in the log |
 | POST | `/api/sessions/:id/preview` | → `{base, root}`: `base` is `/preview/<grant>/`, a 2-hour read-only capability for the chat's folder |
 | GET | `/api/sessions/:id/files?dir=` | → `{dir, entries:[{name, path, kind:"dir"\|"file"\|"broken", size}], truncated}` (inside the chat's folder only) |
 | GET | `/preview/:grant/*path` | no bearer; a file of the granted folder (folders serve `index.html`); HTML/SVG/XML get `CSP: sandbox` (opaque origin), everything `nosniff`, `no-store` |
-| POST | `/api/sessions/:id/prompt` | `{text, images?:[ImageAttachmentRef], model?, effort?, sandbox?, steer?, timeZone?}` → 202; while a turn runs the text queues as the next turn, with `steer: true` its next step takes it; `timeZone` (IANA) makes the message source dsh's web form `{kind:"user", rpcId, clientTimeZone}` for the time context |
+| POST | `/api/sessions/:id/prompt` | `{text, messageId?, images?:[ImageAttachmentRef], model?, effort?, sandbox?, steer?, timeZone?}` → 202; while a turn runs the text queues as the next turn, with `steer: true` its next step takes it; `timeZone` (IANA) makes the message source dsh's web form `{kind:"user", rpcId, clientTimeZone}` for the time context |
 | POST | `/api/sessions/:id/cancel` | → 202 |
 | POST | `/api/sessions/:id/fork` | `{turn, title?}` → `{id}`: a new chat in the same folder and mode with the log through the `turn/end` of `turn` (seq and time kept; `0` = none of it), then dsh's `session/end-seed {inherited: true}` cut; header `parentSession` = the source, `isSeeded: true`, no `origin` (so it stays in the list and is a root agent); `title` (default dsh's "Title (1)") goes to `ui-state.json`; a turn without `turn/end` → 400, unknown session → 404. Inherited requests count only in the source's usage |
 | DELETE | `/api/sessions/:id` | → 204 |

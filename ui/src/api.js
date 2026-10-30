@@ -257,7 +257,7 @@ const DEFAULT_INFO = {
     model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask', defaultPreset: 'standard',
     compaction: { mode: 'threshold', thresholdTokens: 200000 },
   },
-  presets: [{ id: 'standard', name: 'Standard' }, { id: 'minimal', name: 'Minimal' }],
+  presets: [{ id: 'standard', name: 'Standard' }, { id: 'minimal', name: 'Minimal' }, { id: 'ptc', name: 'PTC' }],
   apiKeyConfigured: true,
   tools: { browser: true, app: true, computer: true },
   ui: { workDetails: 'standard', performanceUsage: 'detailed' },

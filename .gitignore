@@ -6,3 +6,6 @@ desktop/build/
 *.local.md
 /target
 *.profraw
+.claude/
+ios/Config/Local.xcconfig
+ios/build/

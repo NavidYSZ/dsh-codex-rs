@@ -21,7 +21,7 @@ fn golden_minimal_prompt() -> String {
 fn preset_ids() {
     assert_eq!(Preset::parse("minimal"), Some(Preset::Minimal));
     assert_eq!(Preset::parse("standard"), Some(Preset::Standard));
-    assert_eq!(Preset::parse("ptc"), None);
+    assert_eq!(Preset::parse("ptc"), Some(Preset::Ptc));
     assert_eq!(Preset::of_session(None), Preset::Standard);
     assert_eq!(Preset::of_session(Some("cordis")), Preset::Standard);
     assert_eq!(Preset::of_session(Some("minimal")), Preset::Minimal);

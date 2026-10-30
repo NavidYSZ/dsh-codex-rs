@@ -1,5 +1,25 @@
 # Changelog
 
+
+## 0.3.0-alpha.1 — 2026-10-31
+
+- Publish Aether as a standalone macOS app alongside DeepSeek Harness, with a
+  clean local-only first-run configuration, bundled Node runtime, and explicit
+  links distinguishing the old DSH plugin from this application.
+- Add PTC mode: TypeScript `run_code`, generated tools SDK, concurrent safe
+  tool calls and filtered results. Nested tools retain validation, approval,
+  cancellation and session logging. Standard and Minimal keep their contracts.
+- Fix prompt acknowledgement and FIFO queue ownership while a turn is running.
+  Accepted input stays visible through steering/queueing, and pending input is
+  preserved through recovery. Publish session events in sequence order.
+- Keep composer text and attachments until acknowledgement; delayed responses
+  cannot overwrite newer drafts or another chat. Show pending steering as well
+  as queued follow-ups.
+- Include the existing provider catalog and compatibility fixes for additional
+  model providers, plus the prepared Aether visual identity.
+- Add Linux/macOS CI and regression coverage for busy-chat messages and PTC.
+
+
 ## Unreleased (branch `codex-app`)
 
 ### Added

@@ -7,7 +7,7 @@
 //! replaced by `@@CWD@@`. The fixture's model streams become our model script and
 //! its tool results our tool outputs; the agent must then log the same events with
 //! the same payloads (ids, times and stream timings masked, telemetry dropped,
-//! parallel tool interleaving canonicalized).
+//! parallel tool interleaving and the safer deferred inbox dequeue canonicalized).
 mod common;
 
 use std::collections::HashMap;
@@ -226,10 +226,34 @@ fn is_provider_title(e: &SessionEvent) -> bool {
 /// Drops telemetry and the asynchronous provider title, canonicalizes runs of
 /// tool events to (call, todo, result) per call, renumbers seqs and masks.
 fn normalize(events: &[SessionEvent]) -> (Vec<Value>, Option<Value>) {
-    let kept: Vec<&SessionEvent> = events
+    let mut kept: Vec<&SessionEvent> = events
         .iter()
         .filter(|e| !e.kind.starts_with("session-log-deepseek/") && !is_provider_title(e))
         .collect();
+    // This implementation retains queued input until user/message commits;
+    // dsh dequeues at pre-step entry. Compare the same dequeue payload at
+    // its legacy position; durability/ordering have dedicated inbox tests.
+    for i in 0..kept.len() {
+        let e = kept[i];
+        if e.kind != "agent/inbox/spliced"
+            || e.data["removedCount"].as_u64().unwrap_or(0) == 0
+            || e.data["outcome"] == "canceled"
+            || !e.data["inserted"].as_array().is_some_and(Vec::is_empty)
+        {
+            continue;
+        }
+        let boundary = kept[..i]
+            .iter()
+            .rposition(|e| matches!(e.kind.as_str(), "turn/start" | "step/end"))
+            .map_or(0, |n| n + 1);
+        if let Some(before) = kept[boundary..i]
+            .iter()
+            .position(|e| matches!(e.kind.as_str(), "compaction/start" | "step/start"))
+        {
+            let e = kept.remove(i);
+            kept.insert(boundary + before, e);
+        }
+    }
     let mut ordered: Vec<&SessionEvent> = Vec::new();
     let mut i = 0;
     while i < kept.len() {
@@ -316,6 +340,19 @@ fn normalize(events: &[SessionEvent]) -> (Vec<Value>, Option<Value>) {
         }
         if let Some(r) = data.get("shadowedRange").cloned() {
             data["shadowedRange"] = json!({"start": remap(&r["start"]), "end": remap(&r["end"])});
+        }
+        if e.kind == "session/title-llm-request" {
+            let text = &mut data["messages"][0]["content"][0]["text"];
+            if let Some((prefix, body)) = text.as_str().and_then(|s| s.split_once('\n')) {
+                let prefix = prefix.to_owned();
+                if let Ok(Value::Array(mut messages)) = serde_json::from_str::<Value>(body) {
+                    for message in &mut messages {
+                        message["seq"] = remap(&message["seq"]);
+                    }
+                    *text =
+                        format!("{prefix}\n{}", serde_json::to_string(&messages).unwrap()).into();
+                }
+            }
         }
         mask(&mut v);
         v

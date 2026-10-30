@@ -49,10 +49,10 @@ impl SessionLog for MemoryLog {
             log.push(event.clone());
             stored.push(event);
         }
-        drop(log);
         for e in &stored {
             let _ = self.tx.send(e.clone());
         }
+        drop(log);
         Ok(stored)
     }
     async fn flush(&self) -> anyhow::Result<()> {

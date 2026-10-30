@@ -49,7 +49,7 @@ struct Cli {
     /// Continue an existing session.
     #[arg(long = "session-id")]
     session_id: Option<String>,
-    /// Agent preset of a new session: standard or minimal (default: the
+    /// Agent preset of a new session: standard, ptc or minimal (default: the
     /// config's `default_preset`). A session keeps its preset.
     #[arg(long, value_parser = parse_preset)]
     preset: Option<dshx_agent::Preset>,

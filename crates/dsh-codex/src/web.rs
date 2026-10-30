@@ -171,6 +171,7 @@ impl WebBackend {
         let cwd = PathBuf::from(log.header().cwd);
         let s = self.start_agent(id, log, cwd, overrides);
         open.insert(id.to_owned(), s.clone());
+        s.agent.resume_pending().await?;
         Ok(s)
     }
 
@@ -364,7 +365,7 @@ impl Backend for WebBackend {
         if let Some(s) = &compaction {
             let turn_end = crate::runtime::turn_end_compaction(s);
             for open in self.open.lock().await.values() {
-                if open.agent.config().preset == Preset::Standard {
+                if open.agent.config().preset != Preset::Minimal {
                     open.agent
                         .update_config(|c| c.compaction.turn_end = turn_end);
                 }
@@ -596,6 +597,14 @@ impl Backend for WebBackend {
     }
 
     async fn prompt(&self, id: &str, request: PromptRequest) -> anyhow::Result<()> {
+        if let Some(message_id) = &request.message_id {
+            anyhow::ensure!(
+                !message_id.is_empty()
+                    && message_id.chars().count() <= 128
+                    && !message_id.chars().any(char::is_control),
+                "invalid messageId"
+            );
+        }
         let model = request
             .model
             .clone()
@@ -628,9 +637,6 @@ impl Backend for WebBackend {
             });
         }
         anyhow::ensure!(!content.is_empty(), "empty prompt");
-        let agent = s.agent.clone();
-        let tx = self.tx.clone();
-        let session_id = id.to_owned();
         let steer = request.steer;
         // dsh's web prompt: the browser's time zone rides on the message source.
         let source = match request
@@ -644,7 +650,7 @@ impl Backend for WebBackend {
             None => MessageSource::User,
         };
         let message = Message {
-            id: dshx_core::new_id(),
+            id: request.message_id.unwrap_or_else(dshx_core::new_id),
             role: Role::User,
             content,
             source,
@@ -652,28 +658,20 @@ impl Backend for WebBackend {
             is_error: None,
             extra: Default::default(),
         };
-        tokio::spawn(async move {
-            let result = if steer {
-                agent.steer_message(message).await.map(|_| ())
-            } else {
-                agent.run_message(message).await.map(|_| ())
-            };
-            if let Err(e) = result {
-                let _ = tx.send(StreamMessage::Status {
-                    session_id,
-                    status: "error".into(),
-                    error: Some(format!("{e:#}")),
-                });
-            }
-        });
-        Ok(())
+        // A successful HTTP response acknowledges a flushed inbox entry.
+        // Detached turn failures reach the normal agent status observer.
+        if steer {
+            s.agent.steer_detached(message).await
+        } else {
+            s.agent.followup(message).await
+        }
     }
 
     async fn cancel(&self, id: &str) -> anyhow::Result<()> {
         let s = self.open.lock().await.get(id).cloned();
         if let Some(s) = s {
             self.approvals.cancel_session(id);
-            s.agent.cancel().await;
+            s.agent.cancel_durable().await?;
         }
         Ok(())
     }

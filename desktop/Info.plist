@@ -9,9 +9,9 @@
 	<key>CFBundleIdentifier</key>
 	<string>de.yousufzai.dsh-codex</string>
 	<key>CFBundleName</key>
-	<string>dsh-codex</string>
+	<string>Aether</string>
 	<key>CFBundleDisplayName</key>
-	<string>dsh-codex</string>
+	<string>Aether</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
@@ -36,6 +36,6 @@
 		<true/>
 	</dict>
 	<key>NSHumanReadableCopyright</key>
-	<string>dsh-codex – DeepSeek Harness für macOS</string>
+	<string>Aether – eigenständiger Coding-Agent</string>
 </dict>
 </plist>

@@ -213,6 +213,55 @@ async fn standard_requests_are_unchanged() {
     assert!(system.starts_with("You are an AI agent powered by DeepSeek Harness."));
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn ptc_cli_runs_typescript_and_returns_only_selected_nested_results() {
+    let mock = MockDeepSeek::start().await;
+    mock.set_responder(|r: &RecordedRequest| {
+        if scenarios::is_title_request(r) {
+            return Reply::text("PTC test");
+        }
+        if r.tool_results() == 0 {
+            Reply::tool_call("ptc_program", "run_code", json!({
+                "description": "Compare two files and print selected lines",
+                "code": "type ReadResult = {lines: {text: string}[]}; const files: string[] = ['a.txt', 'b.txt']; const results = await Promise.all(files.map(file_path => tools.read({file_path}))); for (const result of results) { console.log((result as ReadResult).lines.filter(line => line.text.startsWith('KEEP')).map(line => line.text).join('\\n')); }"
+            }))
+        } else {
+            Reply::text("FERTIG")
+        }
+    });
+    let home = quiet_home("");
+    let ws = tempfile::tempdir().unwrap();
+    let others = tempfile::tempdir().unwrap();
+    std::fs::write(ws.path().join("a.txt"), "KEEP_A\nPRIVATE_INTERMEDIATE_A\n").unwrap();
+    std::fs::write(ws.path().join("b.txt"), "KEEP_B\nPRIVATE_INTERMEDIATE_B\n").unwrap();
+    headless(
+        &mock,
+        home.path(),
+        ws.path(),
+        others.path(),
+        &[
+            "--preset",
+            "ptc",
+            "--sandbox",
+            "danger-full-access",
+            "Compare files",
+        ],
+    );
+    let requests = main_requests(&mock);
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        let tools = request.body["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["name"], "run_code");
+    }
+    let results = tool_results(&requests[1]).join("\n");
+    assert!(
+        results.contains("KEEP_A") && results.contains("KEEP_B"),
+        "{results}"
+    );
+    assert!(!results.contains("PRIVATE_INTERMEDIATE"), "{results}");
+}
+
 #[test]
 fn preset_flag_is_for_new_sessions_only() {
     let home = quiet_home("");
@@ -234,11 +283,11 @@ fn preset_flag_is_for_new_sessions_only() {
     let out = Command::new(BIN)
         .current_dir(ws.path())
         .env("DSHX_HOME", home.path())
-        .args(["--preset", "ptc", "Hi"])
+        .args(["--preset", "unknown-mode", "Hi"])
         .output()
         .unwrap();
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("unknown agent preset \"ptc\""));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("unknown agent preset \"unknown-mode\""));
 }
 
 // ---- web API ---------------------------------------------------------------
@@ -336,7 +385,10 @@ async fn web_creates_lists_and_describes_presets() {
             return Reply::text("Titel");
         }
         match r.tool_results() {
-            0 if r.body["tools"].as_array().is_some_and(|t| t.len() == 1) => {
+            0 if r.body["tools"]
+                .as_array()
+                .is_some_and(|t| t.len() == 1 && t[0]["name"] == "bash") =>
+            {
                 Reply::tool_call("toolu_1", "bash", json!({"command": "echo hi"}))
             }
             _ => Reply::text("FERTIG"),
@@ -353,8 +405,8 @@ async fn web_creates_lists_and_describes_presets() {
         .iter()
         .map(|p| p["id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids, ["standard", "minimal"]);
-    let minimal = &info["presets"][1];
+    assert_eq!(ids, ["standard", "ptc", "minimal"]);
+    let minimal = &info["presets"][2];
     assert_eq!(minimal["name"], "Minimal");
     assert!(
         minimal["description"]
@@ -455,7 +507,7 @@ async fn web_creates_lists_and_describes_presets() {
         .call(
             reqwest::Method::PUT,
             "/settings",
-            Some(json!({"defaultPreset": "ptc"})),
+            Some(json!({"defaultPreset": "unknown-mode"})),
         )
         .await;
     assert_eq!(status, 400);
@@ -463,4 +515,34 @@ async fn web_creates_lists_and_describes_presets() {
     let id = created["id"].as_str().unwrap().to_owned();
     let session = server.get(&format!("/sessions/{id}")).await;
     assert_eq!(session["header"]["agentPreset"], "minimal");
+
+    // PTC is selectable as a default and retained by created sessions.
+    let (status, info) = server
+        .call(
+            reqwest::Method::PUT,
+            "/settings",
+            Some(json!({"defaultPreset": "ptc"})),
+        )
+        .await;
+    assert_eq!(status, 200, "{info}");
+    assert_eq!(info["settings"]["defaultPreset"], "ptc");
+    let (_, created) = server.create(json!({"cwd": ws.path()})).await;
+    let ptc_id = created["id"].as_str().unwrap();
+    let (status, result) = server
+        .call(
+            reqwest::Method::POST,
+            &format!("/sessions/{ptc_id}/prompt"),
+            Some(json!({"text": "Hello PTC"})),
+        )
+        .await;
+    assert_eq!(status, 202, "{result}");
+    assert_eq!(server.preset_of(ptc_id).await, (json!("ptc"), json!("ptc")));
+    let (status, mcp) = server
+        .call(
+            reqwest::Method::GET,
+            &format!("/sessions/{ptc_id}/mcp"),
+            None,
+        )
+        .await;
+    assert_eq!(status, 200, "{mcp}");
 }

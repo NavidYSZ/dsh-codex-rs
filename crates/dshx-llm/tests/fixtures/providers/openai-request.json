@@ -65,7 +65,8 @@
     },
     {
       "role": "assistant",
-      "content": "Done."
+      "content": "Done.",
+      "reasoning_content": ""
     },
     {
       "role": "user",

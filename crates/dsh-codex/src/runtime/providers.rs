@@ -328,6 +328,7 @@ fn model_json(provider: &str, model: &ProviderModel) -> Value {
         "reasoningEfforts": model.efforts,
         "defaultReasoningEffort": model.default_effort,
         "thinking": model.thinking.as_str(),
+        "thinkingFormat": model.thinking_format.as_str(),
     });
     if let Some(cost) = &model.cost {
         row["cost"] = cost_json(cost);
@@ -355,6 +356,7 @@ fn spec_json(spec: &ProviderSpec, key: Value) -> Value {
             "cacheControl": spec.compat.cache_control,
             "maxTokensField": spec.compat.max_tokens_field,
             "reasoningContent": spec.compat.reasoning_content,
+            "toolStream": spec.compat.tool_stream,
         },
         "key": key,
         "models": spec.models.iter().map(|m| model_json(&spec.id, m)).collect::<Vec<_>>(),

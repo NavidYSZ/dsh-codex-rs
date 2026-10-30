@@ -1,0 +1,300 @@
+{
+  "opencode-go": {
+    "display_name": "OpenCode Go",
+    "api": "openai-completions",
+    "base_url": "https://opencode.ai/zen/go/v1",
+    "api_key_env": "OPENCODE_GO_API_KEY",
+    "compat": {
+      "reasoning_content": true
+    },
+    "models": [
+      {
+        "id": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "context_window": 1000000,
+        "max_tokens": 384000,
+        "input": [
+          "text",
+          "image"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_effort": "high",
+        "thinking_format": "deepseek",
+        "cost": {
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.003,
+          "cache_write": 0
+        }
+      },
+      {
+        "id": "glm-5.3",
+        "name": "GLM-5.3",
+        "context_window": 1000000,
+        "max_tokens": 131072,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_effort": "high",
+        "cost": {
+          "input": 1.4,
+          "output": 4.4,
+          "cache_read": 0.26,
+          "cache_write": 0
+        }
+      },
+      {
+        "id": "glm-5.3-flash",
+        "name": "GLM-5.3-Flash",
+        "context_window": 1000000,
+        "max_tokens": 131072,
+        "input": [
+          "text",
+          "image"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_effort": "high",
+        "cost": {
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03,
+          "cache_write": 0
+        }
+      },
+      {
+        "id": "kimi-k3",
+        "name": "Kimi K3",
+        "context_window": 1048576,
+        "max_tokens": 131072,
+        "input": [
+          "text",
+          "image"
+        ],
+        "reasoning_efforts": [
+          "max"
+        ],
+        "default_effort": "max",
+        "cost": {
+          "input": 3,
+          "output": 15,
+          "cache_read": 0.3,
+          "cache_write": 0
+        }
+      }
+    ]
+  },
+  "xiaomi-token-plan-ams": {
+    "display_name": "Xiaomi Token Plan AMS",
+    "api": "openai-completions",
+    "base_url": "https://token-plan-ams.xiaomimimo.com/v1",
+    "api_key_env": "XIAOMI_TOKEN_PLAN_AMS_API_KEY",
+    "compat": {
+      "reasoning_content": true
+    },
+    "models": [
+      {
+        "id": "mimo-v2.6-pro",
+        "name": "MiMo-V2.6-Pro",
+        "context_window": 1048576,
+        "max_tokens": 131072,
+        "input": [
+          "text",
+          "image"
+        ],
+        "reasoning_efforts": [
+          "off",
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_effort": "high",
+        "thinking_format": "deepseek"
+      }
+    ]
+  },
+  "zai": {
+    "display_name": "Z.ai Coding Plan",
+    "api": "openai-completions",
+    "base_url": "https://api.z.ai/api/coding/paas/v4",
+    "api_key_env": "ZAI_API_KEY",
+    "compat": {
+      "reasoning_content": true,
+      "tool_stream": true
+    },
+    "models": [
+      {
+        "id": "glm-5.3",
+        "name": "GLM-5.3",
+        "context_window": 1000000,
+        "max_tokens": 131072,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_effort": "high",
+        "thinking_format": "zai",
+        "cost": {
+          "input": 1.4,
+          "output": 4.4,
+          "cache_read": 0.26,
+          "cache_write": 0
+        }
+      },
+      {
+        "id": "glm-5.3-flash",
+        "name": "GLM-5.3-Flash",
+        "context_window": 1000000,
+        "max_tokens": 131072,
+        "input": [
+          "text",
+          "image"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_effort": "high",
+        "thinking_format": "zai",
+        "cost": {
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03,
+          "cache_write": 0
+        }
+      },
+      {
+        "id": "glm-5.3-highspeed",
+        "name": "GLM-5.3 Highspeed",
+        "context_window": 1000000,
+        "max_tokens": 131072,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_effort": "high",
+        "thinking_format": "zai"
+      }
+    ]
+  },
+  "command-code": {
+    "display_name": "Command Code",
+    "api": "openai-completions",
+    "base_url": "https://api.commandcode.ai/provider/v1",
+    "api_key_env": "COMMAND_CODE_API_KEY",
+    "compat": {
+      "reasoning_content": true
+    },
+    "models": [
+      {
+        "id": "deepseek/deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "context_window": 1000000,
+        "max_tokens": 32768,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "default_effort": "high"
+      },
+      {
+        "id": "deepseek/deepseek-v4.1-flash-fast",
+        "name": "DeepSeek V4.1 Flash Fast",
+        "context_window": 1000000,
+        "max_tokens": 32768,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "default_effort": "high"
+      },
+      {
+        "id": "moonshotai/Kimi-K3",
+        "name": "Kimi K3",
+        "context_window": 1000000,
+        "max_tokens": 32768,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "default_effort": "high"
+      },
+      {
+        "id": "z-ai/glm-5.3-flashx",
+        "name": "GLM-5.3 FlashX",
+        "context_window": 1000000,
+        "max_tokens": 32768,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "default_effort": "high"
+      },
+      {
+        "id": "xiaomi/mimo-v2.6-pro-ultraspeed",
+        "name": "MiMo V2.6 Pro UltraSpeed",
+        "context_window": 1048576,
+        "max_tokens": 32768,
+        "input": [
+          "text"
+        ],
+        "reasoning_efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "default_effort": "high"
+      }
+    ]
+  }
+}

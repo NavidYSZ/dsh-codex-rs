@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 97" width="400" height="97" role="img" aria-label="Aether">
+  <!-- Aether lockup: mark (ring outer diameter = 1.02 cap heights, centred on the cap mid-line) + wordmark, gap 0.4 cap heights. -->
+  <style>.ink{fill:#121420}@media (prefers-color-scheme:dark){.ink{fill:#F2F3F8}}</style><g transform="scale(3.03125)"><path class="ink" fill="#121420" fill-rule="nonzero" d="M4.100 16.000A11.9 11.9 0 1 1 27.900 16.000A11.9 11.9 0 1 1 4.100 16.000ZM7.100 16.000A8.9 8.9 0 1 0 24.900 16.000A8.9 8.9 0 1 0 7.100 16.000ZM19.354 8.646A4.0 4.0 0 1 1 27.354 8.646A4.0 4.0 0 1 1 19.354 8.646Z"/></g>
+  <text class="ink" x="110" y="83.75" font-family="-apple-system, BlinkMacSystemFont, &quot;SF Pro Display&quot;, &quot;SF Pro Text&quot;, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif" font-size="100" font-weight="650" letter-spacing="-3.5" fill="#121420">Aether</text>
+</svg>

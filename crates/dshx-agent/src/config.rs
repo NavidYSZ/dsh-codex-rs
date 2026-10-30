@@ -89,6 +89,8 @@ pub enum Preset {
     /// Today's full composition (dsh `presets/standard.patch.yml`).
     #[default]
     Standard,
+    /// Standard capabilities presented through one TypeScript `run_code` transport.
+    Ptc,
     /// One persistent shell and a fixed prompt (dsh `presets/minimal.patch.yml`).
     Minimal,
 }
@@ -98,11 +100,12 @@ pub enum Preset {
 pub const MINIMAL_PERSONA: &str = "You are a helpful software engineer assistant.";
 
 impl Preset {
-    pub const ALL: [Preset; 2] = [Preset::Standard, Preset::Minimal];
+    pub const ALL: [Preset; 3] = [Preset::Standard, Preset::Ptc, Preset::Minimal];
 
     pub fn id(self) -> &'static str {
         match self {
             Preset::Standard => "standard",
+            Preset::Ptc => "ptc",
             Preset::Minimal => "minimal",
         }
     }
@@ -114,7 +117,7 @@ impl Preset {
 
     /// The preset a session recorded; no record (sessions from before
     /// presets, dsh's headless profile) and presets we do not ship (dsh's
-    /// `ptc`, `cordis`) run as Standard.
+    /// `cordis`) run as Standard.
     pub fn of_session(id: Option<&str>) -> Preset {
         id.and_then(Preset::parse).unwrap_or_default()
     }
@@ -407,15 +410,16 @@ impl AgentConfig {
         c
     }
 
-    /// Shapes the agent like the preset's composition. Standard changes
-    /// nothing. Minimal mounts dsh's persona row with `complete: true` and
+    /// Shapes the agent like the preset's composition. Standard and PTC keep
+    /// the full composition; PTC changes tool presentation at request assembly.
+    /// Minimal mounts dsh's persona row with `complete: true` and
     /// `includeRuntimeContext: false` and none of the per-agent rows: no
     /// workspace instructions, no compaction or tool-result pruner. Host-wide
     /// services (titles, retries, the repeat-tool reminder) stay. The tools
     /// are the caller's part.
     pub fn apply_preset(&mut self, preset: Preset) {
         self.preset = preset;
-        if preset == Preset::Standard {
+        if preset != Preset::Minimal {
             return;
         }
         self.prompt.include_harness_identity = false;

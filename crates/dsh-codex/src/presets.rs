@@ -1,5 +1,5 @@
-//! Agent presets ("modes") a new chat can start with: dsh's Standard and
-//! Minimal declarations, with the picker copy and help texts of dsh's
+//! Agent presets ("modes") a new chat can start with: Standard, PTC and
+//! Minimal, with the picker copy and help texts of dsh's
 //! `dsh-client-ui-agent-preset` (MIT). The UI localizes them by `id`; these
 //! English texts are the fallback.
 use dshx_agent::Preset;
@@ -32,6 +32,22 @@ fn texts(preset: Preset) -> Texts {
                 "### Organize project notes",
                 "> Read the Markdown notes in this project. Summarize the agreed decisions and open questions, with links to the source files.",
                 "Expected output: a summary with references that you can check against the original notes.",
+            ],
+        },
+        Preset::Ptc => Texts {
+            name: "PTC",
+            description: "Group tool calls in TypeScript and filter their results before sending them back to the model.",
+            intro: "Choose PTC for tasks that combine many tool calls or process large results. Describe the result you need; the agent writes TypeScript to coordinate the work.",
+            explanation: &[
+                "### How it works",
+                "The model uses run_code to execute TypeScript. Its tools SDK exposes the same capabilities as Standard, including Skills, MCP, subagents, goals and context compaction. Tool results can be filtered in code; only selected output returns to the model.",
+                "### Permissions and runtime",
+                "Tool calls keep the chat's permissions and approvals. The desktop app includes the Node.js runtime. CLI and web installations need Node.js 22.18 or newer. Each program has fresh state and a time limit.",
+            ],
+            usage: &[
+                "### Compare several files",
+                "> Read these configuration files, compare their settings, and report only the differences that affect deployment.",
+                "The agent can call tools together with Promise.all, transform their JSON results, and print a compact summary. Use console.log to return selected results.",
             ],
         },
         Preset::Minimal => Texts {

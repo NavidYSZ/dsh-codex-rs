@@ -1,7 +1,7 @@
 //! The agent driver: inbox, turn/step machine, request admission, model
 //! streaming, retries and cancellation (dsh `core/agent-loop/src/agent.ts`).
 use std::any::Any;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use dshx_core::{
@@ -23,6 +23,10 @@ use crate::observer::{AgentObserver, AgentStatus, DeltaKind, StreamDelta};
 use crate::prompt;
 use crate::recovery::ToolCallRecovery;
 use crate::stream::{BlockAssembler, StreamAccumulator};
+
+#[cfg(test)]
+#[path = "inbox_tests.rs"]
+mod inbox_tests;
 
 /// Collaborators of an [`Agent`].
 pub struct AgentDeps {
@@ -87,6 +91,15 @@ pub(crate) struct LoopState {
     pub instructions_prepared: Option<(String, HashSet<String>)>,
     /// The queued prompt the running driver owns (claimed instead of the head).
     pub own_prompt: Option<String>,
+    /// Reserved by pre-step preparation; still durable and visible in the inbox
+    /// until the user-message batch commits.
+    pub claimed: HashSet<String>,
+    /// A driver failed before admission. Retry these on the next submission,
+    /// rather than spinning on a failing pre-step or blocking later input.
+    pub undriven: HashMap<String, Target>,
+    /// A caller dropped the active driver; its durable open turn needs repair
+    /// under the driver lock before any later prompt can start.
+    pub abandoned: bool,
     /// The running turn and the `seq` of its `turn/start`.
     pub open_turn: Option<(u64, u64)>,
     /// Whether this session already has a title (skips the per-request scan).
@@ -116,6 +129,7 @@ pub(crate) struct Inner {
     pub state: Mutex<LoopState>,
     driver: tokio::sync::Mutex<()>,
     inbox_lock: tokio::sync::Mutex<()>,
+    inbox_changed: tokio::sync::Notify,
     init: tokio::sync::Mutex<bool>,
     /// Cancelled when the agent is disposed (stops title work).
     pub lifetime: CancellationToken,
@@ -124,6 +138,7 @@ pub(crate) struct Inner {
     pub jobs: crate::jobs::JobQueue,
     /// Product hooks over each step's entering batch, in registration order.
     pub pre_step_hooks: Mutex<Vec<Arc<dyn crate::hooks::PreStepHook>>>,
+    pub ptc_calls: Mutex<HashMap<String, CancellationToken>>,
 }
 
 /// The agent's live observers: the one from [`AgentDeps`] plus every
@@ -168,9 +183,86 @@ pub struct Agent {
     pub(crate) inner: Arc<Inner>,
 }
 
+/// Ownership survives cancellation of an admission or a waiting caller. The
+/// abandoned input transfers to one detached driver. Ordinary failures disarm
+/// this guard and remain pending for explicit retry instead of looping.
+struct PendingInputGuard {
+    inner: Arc<Inner>,
+    id: String,
+    armed: bool,
+}
+
+impl PendingInputGuard {
+    fn new(inner: &Arc<Inner>, id: &str) -> Self {
+        Self {
+            inner: inner.clone(),
+            id: id.to_owned(),
+            armed: true,
+        }
+    }
+}
+
+impl Drop for PendingInputGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let mut st = self.inner.state.lock().unwrap();
+        let target = if st.next_turn.iter().any(|m| m.id == self.id) {
+            Some(Target::NextTurn)
+        } else if st.next_step.iter().any(|m| m.id == self.id) {
+            Some(Target::NextStep)
+        } else {
+            None
+        };
+        let detached =
+            !self.inner.lifetime.is_cancelled() && tokio::runtime::Handle::try_current().is_ok();
+        if let Some(target) = target {
+            if detached {
+                st.undriven.remove(&self.id);
+            } else {
+                st.undriven.insert(self.id.clone(), target);
+            }
+        }
+        drop(st);
+        self.inner.inbox_changed.notify_waiters();
+        if detached && let Some(target) = target {
+            let agent = Agent {
+                inner: self.inner.clone(),
+            };
+            match target {
+                Target::NextTurn => agent.spawn_queued(self.id.clone()),
+                Target::NextStep => agent.spawn_steered(self.id.clone()),
+            }
+        }
+    }
+}
+
+/// Created only by the caller holding the driver lock. A canceled waiter
+/// must never cancel someone else's running turn.
+struct ActiveDriverGuard(Arc<Inner>);
+
+impl Drop for ActiveDriverGuard {
+    fn drop(&mut self) {
+        let mut st = self.0.state.lock().unwrap();
+        if let Some(running) = &st.running {
+            running.cancel.cancel();
+            st.abandoned = true;
+            st.own_prompt = None;
+            st.claimed.clear();
+        }
+        if let Some(cancel) = st.compacting.take() {
+            cancel.cancel();
+        }
+        drop(st);
+        self.0.inbox_changed.notify_waiters();
+    }
+}
+
 /// What one step decided to enter (dsh `PreparedStep`).
 pub(crate) struct Entering {
     pub messages: Vec<Message>,
+    claimed: HashSet<String>,
     /// The step's first request starts a request series (dsh `startsRequestSeries`).
     pub starts_series: bool,
     /// A hook rejected the step: the turn ends `blocked`, these messages
@@ -202,6 +294,23 @@ fn user_message(content: Vec<ContentBlock>) -> Message {
         is_error: None,
         extra: Default::default(),
     }
+}
+
+fn inbox_splice_event(
+    target: Target,
+    start: usize,
+    delete: usize,
+    inserted: &[Message],
+    discard: bool,
+) -> NewEvent {
+    let mut data = json!({"target": target.as_str(), "start": start, "inserted": inserted.iter().map(message_json).collect::<Vec<_>>()});
+    if delete > 0 {
+        data["removedCount"] = delete.into();
+        if discard {
+            data["outcome"] = "canceled".into();
+        }
+    }
+    event(kinds::INBOX_SPLICED, data)
 }
 
 fn preset_for(sandbox: SandboxMode, approval: ApprovalPolicy) -> Option<&'static str> {
@@ -246,17 +355,22 @@ impl Agent {
                 pending_approvals: 0,
                 instructions_prepared: None,
                 own_prompt: None,
+                claimed: HashSet::new(),
+                undriven: HashMap::new(),
+                abandoned: false,
                 open_turn: None,
                 titled: false,
                 compacting: None,
             }),
             driver: tokio::sync::Mutex::new(()),
             inbox_lock: tokio::sync::Mutex::new(()),
+            inbox_changed: tokio::sync::Notify::new(),
             init: tokio::sync::Mutex::new(false),
             lifetime: CancellationToken::new(),
             tools_state,
             jobs: Default::default(),
             pre_step_hooks: Mutex::new(Vec::new()),
+            ptc_calls: Mutex::new(HashMap::new()),
         };
         let inner = Arc::new(inner);
         if let Some(state) = &inner.tools_state {
@@ -311,6 +425,11 @@ impl Agent {
     ) -> anyhow::Result<()> {
         {
             let mut c = self.inner.config.lock().unwrap();
+            if c.sandbox != sandbox {
+                for cancel in self.inner.ptc_calls.lock().unwrap().values() {
+                    cancel.cancel();
+                }
+            }
             c.sandbox = sandbox;
             c.approval = approval;
         }
@@ -342,13 +461,21 @@ impl Agent {
     /// background behind earlier input.
     pub async fn followup(&self, message: Message) -> anyhow::Result<()> {
         let id = self.accept(Target::NextTurn, message).await?;
+        self.spawn_queued(id);
+        Ok(())
+    }
+
+    fn spawn_queued(&self, id: String) {
         let agent = self.clone();
-        tokio::spawn(async move {
+        let run: futures::future::BoxFuture<'static, ()> = Box::pin(async move {
             if let Err(e) = agent.drive_queued(&id).await {
                 tracing::warn!("follow-up turn failed: {e:#}");
+                agent.inner.set_status(AgentStatus::Error {
+                    error: format!("{e:#}"),
+                });
             }
         });
-        Ok(())
+        tokio::spawn(run);
     }
 
     /// Delivers a prebuilt message at the nearest step and returns once the
@@ -356,13 +483,21 @@ impl Agent {
     /// the background.
     pub async fn steer_detached(&self, message: Message) -> anyhow::Result<()> {
         let id = self.accept(Target::NextStep, message).await?;
+        self.spawn_steered(id);
+        Ok(())
+    }
+
+    fn spawn_steered(&self, id: String) {
         let agent = self.clone();
-        tokio::spawn(async move {
+        let run: futures::future::BoxFuture<'static, ()> = Box::pin(async move {
             if let Err(e) = agent.drive_steered(&id).await {
                 tracing::warn!("steered turn failed: {e:#}");
+                agent.inner.set_status(AgentStatus::Error {
+                    error: format!("{e:#}"),
+                });
             }
         });
-        Ok(())
+        tokio::spawn(run);
     }
 
     /// Appends `message` to an inbox list (one durable splice); returns its id.
@@ -370,31 +505,144 @@ impl Agent {
         let inner = &self.inner;
         inner.ensure_initialized().await?;
         let id = message.id.clone();
-        let len = inner.state.lock().unwrap().list(target).len();
-        inner.splice(target, len, 0, vec![message], false).await?;
+        let mut ownership = PendingInputGuard::new(inner, &id);
+        let pending_target = {
+            let _guard = inner.inbox_lock.lock().await;
+            let pending = {
+                let st = inner.state.lock().unwrap();
+                [
+                    (Target::NextTurn, &st.next_turn),
+                    (Target::NextStep, &st.next_step),
+                ]
+                .into_iter()
+                .find_map(|(target, list)| {
+                    list.iter()
+                        .find(|m| m.id == id)
+                        .map(|m| (target, m.clone()))
+                })
+            };
+            let prior = pending.as_ref().map(|(_, m)| m.clone()).or_else(|| {
+                inner.journal.read(|events, _| {
+                    events
+                        .iter()
+                        .rev()
+                        .filter(|e| e.kind == kinds::INBOX_SPLICED)
+                        .flat_map(|e| e.data["inserted"].as_array().into_iter().flatten())
+                        .find(|m| m["id"] == id)
+                        .and_then(|m| serde_json::from_value::<Message>(m.clone()).ok())
+                        .or_else(|| {
+                            events
+                                .iter()
+                                .rev()
+                                .find(|e| e.kind == kinds::USER_MESSAGE && e.data["id"] == id)
+                                .and_then(|e| {
+                                    serde_json::from_value::<Message>(e.data.clone()).ok()
+                                })
+                        })
+                })
+            });
+            if let Some(prior) = prior {
+                // Validation errors are ordinary results, not lost ownership.
+                if prior.role != message.role || prior.content != message.content {
+                    ownership.armed = false;
+                }
+                anyhow::ensure!(
+                    prior.role == message.role && prior.content == message.content,
+                    "messageId already belongs to different content"
+                );
+                pending.map(|(target, _)| target)
+            } else {
+                let tail = inner.state.lock().unwrap().list(target).len();
+                inner
+                    .splice_locked(target, tail, 0, vec![message], false)
+                    .await?;
+                Some(target)
+            }
+        };
+        if let Err(error) = inner.journal.flush().await {
+            if let Some(target) = pending_target {
+                inner
+                    .state
+                    .lock()
+                    .unwrap()
+                    .undriven
+                    .insert(id.clone(), target);
+            }
+            ownership.armed = false;
+            return Err(error.context(format!("message {id} remains queued; saving it failed")));
+        }
+        let retry = std::mem::take(&mut inner.state.lock().unwrap().undriven);
+        for (id, target) in retry {
+            match target {
+                Target::NextTurn => self.spawn_queued(id),
+                Target::NextStep => self.spawn_steered(id),
+            }
+        }
+        ownership.armed = false;
         Ok(id)
     }
 
     /// Drives turns while the queued prompt `id` is pending.
     async fn drive_queued(&self, id: &str) -> anyhow::Result<TurnOutcome> {
-        let inner = &self.inner;
-        let _driver = inner.driver.lock().await;
-        let pending = {
-            let mut st = inner.state.lock().unwrap();
-            let pending = st.next_turn.iter().any(|m| m.id == id);
-            st.own_prompt = pending.then(|| id.to_owned());
-            pending
-        };
-        if !pending {
-            // Cancelled while queued: no turn opens for it.
-            return Ok(TurnOutcome {
-                turn: None,
-                reason: TurnEndReason::Aborted {
-                    reason: CancelCause::User,
-                },
-            });
+        let mut ownership = PendingInputGuard::new(&self.inner, id);
+        let result = self.drive_queued_owned(id).await;
+        ownership.armed = false;
+        let mut st = self.inner.state.lock().unwrap();
+        if st.next_turn.iter().any(|m| m.id == id) {
+            st.undriven.insert(id.to_owned(), Target::NextTurn);
         }
-        inner.drive(Target::NextTurn).await
+        result
+    }
+
+    async fn drive_queued_owned(&self, id: &str) -> anyhow::Result<TurnOutcome> {
+        let inner = &self.inner;
+        loop {
+            // Register before inspecting the inbox so an intervening claim,
+            // removal or promotion cannot leave this waiter asleep forever.
+            let changed = inner.inbox_changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            let driver = inner.driver.lock().await;
+            inner.repair_abandoned().await?;
+            let (pending, head) = {
+                let st = inner.state.lock().unwrap();
+                (
+                    st.next_turn.iter().any(|m| m.id == id),
+                    st.next_turn.first().is_some_and(|m| m.id == id),
+                )
+            };
+            if !pending || inner.lifetime.is_cancelled() {
+                return Ok(TurnOutcome {
+                    turn: None,
+                    reason: TurnEndReason::Aborted {
+                        reason: if inner.lifetime.is_cancelled() {
+                            CancelCause::Disposed
+                        } else {
+                            CancelCause::User
+                        },
+                    },
+                });
+            }
+            if head {
+                inner.state.lock().unwrap().own_prompt = Some(id.to_owned());
+                let _active = ActiveDriverGuard(inner.clone());
+                let result = inner.drive(Target::NextTurn).await;
+                {
+                    let mut st = inner.state.lock().unwrap();
+                    st.own_prompt = None;
+                    if st.next_turn.iter().any(|m| m.id == id) {
+                        st.undriven.insert(id.to_owned(), Target::NextTurn);
+                    }
+                }
+                inner.inbox_changed.notify_waiters();
+                return result;
+            }
+            drop(driver);
+            tokio::select! {
+                _ = changed => {},
+                _ = inner.lifetime.cancelled() => {},
+            }
+        }
     }
 
     /// Delivers a prebuilt message at the nearest step (dsh `steer`): a
@@ -408,8 +656,23 @@ impl Agent {
 
     /// Drives a turn for the steered message `id` unless a running turn took it.
     async fn drive_steered(&self, id: &str) -> anyhow::Result<Option<TurnOutcome>> {
+        let mut ownership = PendingInputGuard::new(&self.inner, id);
+        let result = self.drive_steered_owned(id).await;
+        ownership.armed = false;
+        let mut st = self.inner.state.lock().unwrap();
+        if st.next_step.iter().any(|m| m.id == id) {
+            st.undriven.insert(id.to_owned(), Target::NextStep);
+        }
+        result
+    }
+
+    async fn drive_steered_owned(&self, id: &str) -> anyhow::Result<Option<TurnOutcome>> {
         let inner = &self.inner;
         let _driver = inner.driver.lock().await;
+        inner.repair_abandoned().await?;
+        if inner.lifetime.is_cancelled() {
+            return Ok(None);
+        }
         let pending = inner
             .state
             .lock()
@@ -420,7 +683,16 @@ impl Agent {
         if !pending {
             return Ok(None);
         }
-        inner.drive(Target::NextStep).await.map(Some)
+        let _active = ActiveDriverGuard(inner.clone());
+        let result = inner.drive(Target::NextStep).await.map(Some);
+        {
+            let mut st = inner.state.lock().unwrap();
+            if st.next_step.iter().any(|m| m.id == id) {
+                st.undriven.insert(id.to_owned(), Target::NextStep);
+            }
+        }
+        inner.inbox_changed.notify_waiters();
+        result
     }
 
     /// No turn runs, no input is queued and no caller is about to drive one
@@ -485,16 +757,19 @@ impl Agent {
         self.inner.journal.flush().await
     }
 
+    /// Activates a stored session, resuming accepted input left by a stopped
+    /// process. Initialization schedules each recovered prompt only once.
+    pub async fn resume_pending(&self) -> anyhow::Result<()> {
+        self.inner.ensure_initialized().await
+    }
+
     /// Adds input for the next step of the running turn (dsh `steer`); when idle
     /// it starts a turn like [`Agent::run_turn`].
     pub async fn steer(&self, input: Vec<ContentBlock>) -> anyhow::Result<Option<TurnOutcome>> {
         let running = self.inner.state.lock().unwrap().running.is_some();
         if running {
-            self.inner.ensure_initialized().await?;
-            let len = self.inner.state.lock().unwrap().next_step.len();
-            self.inner
-                .splice(Target::NextStep, len, 0, vec![user_message(input)], false)
-                .await?;
+            let id = self.accept(Target::NextStep, user_message(input)).await?;
+            self.spawn_steered(id);
             return Ok(None);
         }
         self.run_turn(input).await.map(Some)
@@ -546,15 +821,11 @@ impl Agent {
                 inner.splice_item(id, None, true).await?.ok_or_else(gone)?;
             }
             QueueAction::Steer => {
-                let queued = {
-                    let st = inner.state.lock().unwrap();
-                    st.running.is_some() && st.next_turn.iter().any(|m| m.id == id)
-                };
-                anyhow::ensure!(queued, "current turn no longer accepts steering");
-                let (_, message) = inner.splice_item(id, None, false).await?.ok_or_else(gone)?;
-                self.steer_detached(message).await?;
+                inner.promote(id).await?;
+                self.spawn_steered(id.to_owned());
             }
         }
+        inner.journal.flush().await?;
         Ok(())
     }
 
@@ -586,42 +857,65 @@ impl Agent {
         self.cancel_with(CancelCause::User, false).await;
     }
 
+    /// Explicit web cancellation acknowledges only persisted inbox removals.
+    pub async fn cancel_durable(&self) -> anyhow::Result<()> {
+        self.cancel_inner(CancelCause::User, false).await
+    }
+
     /// Cancels with an explicit cause; `keep_inbox` keeps queued prompts.
     pub async fn cancel_with(&self, cause: CancelCause, keep_inbox: bool) {
+        if let Err(error) = self.cancel_inner(cause, keep_inbox).await {
+            tracing::warn!("canceling input failed: {error:#}");
+            self.inner.set_status(AgentStatus::Error {
+                error: format!("{error:#}"),
+            });
+        }
+    }
+
+    async fn cancel_inner(&self, cause: CancelCause, keep_inbox: bool) -> anyhow::Result<()> {
         let inner = &self.inner;
+        let _guard = inner.inbox_lock.lock().await;
+        {
+            let mut st = inner.state.lock().unwrap();
+            if let Some(r) = st.running.as_mut() {
+                if r.cause.is_none() {
+                    r.cause = Some(cause);
+                }
+                r.cancel.cancel();
+            }
+            if let Some(c) = &st.compacting {
+                c.cancel();
+            }
+        }
         if !keep_inbox {
             let (steps, turns) = {
                 let st = inner.state.lock().unwrap();
                 (st.next_step.len(), st.next_turn.len())
             };
+            let mut events = Vec::new();
             if steps > 0 {
-                let _ = inner
-                    .splice(Target::NextStep, 0, steps, Vec::new(), true)
-                    .await;
+                events.push(inbox_splice_event(Target::NextStep, 0, steps, &[], true));
             }
             if turns > 0 {
-                let _ = inner
-                    .splice(Target::NextTurn, 0, turns, Vec::new(), true)
-                    .await;
+                events.push(inbox_splice_event(Target::NextTurn, 0, turns, &[], true));
             }
+            inner.journal.append_all(events).await?;
+            let mut st = inner.state.lock().unwrap();
+            st.next_step.clear();
+            st.next_turn.clear();
+            st.claimed.clear();
+            st.undriven.clear();
         }
-        let mut st = inner.state.lock().unwrap();
-        if let Some(r) = st.running.as_mut() {
-            if r.cause.is_none() {
-                r.cause = Some(cause);
-            }
-            r.cancel.cancel();
-        }
-        if let Some(c) = &st.compacting {
-            c.cancel();
-        }
+        inner.inbox_changed.notify_waiters();
+        inner.journal.flush().await
     }
 
     /// Stops background work (title generation, the session's jobs and
     /// persistent shells) and cancels a running turn.
     pub async fn dispose(&self) {
-        self.cancel_with(CancelCause::Disposed, false).await;
         self.inner.lifetime.cancel();
+        self.inner.inbox_changed.notify_waiters();
+        self.cancel_with(CancelCause::Disposed, false).await;
         if let Some(state) = &self.inner.tools_state {
             let id = self.inner.journal.id();
             state.jobs().shutdown(Some(&id));
@@ -683,26 +977,16 @@ impl Inner {
         if delete == 0 && inserted.is_empty() {
             return Ok(Vec::new());
         }
-        let mut data = Map::new();
-        data.insert("target".into(), target.as_str().into());
-        data.insert("start".into(), start.into());
-        if delete > 0 {
-            data.insert("removedCount".into(), delete.into());
-        }
-        data.insert(
-            "inserted".into(),
-            Value::Array(inserted.iter().map(message_json).collect()),
-        );
-        if discard && delete > 0 {
-            data.insert("outcome".into(), "canceled".into());
-        }
-        self.append(event(kinds::INBOX_SPLICED, Value::Object(data)))
-            .await?;
+        self.append(inbox_splice_event(
+            target, start, delete, &inserted, discard,
+        ))
+        .await?;
         self.state
             .lock()
             .unwrap()
             .list(target)
             .splice(start..start + delete, inserted);
+        self.inbox_changed.notify_waiters();
         Ok(removed)
     }
 
@@ -717,6 +1001,9 @@ impl Inner {
         let _guard = self.inbox_lock.lock().await;
         let found = {
             let st = self.state.lock().unwrap();
+            if st.claimed.contains(id) {
+                return Ok(None);
+            }
             [
                 (Target::NextTurn, &st.next_turn),
                 (Target::NextStep, &st.next_step),
@@ -735,77 +1022,202 @@ impl Inner {
         Ok(Some((target, message)))
     }
 
-    /// Removes and returns the batch one step consumes (dsh `inbox.claim`).
-    async fn claim(&self, target: Target) -> anyhow::Result<Vec<Message>> {
-        let steps = self.state.lock().unwrap().next_step.len();
-        let mut claimed = self
-            .splice(Target::NextStep, 0, steps, Vec::new(), false)
-            .await?;
-        if target == Target::NextTurn {
-            claimed.extend(
-                self.splice(Target::NextTurn, 0, 1, Vec::new(), false)
-                    .await?,
+    /// Moves both durable lists as one append batch. Failure leaves the
+    /// original queued prompt intact; there is no remove-then-accept gap.
+    async fn promote(&self, id: &str) -> anyhow::Result<()> {
+        let _guard = self.inbox_lock.lock().await;
+        let (index, message, tail) = {
+            let st = self.state.lock().unwrap();
+            anyhow::ensure!(
+                st.running
+                    .as_ref()
+                    .is_some_and(|r| !r.cancel.is_cancelled()),
+                "current turn no longer accepts steering"
             );
+            anyhow::ensure!(!st.claimed.contains(id), "queued item is no longer pending");
+            let index = st
+                .next_turn
+                .iter()
+                .position(|m| m.id == id)
+                .ok_or_else(|| anyhow::anyhow!("queued item is no longer pending"))?;
+            (index, st.next_turn[index].clone(), st.next_step.len())
+        };
+        self.journal
+            .append_all(vec![
+                inbox_splice_event(
+                    Target::NextStep,
+                    tail,
+                    0,
+                    std::slice::from_ref(&message),
+                    false,
+                ),
+                inbox_splice_event(Target::NextTurn, index, 1, &[], false),
+            ])
+            .await?;
+        {
+            let mut st = self.state.lock().unwrap();
+            st.next_turn.remove(index);
+            st.next_step.push(message);
         }
+        self.inbox_changed.notify_waiters();
+        Ok(())
+    }
+
+    /// Reserves the batch for pre-step work. It remains in the durable inbox
+    /// until the user-message commit, so errors and restarts cannot lose it.
+    async fn claim(&self, target: Target) -> anyhow::Result<Vec<Message>> {
+        let _guard = self.inbox_lock.lock().await;
+        let mut st = self.state.lock().unwrap();
+        let mut claimed = st.next_step.clone();
+        if target == Target::NextTurn {
+            // The head might have been removed or promoted after the driver
+            // acquired ownership. Never claim a different caller's prompt.
+            if let Some(head) = st.next_turn.first()
+                && st.own_prompt.as_deref() == Some(head.id.as_str())
+            {
+                claimed.push(head.clone());
+            }
+        }
+        st.claimed.extend(claimed.iter().map(|m| m.id.clone()));
         Ok(claimed)
     }
 
+    /// User messages and their inbox removals form one atomic log batch.
+    /// Hook rejection uses the same operation with a restored next-step batch.
+    async fn settle_claim(
+        &self,
+        claimed: &HashSet<String>,
+        messages: &[Message],
+        restore: &[Message],
+        cancel: &CancellationToken,
+    ) -> anyhow::Result<()> {
+        let _guard = self.inbox_lock.lock().await;
+        check(cancel)?;
+        let (mut turns, mut steps) = {
+            let st = self.state.lock().unwrap();
+            (st.next_turn.clone(), st.next_step.clone())
+        };
+        let mut events: Vec<_> = messages
+            .iter()
+            .map(|m| surface_append(kinds::USER_MESSAGE, message_json(m), None))
+            .collect();
+        if !restore.is_empty() {
+            // Like promotion, restore first. A torn batch may duplicate IDs;
+            // recovery can deduplicate them, but cannot recover missing text.
+            events.push(inbox_splice_event(Target::NextStep, 0, 0, restore, false));
+            steps.splice(0..0, restore.iter().cloned());
+        }
+        for (target, list) in [
+            (Target::NextStep, &mut steps),
+            (Target::NextTurn, &mut turns),
+        ] {
+            let restored = if target == Target::NextStep {
+                restore.len()
+            } else {
+                0
+            };
+            for index in (restored..list.len()).rev() {
+                if claimed.contains(&list[index].id) {
+                    list.remove(index);
+                    events.push(inbox_splice_event(target, index, 1, &[], false));
+                }
+            }
+        }
+        self.journal.append_all(events).await?;
+        {
+            let mut st = self.state.lock().unwrap();
+            st.next_turn = turns;
+            st.next_step = steps;
+            st.claimed.retain(|id| !claimed.contains(id));
+        }
+        self.inbox_changed.notify_waiters();
+        Ok(())
+    }
+
     /// Folds durable state of an existing log, repairs a crashed turn and pins permissions.
-    pub(crate) async fn ensure_initialized(&self) -> anyhow::Result<()> {
+    pub(crate) async fn ensure_initialized(self: &Arc<Self>) -> anyhow::Result<()> {
         let mut done = self.init.lock().await;
         if *done {
             return Ok(());
         }
-        let (next_turn, next_step, last_turn, open, recovery) = self.journal.read(|events, _| {
-            let mut next_turn: Vec<Message> = Vec::new();
-            let mut next_step: Vec<Message> = Vec::new();
-            let mut last_turn = 0;
-            let mut open: Option<(u64, Option<u64>)> = None;
-            let mut recovery = ToolCallRecovery::default();
-            for e in events {
-                recovery.observe(e);
-                match e.kind.as_str() {
-                    kinds::INBOX_SPLICED => {
-                        let list = if e.data["target"] == "next-step" {
-                            &mut next_step
-                        } else {
-                            &mut next_turn
-                        };
-                        let start =
-                            (e.data["start"].as_u64().unwrap_or(0) as usize).min(list.len());
-                        let removed = (e.data["removedCount"].as_u64().unwrap_or(0) as usize)
-                            .min(list.len() - start);
-                        let inserted: Vec<Message> = e.data["inserted"]
-                            .as_array()
-                            .map(|a| {
-                                a.iter()
-                                    .filter_map(|m| serde_json::from_value(m.clone()).ok())
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        list.splice(start..start + removed, inserted);
-                    }
-                    kinds::TURN_START => {
-                        let t = e.data["turn"].as_u64().unwrap_or(0);
-                        last_turn = last_turn.max(t);
-                        open = Some((t, None));
-                    }
-                    kinds::TURN_END => open = None,
-                    kinds::STEP_START => {
-                        if let Some(o) = open.as_mut() {
-                            o.1 = e.data["step"].as_u64();
+        let (next_turn, next_step, last_turn, open, recovery, reconcile) =
+            self.journal.read(|events, _| {
+                let mut next_turn: Vec<Message> = Vec::new();
+                let mut next_step: Vec<Message> = Vec::new();
+                let mut last_turn = 0;
+                let mut open: Option<(u64, Option<u64>)> = None;
+                let mut recovery = ToolCallRecovery::default();
+                let mut admitted = HashSet::new();
+                for e in events {
+                    recovery.observe(e);
+                    match e.kind.as_str() {
+                        kinds::USER_MESSAGE => {
+                            if let Some(id) = e.data["id"].as_str() {
+                                admitted.insert(id.to_owned());
+                            }
                         }
-                    }
-                    kinds::STEP_END => {
-                        if let Some(o) = open.as_mut() {
-                            o.1 = None;
+                        kinds::INBOX_SPLICED => {
+                            let list = if e.data["target"] == "next-step" {
+                                &mut next_step
+                            } else {
+                                &mut next_turn
+                            };
+                            let start =
+                                (e.data["start"].as_u64().unwrap_or(0) as usize).min(list.len());
+                            let removed = (e.data["removedCount"].as_u64().unwrap_or(0) as usize)
+                                .min(list.len() - start);
+                            let inserted: Vec<Message> = e.data["inserted"]
+                                .as_array()
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(|m| serde_json::from_value(m.clone()).ok())
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            list.splice(start..start + removed, inserted);
                         }
+                        kinds::TURN_START => {
+                            let t = e.data["turn"].as_u64().unwrap_or(0);
+                            last_turn = last_turn.max(t);
+                            open = Some((t, None));
+                        }
+                        kinds::TURN_END => open = None,
+                        kinds::STEP_START => {
+                            if let Some(o) = open.as_mut() {
+                                o.1 = e.data["step"].as_u64();
+                            }
+                        }
+                        kinds::STEP_END => {
+                            if let Some(o) = open.as_mut() {
+                                o.1 = None;
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
-            (next_turn, next_step, last_turn, open, recovery)
-        });
+                // A torn durable frame may retain only the beginning of an append
+                // batch. User messages precede dequeue; promotion inserts before
+                // removing its old entry. Reconcile both cases by stable ID and
+                // persist the repair so later positional splices replay correctly.
+                let mut reconcile = Vec::new();
+                for (target, list) in [
+                    (Target::NextStep, &mut next_step),
+                    (Target::NextTurn, &mut next_turn),
+                ] {
+                    let remove: Vec<_> = list
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, message)| {
+                            (!admitted.insert(message.id.clone())).then_some(index)
+                        })
+                        .collect();
+                    for index in remove.into_iter().rev() {
+                        list.remove(index);
+                        reconcile.push(inbox_splice_event(target, index, 1, &[], false));
+                    }
+                }
+                (next_turn, next_step, last_turn, open, recovery, reconcile)
+            });
         {
             let mut st = self.state.lock().unwrap();
             st.next_turn = next_turn;
@@ -826,13 +1238,34 @@ impl Inner {
             .await?;
         }
         self.apply_permissions().await?;
-        let stale = self.state.lock().unwrap().next_turn.len();
-        if stale > 0 {
-            // Prompts queued by an earlier process have no waiting caller.
-            self.splice(Target::NextTurn, 0, stale, Vec::new(), true)
-                .await?;
+        if !reconcile.is_empty() {
+            self.journal.append_all(reconcile).await?;
+            self.journal.flush().await?;
         }
+        let (turns, step) = {
+            let st = self.state.lock().unwrap();
+            (
+                st.next_turn
+                    .iter()
+                    .map(|m| m.id.clone())
+                    .collect::<Vec<_>>(),
+                st.next_step.first().map(|m| m.id.clone()),
+            )
+        };
         *done = true;
+        drop(done);
+        // The old process's callers no longer exist. Give each recovered
+        // prompt a driver; head ownership enforces FIFO even if tasks start
+        // in a different order. Release init before any task can run.
+        let agent = Agent {
+            inner: self.clone(),
+        };
+        for id in turns {
+            agent.spawn_queued(id);
+        }
+        if let Some(id) = step {
+            agent.spawn_steered(id);
+        }
         Ok(())
     }
 
@@ -845,6 +1278,61 @@ impl Inner {
             self.append(surface_append(kinds::TOOL_RESULT, data, sources))
                 .await?;
         }
+        Ok(())
+    }
+
+    /// A dropped synchronous run releases the mutex without reaching turn's
+    /// normal cleanup. Repair from the log, just like restart, before the next
+    /// owner drives. Keeping the flag until flush makes this repair retryable.
+    async fn repair_abandoned(&self) -> anyhow::Result<()> {
+        if !self.state.lock().unwrap().abandoned {
+            return Ok(());
+        }
+        let (open, recovery) = self.journal.read(|events, _| {
+            let mut open: Option<(u64, Option<u64>)> = None;
+            let mut recovery = ToolCallRecovery::default();
+            for e in events {
+                recovery.observe(e);
+                match e.kind.as_str() {
+                    kinds::TURN_START => open = Some((e.data["turn"].as_u64().unwrap_or(0), None)),
+                    kinds::TURN_END => open = None,
+                    kinds::STEP_START => {
+                        if let Some((_, step)) = &mut open {
+                            *step = e.data["step"].as_u64();
+                        }
+                    }
+                    kinds::STEP_END => {
+                        if let Some((_, step)) = &mut open {
+                            *step = None;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            (open, recovery)
+        });
+        if let Some((turn, step)) = open {
+            self.append_recovery(&recovery).await?;
+            if let Some(step) = step {
+                self.append(event(kinds::STEP_END, json!({"turn": turn, "step": step})))
+                    .await?;
+            }
+            self.append(event(
+                kinds::TURN_END,
+                json!({"turn": turn, "reason": {"kind": "interrupted"}}),
+            ))
+            .await?;
+        }
+        self.journal.flush().await?;
+        {
+            let mut st = self.state.lock().unwrap();
+            st.running = None;
+            st.open_turn = None;
+            st.claimed.clear();
+            st.pending_approvals = 0;
+            st.abandoned = false;
+        }
+        self.set_status(AgentStatus::Idle);
         Ok(())
     }
 
@@ -901,7 +1389,13 @@ impl Inner {
         loop {
             outcome = self.turn(target).await;
             target = Target::NextStep;
-            let more = outcome.is_ok() && !self.state.lock().unwrap().next_step.is_empty();
+            let more = matches!(
+                &outcome,
+                Ok(TurnOutcome {
+                    reason: TurnEndReason::Completed,
+                    ..
+                })
+            ) && !self.state.lock().unwrap().next_step.is_empty();
             if !more {
                 break;
             }
@@ -966,7 +1460,8 @@ impl Inner {
     }
 
     async fn turn(self: &Arc<Self>, target: Target) -> anyhow::Result<TurnOutcome> {
-        let cancel = CancellationToken::new();
+        let cancel = self.lifetime.child_token();
+        check(&cancel)?;
         let turn = {
             let mut st = self.state.lock().unwrap();
             st.running = Some(Running {
@@ -1022,6 +1517,7 @@ impl Inner {
             let mut st = self.state.lock().unwrap();
             st.running = None;
             st.open_turn = None;
+            st.claimed.clear();
         }
         end?;
         // Completions that arrived after the last step wake the agent.
@@ -1047,9 +1543,8 @@ impl Inner {
             let step = current_step + 1;
             let mut entering = self.pre_step(target, turn, step, cancel).await?;
             if let Some(restore) = entering.rejected.take() {
-                if !restore.is_empty() {
-                    self.splice(Target::NextStep, 0, 0, restore, false).await?;
-                }
+                self.settle_claim(&entering.claimed, &[], &restore, cancel)
+                    .await?;
                 return Ok(TurnEndReason::Blocked);
             }
             if turn_ends.is_some() && entering.messages.is_empty() {
@@ -1157,6 +1652,7 @@ impl Inner {
         }
         Ok(Entering {
             messages,
+            claimed: claimed.iter().map(|m| m.id.clone()).collect(),
             starts_series: decision.starts_series,
             rejected: decision.reject,
         })
@@ -1216,8 +1712,16 @@ impl Inner {
         ))
     }
 
-    pub(crate) fn tool_schemas(&self) -> Vec<ToolSchema> {
+    pub(crate) fn capability_schemas(&self) -> Vec<ToolSchema> {
         prompt::ordered_tools(self.tools.lock().unwrap().schemas())
+    }
+
+    pub(crate) fn tool_schemas(&self) -> Vec<ToolSchema> {
+        if self.config.lock().unwrap().preset == crate::config::Preset::Ptc {
+            vec![dshx_tools::ptc::schema()]
+        } else {
+            self.capability_schemas()
+        }
     }
 
     /// The client of a provider route; the base client serves `None` and
@@ -1237,9 +1741,20 @@ impl Inner {
     fn rendered_prompt(&self, tools: &[ToolSchema]) -> anyhow::Result<String> {
         let c = self.config.lock().unwrap();
         let llm = self.client_for(c.provider.as_deref());
+        let mut prompt_config = c.prompt.clone();
+        let capabilities;
+        let tools = if c.preset == crate::config::Preset::Ptc {
+            capabilities = self.capability_schemas();
+            prompt_config
+                .extra_sections
+                .extend(crate::ptc::sdk_sections(&capabilities));
+            &capabilities
+        } else {
+            tools
+        };
         let names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
         let cwd = c.cwd.to_string_lossy().into_owned();
-        prompt::render_system_prompt(&c.prompt, &names, llm.provider(), &c.model, &cwd)
+        prompt::render_system_prompt(&prompt_config, &names, llm.provider(), &c.model, &cwd)
     }
 
     /// dsh `SystemPromptProjection.project`: per-node system prompt commits.
@@ -1549,10 +2064,8 @@ impl Inner {
                 self.append(commit).await?;
             }
             if first_attempt {
-                for m in &entering.messages {
-                    self.append(surface_append(kinds::USER_MESSAGE, message_json(m), None))
-                        .await?;
-                }
+                self.settle_claim(&entering.claimed, &entering.messages, &[], cancel)
+                    .await?;
             }
             first_attempt = false;
             let (request, llm) = self

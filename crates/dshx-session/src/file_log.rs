@@ -246,10 +246,12 @@ impl FileLog {
             state.timer_armed = true;
             runtime.spawn(batch_timer(Arc::downgrade(&self.inner)));
         }
-        drop(state);
+        // Publish under the sequencing lock: concurrent appenders must not
+        // broadcast a later seq before this batch (including within a batch).
         for event in &stored {
             let _ = self.inner.tx.send(event.clone());
         }
+        drop(state);
         Ok(stored)
     }
 

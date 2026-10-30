@@ -287,6 +287,7 @@ function toRow(m) {
     efforts: m.reasoningEfforts ?? [],
     defaultEffort: m.defaultReasoningEffort ?? m.defaultEffort ?? '',
     thinking: m.thinking ?? '',
+    thinkingFormat: m.thinkingFormat ?? '',
     cost: m.cost ? { input: price(m.cost.input), output: price(m.cost.output), cacheRead: price(m.cost.cacheRead), cacheWrite: price(m.cost.cacheWrite) } : { ...blankCost },
   };
 }
@@ -324,6 +325,7 @@ function rowBody(r) {
   if (r.efforts.length) out.reasoningEfforts = r.efforts;
   if (r.defaultEffort && r.efforts.includes(r.defaultEffort)) out.defaultEffort = r.defaultEffort;
   if (r.thinking) out.thinking = r.thinking;
+  if (r.thinkingFormat) out.thinkingFormat = r.thinkingFormat;
   if (Object.values(r.cost).some((v) => String(v).trim())) {
     // A blank field is an unknown price (the server prices unknown cache
     // tokens like input), not a free one.

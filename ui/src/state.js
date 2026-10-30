@@ -423,25 +423,36 @@ export function refreshSessions() {
 
 // ---- actions -------------------------------------------------------------
 
-export async function send(text, images, opts) {
+export async function send(text, images, opts, { onSession, sessionId } = {}) {
   const s = store.get();
+  const navigation = openToken;
   const body = { text, ...(images.length ? { images } : {}), ...opts, ...timeZone() };
   // Only a prompt that starts a turn now shows as pending; one sent while a
   // turn runs is steered into it or queued (the queue list shows it).
   const busy = !!s.activeId && (s.status === 'running' || s.status === 'waiting-approval');
-  store.set({ ...(busy ? {} : { pending: { text, images, time: Date.now() } }), statusError: null });
+  const pending = busy ? null : { text, images, time: Date.now() };
+  store.set({ ...(pending ? { pending } : {}), statusError: null });
   try {
-    let id = s.activeId;
+    let id = sessionId ?? s.activeId;
     if (!id) {
       ({ id } = await api.createSession(s.cwd, s.composer.preset));
-      await openSession(id, { fresh: true });
       refreshSessions();
     }
+    const following = navigation === openToken && store.get().activeId === s.activeId && store.get().view === s.view;
+    onSession?.(id, following);
+    if (following && id !== s.activeId) await openSession(id, { fresh: true });
     await api.prompt(id, body);
-    if (store.get().activeId === id && store.get().status === 'idle') store.set({ status: 'running' });
+    // An idempotent retry may acknowledge a message already in the log,
+    // without publishing another user/message to clear optimistic feedback.
+    const now = store.get();
+    if (pending && now.pending === pending && body.messageId && now.events.some((e) =>
+      (e.type === 'user/message' && e.data?.id === body.messageId)
+      || (e.type === 'agent/inbox/spliced' && e.data?.inserted?.some((m) => m.id === body.messageId)))) store.set({ pending: null });
+    // The stream owns run status: the turn may already have ended before
+    // this HTTP acknowledgement reaches us.
     return true;
   } catch (e) {
-    if (!busy) store.set({ pending: null });
+    if (pending && store.get().pending === pending) store.set({ pending: null });
     fail(e);
     return false;
   }

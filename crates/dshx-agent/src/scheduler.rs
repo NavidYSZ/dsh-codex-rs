@@ -3,21 +3,25 @@
 //! concurrency-safe calls share a bounded rolling pool, and results commit in
 //! model order. Cancellation drains started calls and records
 //! `ABORTED_BEFORE_DISPATCH` pairs for the rest.
+use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use dshx_core::{
     ApprovalDecision, Approver, CallerInfo, ContentBlock, Message, MessageSource, Role, Tool,
-    ToolContext, ToolError, ToolOutput, ToolResultPart, kinds,
+    ToolContext, ToolError, ToolOutput, ToolRegistry, ToolResultPart, ToolSchema, kinds,
 };
 use futures::StreamExt;
+use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use serde_json::{Map, Value, json};
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use crate::agent::{Inner, Target};
-use crate::config::ApprovalPolicy;
+use crate::config::{ApprovalPolicy, Preset};
 use crate::events::{event, message_json, surface_append};
 use crate::observer::AgentStatus;
 use crate::schema;
@@ -137,6 +141,9 @@ struct GroupOutcome {
 impl Inner {
     /// Whether a call may join the parallel pool (dsh `executionMode`).
     fn parallel(&self, call: &Planned) -> bool {
+        if self.config.lock().unwrap().preset == Preset::Ptc {
+            return false;
+        }
         let tool = self.tools.lock().unwrap().get(&call.name);
         match tool {
             Some(t) => {
@@ -278,30 +285,14 @@ impl Inner {
     }
 
     /// Ordered pre-dispatch gate: cancellation, unknown tool, argument validation.
-    fn prepare(&self, call: &Planned, cancel: &CancellationToken) -> Prepared {
-        if cancel.is_cancelled() {
-            return Prepared::Final(ExecResult::aborted_before_dispatch());
-        }
-        let Some(tool) = self.tools.lock().unwrap().get(&call.name) else {
-            return Prepared::Post(ExecResult::error(
-                &format!("unknown tool \"{}\"", call.name),
-                Some(("ToolNotFoundError", "UNKNOWN_TOOL")),
-            ));
-        };
-        // dsh validates only tools built with `defineTool`; MCP tools hand the
-        // raw arguments to their server, which reports what is wrong.
-        let violations = if call.name.starts_with(MCP_TOOL_PREFIX) {
-            Vec::new()
+    fn prepare(self: &Arc<Self>, call: &Planned, cancel: &CancellationToken) -> Prepared {
+        let tool = if self.config.lock().unwrap().preset == Preset::Ptc {
+            (call.name == "run_code")
+                .then(|| Arc::new(crate::ptc::RunCodeTool::new(self)) as Arc<dyn Tool>)
         } else {
-            schema::validate(&tool.schema().parameters, &call.args)
+            self.tools.lock().unwrap().get(&call.name)
         };
-        if !violations.is_empty() {
-            return Prepared::Post(ExecResult::error(
-                &format!("invalid arguments: {}", violations.join("; ")),
-                Some(("ToolArgsError", "INVALID_ARGS")),
-            ));
-        }
-        Prepared::Dispatch(tool)
+        prepare_tool(tool, call, cancel)
     }
 
     /// Runs one tool body with its cooperative deadline and cancellation.
@@ -313,7 +304,13 @@ impl Inner {
     ) -> ExecResult {
         let (cwd, sandbox, grace, policy) = {
             let c = self.config.lock().unwrap();
-            (c.cwd.clone(), c.sandbox, c.tool_grace, c.approval)
+            // A transport must drain child tool cleanup and its worker before settling.
+            let grace = if call.name == "run_code" && c.preset == Preset::Ptc {
+                c.tool_grace.saturating_mul(3)
+            } else {
+                c.tool_grace
+            };
+            (c.cwd.clone(), c.sandbox, grace, c.approval)
         };
         let token = cancel.child_token();
         let approver: Arc<dyn Approver> = Arc::new(LoggingApprover {
@@ -523,20 +520,7 @@ impl Inner {
         result: ExecResult,
         call_seq: u64,
     ) -> anyhow::Result<()> {
-        if call.name == "todo_write" && !result.is_error {
-            let todos = result
-                .value
-                .as_ref()
-                .and_then(|v| v.get("todos").or(if v.is_array() { Some(v) } else { None }))
-                .or_else(|| call.args.get("todos"))
-                .cloned();
-            if let Some(todos) = todos {
-                self.append(event(kinds::TODO_WRITE, json!({"todos": todos})))
-                    .await?;
-            }
-        }
-        // Job lifecycle events of this call (e.g. a backgrounded bash) precede its result.
-        crate::jobs::drain(self).await;
+        self.commit_tool_effects(call, &result).await?;
         let message = Message {
             id: dshx_core::new_id(),
             role: Role::Tool,
@@ -565,10 +549,32 @@ impl Inner {
         ))
         .await?;
         for context in result.contexts {
-            let len = self.state.lock().unwrap().next_step.len();
-            self.splice(Target::NextStep, len, 0, vec![context], false)
+            self.splice(Target::NextStep, usize::MAX, 0, vec![context], false)
                 .await?;
         }
+        Ok(())
+    }
+
+    /// Domain events belong to the underlying capability, including nested PTC calls.
+    async fn commit_tool_effects(
+        self: &Arc<Self>,
+        call: &Planned,
+        result: &ExecResult,
+    ) -> anyhow::Result<()> {
+        if call.name == "todo_write" && !result.is_error {
+            let todos = result
+                .value
+                .as_ref()
+                .and_then(|v| v.get("todos").or(if v.is_array() { Some(v) } else { None }))
+                .or_else(|| call.args.get("todos"))
+                .cloned();
+            if let Some(todos) = todos {
+                self.append(event(kinds::TODO_WRITE, json!({"todos": todos})))
+                    .await?;
+            }
+        }
+        // Job lifecycle events of this call (e.g. a backgrounded bash) precede its result.
+        crate::jobs::drain(self).await;
         Ok(())
     }
 
@@ -588,6 +594,349 @@ impl Inner {
             .seq;
         self.commit(turn, step, call, ExecResult::aborted_before_dispatch(), seq)
             .await
+    }
+}
+
+fn prepare_tool(
+    tool: Option<Arc<dyn Tool>>,
+    call: &Planned,
+    cancel: &CancellationToken,
+) -> Prepared {
+    if cancel.is_cancelled() {
+        return Prepared::Final(ExecResult::aborted_before_dispatch());
+    }
+    let Some(tool) = tool else {
+        return Prepared::Post(ExecResult::error(
+            &format!("unknown tool \"{}\"", call.name),
+            Some(("ToolNotFoundError", "UNKNOWN_TOOL")),
+        ));
+    };
+    let violations = if call.name.starts_with(MCP_TOOL_PREFIX) {
+        Vec::new()
+    } else {
+        schema::validate(&tool.schema().parameters, &call.args)
+    };
+    if !violations.is_empty() {
+        return Prepared::Post(ExecResult::error(
+            &format!("invalid arguments: {}", violations.join("; ")),
+            Some(("ToolArgsError", "INVALID_ARGS")),
+        ));
+    }
+    Prepared::Dispatch(tool)
+}
+
+struct PtcRequest {
+    call: Planned,
+    cancel: CancellationToken,
+    reply: oneshot::Sender<Result<Value, ToolError>>,
+}
+
+struct PtcSlot {
+    request: PtcRequest,
+    result: Option<ExecResult>,
+    exclusive: bool,
+}
+
+/// A fresh FIFO scheduler for each program. The worker only receives JSON values.
+pub(crate) struct PtcDispatcher {
+    schemas: Vec<ToolSchema>,
+    tx: mpsc::UnboundedSender<PtcRequest>,
+    cancel: CancellationToken,
+    root: String,
+    next: AtomicU64,
+    task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<Result<(), ToolError>>>>,
+}
+
+impl PtcDispatcher {
+    pub(crate) fn new(inner: Arc<Inner>, ctx: &ToolContext) -> Arc<Self> {
+        let tools = inner.tools.lock().unwrap().clone();
+        let schemas = tools
+            .schemas()
+            .into_iter()
+            .filter(|s| s.name != "run_code")
+            .collect();
+        let max = inner.config.lock().unwrap().max_parallel_tool_calls.max(1);
+        let (tx, rx) = mpsc::unbounded_channel();
+        let cancel = ctx.cancel.clone();
+        let root = ctx.call_id.clone();
+        let task = tokio::spawn(drive_ptc(
+            inner,
+            tools,
+            rx,
+            root.clone(),
+            cancel.clone(),
+            max,
+        ));
+        Arc::new(Self {
+            schemas,
+            tx,
+            cancel,
+            root,
+            next: AtomicU64::new(1),
+            task: tokio::sync::Mutex::new(Some(task)),
+        })
+    }
+
+    pub(crate) async fn finish(&self) -> Result<(), ToolError> {
+        self.cancel.cancel();
+        if let Some(task) = self.task.lock().await.take() {
+            task.await
+                .map_err(|e| ToolError::Failed(format!("PTC dispatch cleanup failed: {e}")))??;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for PtcDispatcher {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
+}
+
+#[async_trait]
+impl dshx_tools::ptc::PtcBindings for PtcDispatcher {
+    fn schemas(&self) -> Vec<ToolSchema> {
+        self.schemas.clone()
+    }
+
+    async fn call(
+        &self,
+        name: String,
+        args: Value,
+        cancel: CancellationToken,
+    ) -> Result<Value, ToolError> {
+        if self.cancel.is_cancelled() || cancel.is_cancelled() {
+            return Err(ToolError::Cancelled);
+        }
+        let n = self.next.fetch_add(1, Ordering::Relaxed);
+        let (reply, result) = oneshot::channel();
+        let call = Planned {
+            id: format!("{}:ptc:{n}", self.root),
+            name,
+            raw: serde_json::to_string(&args)
+                .map_err(|e| ToolError::InvalidArguments(e.to_string()))?,
+            args,
+        };
+        // No await before sending: polling binding calls once in frame order is sufficient.
+        self.tx
+            .send(PtcRequest {
+                call,
+                cancel,
+                reply,
+            })
+            .map_err(|_| ToolError::Cancelled)?;
+        result.await.unwrap_or(Err(ToolError::Cancelled))
+    }
+}
+
+async fn drive_ptc(
+    inner: Arc<Inner>,
+    tools: ToolRegistry,
+    mut rx: mpsc::UnboundedReceiver<PtcRequest>,
+    root: String,
+    cancel: CancellationToken,
+    max: usize,
+) -> Result<(), ToolError> {
+    let mut queue: VecDeque<PtcRequest> = VecDeque::new();
+    let mut slots: VecDeque<PtcSlot> = VecDeque::new();
+    let mut flights: FuturesUnordered<BoxFuture<'static, (String, ExecResult)>> =
+        FuturesUnordered::new();
+    let mut exclusive = false;
+    let mut closed = false;
+    let mut failure = None;
+    loop {
+        while slots.front().is_some_and(|s| s.result.is_some()) {
+            let slot = slots.pop_front().unwrap();
+            let outcome = inner
+                .commit_ptc(&root, &slot.request.call, slot.result.unwrap())
+                .await;
+            if let Err(error) = &outcome {
+                // A normal tool error is data; only an audit/commit failure stops the program.
+                if matches!(error, ToolError::Coded { code, .. } if code == "PTC_COMMIT_FAILED") {
+                    failure = Some(error.to_string());
+                    cancel.cancel();
+                }
+            }
+            let _ = slot.request.reply.send(outcome);
+        }
+        if cancel.is_cancelled() {
+            rx.close();
+            closed = true;
+            while let Ok(request) = rx.try_recv() {
+                queue.push_back(request);
+            }
+            while let Some(request) = queue.pop_front() {
+                let _ = request.reply.send(Err(ToolError::Cancelled));
+            }
+        }
+        while !cancel.is_cancelled() && flights.len() < max {
+            let Some(head) = queue.front() else {
+                break;
+            };
+            let tool = (head.call.name != "run_code")
+                .then(|| tools.get(&head.call.name))
+                .flatten();
+            let safe = tool.as_ref().is_some_and(|t| {
+                t.concurrency_safe()
+                    && schema::validate(&t.schema().parameters, &head.call.args).is_empty()
+            });
+            if exclusive || (!safe && !flights.is_empty()) {
+                break;
+            }
+            let request = queue.pop_front().unwrap();
+            if request.cancel.is_cancelled() {
+                let _ = request.reply.send(Err(ToolError::Cancelled));
+                continue;
+            }
+            let start = inner
+                .append(event(
+                    "tool/ptc-dispatch-start",
+                    ptc_pair(&root, &request.call),
+                ))
+                .await;
+            if let Err(error) = start {
+                failure = Some(format!("PTC dispatch audit failed: {error}"));
+                let _ = request
+                    .reply
+                    .send(Err(ToolError::Failed(failure.clone().unwrap())));
+                cancel.cancel();
+                break;
+            }
+            let prepared = prepare_tool(tool, &request.call, &cancel);
+            let result = match prepared {
+                Prepared::Dispatch(tool) => {
+                    if let Err(error) = inner.journal.flush().await {
+                        failure = Some(format!("PTC dispatch flush failed: {error}"));
+                        cancel.cancel();
+                        Some(ExecResult::aborted_before_dispatch())
+                    } else {
+                        let exec = inner.clone();
+                        let call = request.call.clone();
+                        let token = cancel.child_token();
+                        let requested_cancel = request.cancel.clone();
+                        flights.push(Box::pin(async move {
+                            let id = call.id.clone();
+                            let run = exec.dispatch(tool, call, token.clone());
+                            tokio::pin!(run);
+                            let result = tokio::select! {
+                                result = &mut run => result,
+                                _ = requested_cancel.cancelled() => { token.cancel(); run.await }
+                            };
+                            (id, result)
+                        }));
+                        exclusive = !safe;
+                        None
+                    }
+                }
+                Prepared::Post(result) | Prepared::Final(result) => Some(result),
+            };
+            slots.push_back(PtcSlot {
+                request,
+                result,
+                exclusive: !safe,
+            });
+            if !safe || slots.front().is_some_and(|s| s.result.is_some()) {
+                break;
+            }
+        }
+        if slots.front().is_some_and(|s| s.result.is_some()) {
+            continue;
+        }
+        if closed && flights.is_empty() && queue.is_empty() {
+            break;
+        }
+        tokio::select! {
+            request = rx.recv(), if !closed => match request {
+                Some(request) => queue.push_back(request),
+                None => closed = true,
+            },
+            result = flights.next(), if !flights.is_empty() => {
+                if let Some((id, result)) = result
+                    && let Some(slot) = slots.iter_mut().find(|s| s.request.call.id == id) {
+                    if slot.exclusive { exclusive = false; }
+                    slot.result = Some(result);
+                }
+            },
+            _ = cancel.cancelled(), if !closed => {},
+        }
+    }
+    match failure {
+        Some(error) => Err(ToolError::Failed(error)),
+        None => Ok(()),
+    }
+}
+
+fn ptc_pair(root: &str, call: &Planned) -> Value {
+    json!({"rootCallId":root,"parentCallId":root,"subCallId":call.id,"name":call.name,"arguments":call.args})
+}
+
+impl Inner {
+    async fn commit_ptc(
+        self: &Arc<Self>,
+        root: &str,
+        call: &Planned,
+        mut result: ExecResult,
+    ) -> Result<Value, ToolError> {
+        self.post_execute(call, &mut result);
+        self.notify_result(call, &result);
+        let value = result
+            .value
+            .clone()
+            .unwrap_or_else(|| json!({"content":result.content}));
+        self.bound_inline(call, &mut result);
+        let commit = async {
+            self.commit_tool_effects(call, &result).await?;
+            let mut data = ptc_pair(root, call);
+            data["isError"] = result.is_error.into();
+            data["content"] = serde_json::to_value(&result.content)?;
+            if let Some(info) = &result.error_info {
+                data["error"] = info.clone();
+            }
+            if let Some(meta) = &result.meta {
+                data["meta"] = meta.clone();
+            }
+            self.append(event("tool/ptc-dispatch", data)).await?;
+            if !result.is_error
+                && result
+                    .content
+                    .iter()
+                    .any(|c| matches!(c, ContentBlock::Image { .. }))
+            {
+                result.contexts.push(Message {
+                    id: dshx_core::new_id(),
+                    role: Role::User,
+                    content: result.content.clone(),
+                    source: MessageSource::Other(json!({"kind":"ptc-mode"})),
+                    tool_call_id: None,
+                    is_error: None,
+                    extra: Default::default(),
+                });
+            }
+            for context in std::mem::take(&mut result.contexts) {
+                self.splice(Target::NextStep, usize::MAX, 0, vec![context], false)
+                    .await?;
+            }
+            Ok::<_, anyhow::Error>(())
+        }
+        .await;
+        commit
+            .map_err(|e| ToolError::coded("PtcCommitError", "PTC_COMMIT_FAILED", e.to_string()))?;
+        if result.is_error {
+            let text = result
+                .content
+                .iter()
+                .filter_map(|p| match p {
+                    ContentBlock::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(ToolError::Failed(
+                text.strip_prefix("Error: ").unwrap_or(&text).to_owned(),
+            ))
+        } else {
+            Ok(value)
+        }
     }
 }
 

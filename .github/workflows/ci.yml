@@ -1,0 +1,57 @@
+name: Check and build
+
+on:
+  push:
+    branches: [main, codex-app]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUSTUP_TOOLCHAIN: 1.97.1
+  CARGO_BUILD_JOBS: 3
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 26.13.0
+      - name: Rust toolchain
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace
+      - name: UI regression checks
+        run: for script in ui/dev/*_check.mjs; do node "$script"; done
+      - name: Build standalone macOS app
+        if: runner.os == 'macOS'
+        run: desktop/build.sh --ad-hoc
+      - name: Package app
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent desktop/build/Aether.app desktop/build/Aether-macos-arm64.zip
+      - uses: actions/upload-artifact@v7.0.2
+        if: runner.os == 'macOS'
+        with:
+          name: Aether-macos-arm64
+          path: |
+            desktop/build/Aether.dmg
+            desktop/build/Aether-macos-arm64.zip
+          if-no-files-found: error

@@ -71,6 +71,36 @@ pub enum Thinking {
     None,
 }
 
+/// Chat Completions endpoints agree on the transcript, but use different
+/// switches for enabling thinking. This belongs to the model: one gateway
+/// may serve DeepSeek, GLM and Kimi on the same route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThinkingFormat {
+    #[default]
+    ReasoningEffort,
+    DeepSeek,
+    Zai,
+}
+
+impl ThinkingFormat {
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "reasoning-effort" => Some(Self::ReasoningEffort),
+            "deepseek" => Some(Self::DeepSeek),
+            "zai" => Some(Self::Zai),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReasoningEffort => "reasoning-effort",
+            Self::DeepSeek => "deepseek",
+            Self::Zai => "zai",
+        }
+    }
+}
+
 impl Thinking {
     pub fn parse(text: &str) -> Option<Thinking> {
         match text {
@@ -105,6 +135,7 @@ pub struct ProviderModel {
     pub efforts: Vec<String>,
     pub default_effort: Option<String>,
     pub thinking: Thinking,
+    pub thinking_format: ThinkingFormat,
     /// USD per million tokens, when known.
     pub cost: Option<ModelCost>,
 }
@@ -175,6 +206,7 @@ pub struct Compat {
     pub max_tokens_field: String,
     /// OpenAI Chat Completions: replay reasoning as `reasoning_content`.
     pub reasoning_content: bool,
+    pub tool_stream: bool,
 }
 
 impl Compat {
@@ -202,6 +234,7 @@ impl Compat {
             cache_control: config.cache_control.unwrap_or(true),
             max_tokens_field,
             reasoning_content: config.reasoning_content.unwrap_or(false),
+            tool_stream: config.tool_stream.unwrap_or(false),
         })
     }
 }
@@ -281,7 +314,13 @@ impl ProviderSpec {
             let mut models = Vec::with_capacity(config.models.len());
             for model in &config.models {
                 // Hand-declared models of a catalog route keep what the catalog knows about them.
-                let known = entry.as_ref().and_then(|_| known_model(api, &model.id));
+                let known = entry.as_ref().and_then(|e| {
+                    e.models
+                        .iter()
+                        .find(|m| m.id == model.id)
+                        .cloned()
+                        .or_else(|| known_model(api, &model.id))
+                });
                 models.push(resolve_model(model, api, known.as_ref()).map_err(fail)?);
             }
             models
@@ -323,7 +362,34 @@ impl ProviderSpec {
             models,
             catalog: entry.is_some(),
             models_customized,
-            compat: Compat::resolve(api, &config.compat).map_err(fail)?,
+            compat: Compat::resolve(
+                api,
+                &ProviderCompat {
+                    auth: config
+                        .compat
+                        .auth
+                        .clone()
+                        .or_else(|| entry.as_ref()?.compat.auth.clone()),
+                    cache_control: config
+                        .compat
+                        .cache_control
+                        .or_else(|| entry.as_ref()?.compat.cache_control),
+                    max_tokens_field: config
+                        .compat
+                        .max_tokens_field
+                        .clone()
+                        .or_else(|| entry.as_ref()?.compat.max_tokens_field.clone()),
+                    reasoning_content: config
+                        .compat
+                        .reasoning_content
+                        .or_else(|| entry.as_ref()?.compat.reasoning_content),
+                    tool_stream: config
+                        .compat
+                        .tool_stream
+                        .or_else(|| entry.as_ref()?.compat.tool_stream),
+                },
+            )
+            .map_err(fail)?,
         })
     }
 
@@ -407,6 +473,14 @@ fn resolve_model(
             _ => Thinking::None,
         },
     };
+    let thinking_format = match config.thinking_format.as_deref() {
+        Some(text) => ThinkingFormat::parse(text).ok_or_else(|| {
+            ConfigError(format!(
+                "model {id:?}: unknown thinking_format {text:?} (reasoning-effort, deepseek or zai)"
+            ))
+        })?,
+        None => known.map(|k| k.thinking_format).unwrap_or_default(),
+    };
     let context_window = config
         .context_window
         .or(known.map(|k| k.context_window))
@@ -445,6 +519,7 @@ fn resolve_model(
         efforts,
         default_effort,
         thinking,
+        thinking_format,
         cost,
     })
 }
@@ -544,14 +619,16 @@ pub struct CatalogEntry {
     pub api_key_env: Option<String>,
     pub title_model: Option<String>,
     pub models: Vec<ProviderModel>,
+    pub compat: ProviderCompat,
 }
 
 /// Official Anthropic API root.
 pub const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com";
 
-/// The built-in catalog besides DeepSeek: Anthropic.
+/// The built-in catalog besides DeepSeek. Additional routes mirror the
+/// user's original DSH desktop profile and its installed pi-ai metadata.
 pub fn catalog() -> Vec<CatalogEntry> {
-    vec![CatalogEntry {
+    let mut entries = vec![CatalogEntry {
         id: "anthropic".into(),
         name: "Anthropic".into(),
         api: Api::AnthropicMessages,
@@ -568,7 +645,28 @@ pub fn catalog() -> Vec<CatalogEntry> {
         .iter()
         .filter_map(|id| known_model(Api::AnthropicMessages, id))
         .collect(),
-    }]
+        compat: ProviderCompat::default(),
+    }];
+    let routes: std::collections::BTreeMap<String, ProviderConfig> =
+        serde_json::from_str(include_str!("provider_catalog.json")).expect("provider catalog");
+    for (id, config) in routes {
+        let api = Api::parse(config.api.as_deref().expect("catalog api")).expect("catalog api");
+        entries.push(CatalogEntry {
+            id,
+            name: config.display_name.expect("catalog name"),
+            api,
+            base_url: config.base_url.expect("catalog URL"),
+            api_key_env: config.api_key_env,
+            title_model: config.title_model,
+            models: config
+                .models
+                .iter()
+                .map(|m| resolve_model(m, api, None).expect("catalog model"))
+                .collect(),
+            compat: config.compat,
+        });
+    }
+    entries
 }
 
 pub fn catalog_entry(id: &str) -> Option<CatalogEntry> {
@@ -725,6 +823,7 @@ pub fn known_model(api: Api, id: &str) -> Option<ProviderModel> {
         efforts: row.4.iter().map(|e| e.to_string()).collect(),
         default_effort: Some(row.5.into()),
         thinking: row.6,
+        thinking_format: ThinkingFormat::default(),
         cost: Some(ModelCost {
             input,
             output,
@@ -793,6 +892,76 @@ mod tests {
         assert_eq!(haiku.thinking, Thinking::Budget);
         assert_eq!(haiku.context_window, 200_000);
         assert_eq!(haiku.cost.unwrap().output, 5.0);
+    }
+
+    #[test]
+    fn original_dsh_routes_keep_endpoints_and_model_capabilities() {
+        for (id, url, env, count) in [
+            (
+                "opencode-go",
+                "https://opencode.ai/zen/go/v1",
+                "OPENCODE_GO_API_KEY",
+                4,
+            ),
+            (
+                "xiaomi-token-plan-ams",
+                "https://token-plan-ams.xiaomimimo.com/v1",
+                "XIAOMI_TOKEN_PLAN_AMS_API_KEY",
+                1,
+            ),
+            (
+                "zai",
+                "https://api.z.ai/api/coding/paas/v4",
+                "ZAI_API_KEY",
+                3,
+            ),
+            (
+                "command-code",
+                "https://api.commandcode.ai/provider/v1",
+                "COMMAND_CODE_API_KEY",
+                5,
+            ),
+        ] {
+            let spec = ProviderSpec::resolve(id, &ProviderConfig::default()).unwrap();
+            assert_eq!(spec.api, Api::OpenAiCompletions);
+            assert_eq!(spec.base_url, url);
+            assert_eq!(spec.api_key_env.as_deref(), Some(env));
+            assert_eq!(spec.models.len(), count);
+            assert!(spec.key_required && spec.catalog && spec.compat.bearer);
+        }
+        let config = ProviderConfig {
+            models: vec![ProviderModelConfig {
+                id: "deepseek-v4.1-flash".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let spec = ProviderSpec::resolve("opencode-go", &config).unwrap();
+        let model = &spec.models[0];
+        assert!(model.accepts_images());
+        assert_eq!(model.thinking_format, ThinkingFormat::DeepSeek);
+        assert_eq!(model.efforts, ["low", "high", "max"]);
+        assert_eq!(model.max_tokens, 384_000);
+        assert!(spec.compat.reasoning_content);
+        let spec = ProviderSpec::resolve("zai", &ProviderConfig::default()).unwrap();
+        assert!(spec.compat.tool_stream);
+        assert_eq!(spec.models[0].thinking_format, ThinkingFormat::Zai);
+        assert!(!spec.models[0].efforts.iter().any(|e| e == "off"));
+        assert!(spec.model("glm-5.3-highspeed").unwrap().cost.is_none());
+        let spec =
+            ProviderSpec::resolve("xiaomi-token-plan-ams", &ProviderConfig::default()).unwrap();
+        assert_eq!(spec.models[0].effort(Some("max")).as_deref(), Some("high"));
+        assert!(spec.models[0].cost.is_none());
+        let config = ProviderConfig {
+            compat: ProviderCompat {
+                reasoning_content: Some(false),
+                tool_stream: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let spec = ProviderSpec::resolve("zai", &config).unwrap();
+        assert!(!spec.compat.reasoning_content && !spec.compat.tool_stream);
     }
 
     #[test]

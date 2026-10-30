@@ -1,0 +1,52 @@
+# Aether (dsh-codex)
+
+[English and full documentation](README.md)
+
+**Aether ist eine eigenständige App.** Sie wird neben DeepSeek Harness
+installiert und hat eigene Chats, Einstellungen und Zugangsdaten unter
+`~/.dsh-codex`. Das Repository und die CLI heißen weiterhin `dsh-codex`.
+
+## Installation auf dem Mac
+
+1. Unter [Releases](https://github.com/NavidYSZ/dsh-codex-rs/releases) die
+   macOS-ARM64-DMG herunterladen.
+2. DMG öffnen und **Aether.app** nach **Programme** ziehen.
+3. Aether starten und unter Einstellungen den gewünschten Modellanbieter
+   einrichten. Agent, PTC-Laufzeit und Computer-Use-Helfer sind enthalten.
+
+Voraussetzungen: Apple Silicon (M1 oder neuer), macOS 14 oder neuer.
+Die Vorschau ist ad hoc signiert, noch nicht notarisiert. Falls macOS den
+Start blockiert, nach Prüfung der Downloadquelle die Freigabe für diese App
+unter **Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen**
+verwenden. Die systemweite Sicherheitsfunktion muss nicht abgeschaltet werden.
+
+Für Computer Use optional dem Helfer **DSH Computer Use** Bedienungshilfen
+und Bildschirmaufnahme erlauben.
+
+Du hast bereits unsere frühere `dsh-codex.app`? Beende sie vor dem Start von
+Aether. Die vorhandenen Daten und gespeicherten Instanzen bleiben unter den
+bisherigen Pfaden erhalten. Nur eine Kopie unserer eigenständigen App
+installiert lassen. Das originale DeepSeek Harness ist davon unabhängig.
+
+## PTC, Steering und Warteschlange
+
+- **PTC:** Beim Anlegen eines Chats den Modus PTC auswählen. Der Agent
+  koordiniert Tools über TypeScript (`run_code`), kann unabhängige Aufrufe
+  bündeln und große Ergebnisse vor der Rückgabe filtern. Berechtigungen,
+  Freigaben und Abbruch gelten weiterhin. Standard und Minimal bleiben verfügbar.
+- **Steering:** Während einer Aufgabe fügt Enter die Nachricht am nächsten
+  Verarbeitungsschritt ein. Sie bleibt bis dahin sichtbar.
+- **Warteschlange:** ⌘Enter stellt die Nachricht für einen eigenen nächsten
+  Durchlauf an. In den Einstellungen lassen sich die beiden Tastenbelegungen
+  vertauschen. Fehlgeschlagene Sendungen behalten Text und Anhänge; ein
+  Wiederholungsversuch derselben Sendung wird nicht doppelt ausgeführt.
+
+## Unterschied zum alten Repository
+
+[NavidYSZ/dsh-codex](https://github.com/NavidYSZ/dsh-codex) enthält das ältere
+**Plugin für eine vorhandene DeepSeek-Harness-App**. Dessen Installationsschritte
+bauen keine zweite App. Für die eigenständige App verwende dieses Repository
+und seine Releases.
+
+Quellcode, CLI-/Web-Installation, weitere Funktionen und Einschränkungen stehen
+in der [englischen README](README.md) und den [Desktop-Buildhinweisen](desktop/README.md).

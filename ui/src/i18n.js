@@ -5,7 +5,7 @@ export const de = lang === 'de';
 document.documentElement.lang = lang;
 
 const EN = {
-  brand: 'dsh-codex',
+  brand: 'Aether',
   newChat: 'New chat',
   settings: 'Settings',
   noSessions: 'No chats yet',
@@ -177,6 +177,11 @@ const EN = {
       name: 'Minimal',
       hint: 'Only a terminal and a fixed prompt, for comparisons',
       description: 'The agent works using only a terminal tool. Useful for testing and comparing its basic performance.',
+    },
+    ptc: {
+      name: 'PTC',
+      hint: 'Group tool calls in TypeScript',
+      description: 'Group tool calls in TypeScript; filter results before sending them back to the model.',
     },
   },
   modeSeat: 'Choose the mode for your new chat',
@@ -383,6 +388,8 @@ const EN = {
   ciViewSet: (mode) => `Work details: ${mode}`, ciViewUsage: (modes) => `Usage: /view ${modes}`,
   ciSteerQueue: '⌘↩ steers all queued messages',
   ciQueueCount: (n) => (n === 1 ? '1 queued message' : `${n} queued messages`), ciQueueHint: '⌘↩ on an empty composer steers them all now',
+  ciPendingCount: (n) => (n === 1 ? '1 pending message' : `${n} pending messages`),
+  ciQueueNextStep: 'Waiting for the next step', ciQueueNextTurn: 'Queued for the next turn',
   ciQueueEdit: 'Edit queued message', ciQueueEditUnsupported: 'Contains non-text content; editing is not supported yet',
   ciQueueSave: 'Save', ciQueueCancel: 'Cancel', ciQueueRemove: 'Delete queued message', ciQueueSteer: 'Steer now',
   ciQueueAttachment: 'Queued attachment',
@@ -605,6 +612,7 @@ const EN = {
 
 const DE = {
   ...EN,
+  brand: 'Aether',
   newChat: 'Neuer Chat',
   settings: 'Einstellungen',
   noSessions: 'Noch keine Chats',
@@ -761,6 +769,11 @@ const DE = {
       name: 'Minimal',
       hint: 'Nur ein Terminal und ein fester Prompt – zum Vergleichen',
       description: 'Der Agent arbeitet nur mit einem Terminal-Tool. Gut, um seine Grundleistung zu testen und zu vergleichen.',
+    },
+    ptc: {
+      name: 'PTC',
+      hint: 'Tool-Aufrufe in TypeScript bündeln',
+      description: 'Tool-Aufrufe in TypeScript bündeln und Ergebnisse filtern, bevor sie an das Modell zurückgehen.',
     },
   },
   modeSeat: 'Modus für den neuen Chat wählen',
@@ -962,6 +975,8 @@ const DE = {
   ciViewSet: (mode) => `Arbeitsschritte: ${mode}`, ciViewUsage: (modes) => `Verwendung: /view ${modes}`,
   ciSteerQueue: '⌘↩ bringt alle eingereihten Nachrichten sofort ein',
   ciQueueCount: (n) => (n === 1 ? '1 eingereihte Nachricht' : `${n} eingereihte Nachrichten`), ciQueueHint: '⌘↩ im leeren Feld bringt alle sofort ein',
+  ciPendingCount: (n) => (n === 1 ? '1 ausstehende Nachricht' : `${n} ausstehende Nachrichten`),
+  ciQueueNextStep: 'Wartet auf den nächsten Schritt', ciQueueNextTurn: 'Für die nächste Runde eingereiht',
   ciQueueEdit: 'Eingereihte Nachricht bearbeiten', ciQueueEditUnsupported: 'Enthält mehr als Text und lässt sich noch nicht bearbeiten',
   ciQueueSave: 'Speichern', ciQueueCancel: 'Abbrechen', ciQueueRemove: 'Eingereihte Nachricht löschen', ciQueueSteer: 'Jetzt einbringen',
   ciQueueAttachment: 'Eingereihter Anhang',

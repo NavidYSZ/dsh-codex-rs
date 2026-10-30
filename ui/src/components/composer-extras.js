@@ -91,8 +91,8 @@ export function runCommand(name, arg = '') {
 
 // ---- queued prompts ----------------------------------------------------------
 
-/** Prompts waiting for the next turn, folded from the inbox splices of the log. */
-export function queuedPrompts(events) {
+/** Accepted prompts remain visible until the log removes them from their inbox. */
+export function pendingPrompts(events) {
   const lists = { 'next-turn': [], 'next-step': [] };
   for (const e of events) {
     if (e.type !== 'agent/inbox/spliced') continue;
@@ -100,8 +100,13 @@ export function queuedPrompts(events) {
     const list = lists[d.target];
     if (list) list.splice(d.start ?? 0, d.removedCount ?? 0, ...(d.inserted ?? []));
   }
-  return lists['next-turn'].filter((m) => m.source?.kind === 'user' || m.source === 'user');
+  return ['next-step', 'next-turn'].flatMap((target) => lists[target]
+    .filter((m) => m.source?.kind === 'user' || m.source === 'user')
+    .map((m) => ({ ...m, target })));
 }
+
+/** Only next-turn messages support queue editing and "steer all". */
+export const queuedPrompts = (events) => pendingPrompts(events).filter((m) => m.target === 'next-turn');
 
 const textOf = (m) => (m.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 
@@ -113,8 +118,7 @@ export function useQueue() {
   return running ? queued : [];
 }
 
-async function queueAction(item, body, failure) {
-  const id = store.get().activeId;
+async function queueAction(item, body, failure, id = store.get().activeId) {
   if (!id) return false;
   try {
     await api.updateQueue(id, item, body);
@@ -132,12 +136,12 @@ export async function steerQueued() {
   const queued = running ? queuedPrompts(s.events) : [];
   if (!queued.length) return false;
   for (const m of queued) {
-    if (!(await queueAction(m.id, { action: 'steer' }, t.ciQueueSteerFailed))) break;
+    if (!(await queueAction(m.id, { action: 'steer' }, t.ciQueueSteerFailed, s.activeId))) break;
   }
   return true;
 }
 
-function QueueItem({ item }) {
+function QueueItem({ item, running }) {
   const [edit, setEdit] = useState(null);
   // The prompt may start while it is being edited: the change goes into
   // the composer with a word, not nowhere.
@@ -154,6 +158,7 @@ function QueueItem({ item }) {
     };
   }, []);
   const text = textOf(item);
+  const queued = item.target === 'next-turn';
   const textOnly = (item.content ?? []).every((b) => b.type === 'text');
   const save = async () => {
     const next = edit.trim();
@@ -178,22 +183,31 @@ function QueueItem({ item }) {
     </li>`;
   }
   return html`<li class="qp-item">
-    <span class="qp-text" title=${text}>${text || t.ciQueueAttachment}</span>
-    <button type="button" class="icon-btn qp-btn" aria-label=${t.ciQueueSteer} title=${t.ciQueueSteer}
-      onClick=${() => queueAction(item.id, { action: 'steer' }, t.ciQueueSteerFailed)}><${IconArrowUp} size=${13} /></button>
+    <div class="qp-message">
+      <span class="qp-text" title=${text}>${text || t.ciQueueAttachment}</span>
+      <span class="qp-state">${queued ? t.ciQueueNextTurn : t.ciQueueNextStep}</span>
+    </div>
+    ${queued ? html`<span class="qp-controls">
+    ${running ? html`<button type="button" class="icon-btn qp-btn" aria-label=${t.ciQueueSteer} title=${t.ciQueueSteer}
+      onClick=${() => queueAction(item.id, { action: 'steer' }, t.ciQueueSteerFailed)}><${IconArrowUp} size=${13} /></button>` : null}
     <button type="button" class="icon-btn qp-btn" aria-label=${t.ciQueueEdit} title=${textOnly ? t.ciQueueEdit : t.ciQueueEditUnsupported}
       disabled=${!textOnly} onClick=${() => setEdit(text)}><${IconPencil} size=${13} /></button>
     <button type="button" class="icon-btn qp-btn" aria-label=${t.ciQueueRemove} title=${t.ciQueueRemove}
       onClick=${() => queueAction(item.id, { action: 'remove' }, t.ciQueueRemoveFailed)}><${IconX} size=${13} /></button>
+    </span>` : null}
   </li>`;
 }
 
 function QueuedPrompts() {
-  const queued = useQueue();
-  if (!queued.length) return null;
-  return html`<section class="qp" aria-label=${t.ciQueueCount(queued.length)}>
-    <div class="qp-head"><span>${t.ciQueueCount(queued.length)}</span><span class="qp-hint">${t.ciQueueHint}</span></div>
-    <ul class="qp-list">${queued.map((m) => html`<${QueueItem} key=${m.id} item=${m} />`)}</ul>
+  const events = useStore(store, (s) => s.events);
+  const status = useStore(store, (s) => s.status);
+  const running = status === 'running' || status === 'waiting-approval';
+  const pending = useMemo(() => pendingPrompts(events), [events]);
+  if (!pending.length) return null;
+  const canSteer = running && pending.some((m) => m.target === 'next-turn');
+  return html`<section class="qp" aria-label=${t.ciPendingCount(pending.length)}>
+    <div class="qp-head"><span>${t.ciPendingCount(pending.length)}</span>${canSteer ? html`<span class="qp-hint">${t.ciQueueHint}</span>` : null}</div>
+    <ul class="qp-list">${pending.map((m) => html`<${QueueItem} key=${`${m.target}:${m.id}`} item=${m} running=${running} />`)}</ul>
   </section>`;
 }
 

@@ -92,7 +92,7 @@ final class LocalConnection: Connection {
             update(.error, "Das Programm dsh-codex wurde nicht gefunden (\(binaryPath ?? "nicht im App-Paket")).")
             return
         }
-        update(.starting, "dsh-codex wird gestartet …")
+        update(.starting, "Aether wird gestartet …")
         let pidFile = self.pidFile
         DispatchQueue.global(qos: .userInitiated).async {
             Paths.ensurePrivateDirectory(Paths.run)

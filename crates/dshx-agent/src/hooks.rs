@@ -22,7 +22,8 @@ pub struct PreStep<'a> {
     pub cwd: &'a Path,
     /// Input claimed for this step (user prompts, notices), in order.
     pub claimed: &'a [Message],
-    /// Names of the tools offered to the model when the hooks started, sorted.
+    /// Names of available capabilities when the hooks started, sorted. In PTC
+    /// these are program bindings; the wire schema is the `run_code` transport.
     pub tools: &'a [String],
     /// How the routed model accepts tool-set changes mid-conversation.
     pub tool_update: Option<ToolUpdate>,
@@ -110,7 +111,12 @@ pub(crate) async fn run(
         let c = inner.config.lock().unwrap();
         (c.cwd.clone(), c.route().tool_update)
     };
-    let tools: Vec<String> = inner.tool_schemas().into_iter().map(|t| t.name).collect();
+    // Hooks compose capabilities, even when PTC exposes only the transport to the model.
+    let tools: Vec<String> = inner
+        .capability_schemas()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
     let step = PreStep {
         cwd: &cwd,
         claimed,

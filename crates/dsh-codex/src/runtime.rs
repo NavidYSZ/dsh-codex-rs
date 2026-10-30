@@ -276,9 +276,30 @@ impl Runtime {
             Err(e) => return Err(e.into()),
         };
         let text = crate::config_file::render(&old, &before, &config)?;
-        let tmp = path.with_extension("toml.tmp");
-        std::fs::write(&tmp, text)?;
-        std::fs::rename(&tmp, &path)?;
+        // Provider headers can hold secrets too. Create the atomic write
+        // owner-only instead of widening an existing 0600 config to 0644.
+        let tmp = self
+            .home
+            .join(format!(".config.{}.tmp", dshx_core::new_id()));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let written = options
+            .open(&tmp)
+            .and_then(|mut file| {
+                use std::io::Write;
+                file.write_all(text.as_bytes())?;
+                file.sync_all()
+            })
+            .and_then(|_| std::fs::rename(&tmp, &path));
+        if let Err(error) = written {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(error.into());
+        }
         self.skills.set_policy(Some(config.skills.clone()));
         self.settings_version.fetch_add(1, Ordering::SeqCst);
         Ok(config.clone())
@@ -392,7 +413,7 @@ impl Runtime {
         config: &AgentConfig,
     ) -> ToolRegistry {
         match preset {
-            Preset::Standard => self.session_tools(
+            Preset::Standard | Preset::Ptc => self.session_tools(
                 log.id(),
                 &config.cwd,
                 &log.events(),
@@ -496,7 +517,7 @@ impl Runtime {
         );
         // Skills, delegation, goals, Teams and the time context belong to
         // Standard's composition.
-        if preset == Preset::Standard {
+        if preset != Preset::Minimal {
             agent.add_pre_step_hook(Arc::new(SkillsHook {
                 skills: self.skills.clone(),
             }));

@@ -1,5 +1,7 @@
-// Renders the app icon (the ui/favicon.svg prompt mark on the macOS icon grid)
-// into an .iconset directory for iconutil.
+// Renders the macOS app icon (the Aether mark on the macOS icon grid) into an
+// .iconset directory for iconutil. Same composition as the iOS default icon
+// (brand/tools/make-ios-icon.swift): the 32-unit mark of brand/aether-mark.svg
+// on the accent gradient, with the soft glow inside the ring.
 //
 //   make-icon <out.iconset>
 import AppKit
@@ -24,39 +26,51 @@ func render(_ pixels: Int) -> Data {
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: -10), blur: 24, color: NSColor.black.withAlphaComponent(0.35).cgColor)
     ctx.addPath(shape)
-    ctx.setFillColor(NSColor(srgbRed: 0.10, green: 0.11, blue: 0.12, alpha: 1).cgColor)
+    ctx.setFillColor(NSColor(srgbRed: 0.26, green: 0.38, blue: 0.94, alpha: 1).cgColor)
     ctx.fillPath()
     ctx.restoreGState()
 
     ctx.saveGState()
     ctx.addPath(shape)
     ctx.clip()
+    // Accent gradient, top #5F80FA → bottom #3454E4 (brand/colors.json accent #3E62F0 in the middle).
     let gradient = CGGradient(
         colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [NSColor(srgbRed: 0.20, green: 0.21, blue: 0.23, alpha: 1).cgColor,
-                 NSColor(srgbRed: 0.08, green: 0.085, blue: 0.095, alpha: 1).cgColor] as CFArray,
+        colors: [NSColor(srgbRed: 0x5F / 255, green: 0x80 / 255, blue: 0xFA / 255, alpha: 1).cgColor,
+                 NSColor(srgbRed: 0x34 / 255, green: 0x54 / 255, blue: 0xE4 / 255, alpha: 1).cgColor] as CFArray,
         locations: [0, 1])!
     ctx.drawLinearGradient(gradient, start: CGPoint(x: 512, y: 924), end: CGPoint(x: 512, y: 100), options: [])
     // Hairline highlight along the top edge.
     ctx.addPath(CGPath(roundedRect: body.insetBy(dx: 3, dy: 3), cornerWidth: 183, cornerHeight: 183, transform: nil))
-    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.10).cgColor)
+    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.14).cgColor)
     ctx.setLineWidth(6)
     ctx.strokePath()
     ctx.restoreGState()
 
-    // favicon.svg: viewBox 36, rect 2…34. Map its 32 units onto the 824 pt body (y flipped).
-    let unit: CGFloat = 824 / 32
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: 100 + (x - 2) * unit, y: 924 - (y - 2) * unit) }
-    ctx.setStrokeColor(NSColor.white.cgColor)
-    ctx.setLineWidth(2.6 * unit)
-    ctx.setLineCap(.round)
-    ctx.setLineJoin(.round)
-    ctx.move(to: p(11, 13.5))
-    ctx.addLine(to: p(16, 18))
-    ctx.addLine(to: p(11, 22.5))
-    ctx.move(to: p(19.5, 23))
-    ctx.addLine(to: p(25.5, 23))
+    // The mark: aether-mark.svg's 32-unit box (y down) on a 612 pt box centred in the body
+    // (the same 760/1024 proportion as the iOS icon): ring r 10.4, stroke 3, bead r 4 at 45°.
+    let box: CGFloat = 824 * 760 / 1024
+    let unit = box / 32
+    let origin = 100 + (824 - box) / 2
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: origin + x * unit, y: 924 - (origin - 100) - y * unit) }
+    let center = p(16, 16)
+    let bead = p(16 + 10.4 * cos(.pi / 4), 16 - 10.4 * sin(.pi / 4))
+    let white = NSColor.white
+    let glow = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                          colors: [white.withAlphaComponent(0.22).cgColor, white.withAlphaComponent(0).cgColor] as CFArray,
+                          locations: [0, 1])!
+    ctx.drawRadialGradient(glow, startCenter: center, startRadius: 0, endCenter: center, endRadius: (10.4 - 1.5) * unit, options: [])
+    let halo = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                          colors: [white.withAlphaComponent(0.28).cgColor, white.withAlphaComponent(0).cgColor] as CFArray,
+                          locations: [0, 1])!
+    ctx.drawRadialGradient(halo, startCenter: bead, startRadius: 4 * unit, endCenter: bead, endRadius: 4 * 2.6 * unit, options: [])
+    ctx.setStrokeColor(white.cgColor)
+    ctx.setLineWidth(3 * unit)
+    ctx.addArc(center: center, radius: 10.4 * unit, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
     ctx.strokePath()
+    ctx.setFillColor(white.cgColor)
+    ctx.addArc(center: bead, radius: 4 * unit, startAngle: 0, endAngle: 2 * .pi, clockwise: false)
+    ctx.fillPath()
 
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!

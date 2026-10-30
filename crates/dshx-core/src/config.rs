@@ -31,7 +31,7 @@ pub struct Config {
     /// `ask`: wider access needs the user's OK; `never`: never ask (deny in headless).
     pub approval: String,
     pub max_tokens: u32,
-    /// Agent preset of new chats (`standard`, `minimal`); unset = `standard`.
+    /// Agent preset of new chats (`standard`, `ptc`, `minimal`); unset = `standard`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_preset: Option<String>,
     pub codex: CodexConfig,
@@ -222,6 +222,9 @@ pub struct ProviderCompat {
     /// messages of the same model back as `reasoning_content`.
     #[serde(alias = "reasoningContent", skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<bool>,
+    /// Z.ai: stream tool calls instead of buffering them at the endpoint.
+    #[serde(alias = "toolStream", skip_serializing_if = "Option::is_none")]
+    pub tool_stream: Option<bool>,
 }
 
 impl ProviderCompat {
@@ -255,6 +258,10 @@ pub struct ProviderModelConfig {
     /// later), `budget` (`budget_tokens`), `effort` (DeepSeek style) or `none`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<String>,
+    /// Chat Completions reasoning parameters: `reasoning-effort` (default),
+    /// `deepseek` (`thinking.type`) or `zai` (also preserves thinking).
+    #[serde(alias = "thinkingFormat", skip_serializing_if = "Option::is_none")]
+    pub thinking_format: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cost: Option<ModelCost>,
 }

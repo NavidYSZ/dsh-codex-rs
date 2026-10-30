@@ -1,170 +1,135 @@
-# dsh-codex
+# Aether (dsh-codex)
 
-A standalone coding agent for DeepSeek: one Rust binary
-that talks to the model exactly like [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-(DSH) 0.2 and brings this project's Codex look and macOS tools with it, without
-Node.js and without DSH.
+[Deutsch](README.de.md)
 
-> Preview. Everything below is tested offline against a scripted DeepSeek
-> stand-in; runs against the real DeepSeek API are still to come.
-> Not affiliated with OpenAI or DeepSeek. "Codex" is a trademark of OpenAI;
-> this project contains no Codex code or assets.
+A standalone coding agent with a native macOS app, a web interface and a Rust
+CLI. It supports DeepSeek and additional configured model providers, MCP,
+skills, subagents, goals and schedules.
 
-The repository also contains the original **DSH plugin** that brings the same
-look and tools into the DeepSeek Harness desktop app: see [PLUGIN.md](PLUGIN.md)
-([Deutsch](PLUGIN.de.md)).
+**Aether installs alongside DeepSeek Harness.** It has its own application ID
+and stores chats and settings in `~/.dsh-codex`. The repository and executable
+retain the technical name `dsh-codex`.
 
-## Why
+Looking for the extension to the original DeepSeek Harness? That is the
+separate [dsh-codex plugin](https://github.com/NavidYSZ/dsh-codex).
+The plugin installation instructions do not install Aether.
 
-| Measured on the same Linux host, model answering instantly | DSH 0.2 (Node) | dsh-codex (Rust) |
-|---|---:|---:|
-| One answer, no tools | 1,713 ms, 183 MB | 18 ms, 17 MB |
-| Five bash calls | 2,236 ms, 225 MB | 92 ms, 21 MB |
-| Install size | 518 MB (288 packages) | 17 MB (one file, UI included) |
+> Preview software. Not affiliated with OpenAI or DeepSeek. “Codex” is an
+> OpenAI trademark. This project contains no OpenAI Codex code or assets.
 
-Median of 7 runs, `tools/bench/compare.py`. Real model calls take seconds,
-so a single task finishes only slightly faster; the gain shows with many
-parallel agents, many short jobs, and on small machines.
+## Install the macOS app
 
-## What is the same as DSH
+1. Download the macOS ARM64 disk image from
+   [Releases](https://github.com/NavidYSZ/dsh-codex-rs/releases).
+2. Open it and drag **Aether.app** into **Applications**.
+3. Launch Aether, choose “This Mac”, and configure your model provider in
+   Settings. The app includes its own agent, Node runtime for PTC, and
+   optional Computer Use helper. DeepSeek Harness is not required.
 
-- **Towards the model:** tool names, descriptions and schemas, the system
-  prompt, runtime-context messages and the Anthropic-Messages request bodies
-  are byte-identical to DSH 0.2.0-rc.2 for the same situation, so answers and
-  DeepSeek's prefix cache behave the same.
-- **Sessions:** DSH session format v4. A session started by dsh-codex can be
-  continued by the official `dsh` and the other way round.
-- **SDK:** `dsh-codex sdk` speaks the DSH SDK protocol; the official Python
-  SDK works unchanged when pointed at this binary (`dsh_bin=...`).
+Requires **macOS 14 or newer and Apple Silicon**. The preview is ad-hoc signed,
+not notarized. If macOS blocks its first launch, use the app-specific
+“Open Anyway” control in System Settings → Privacy & Security after checking
+that the download came from this repository. Do not disable Gatekeeper globally.
 
-## What is different
+For Computer Use, allow **DSH Computer Use** under Accessibility and Screen
+Recording. Those permissions are optional for ordinary chat and coding.
 
-- **Nothing extra leaves your machine.** DSH attaches its full session log
-  (`dsh_session_log`), a plugin inventory and an anonymous user id to every
-  model request by default. dsh-codex sends only what the request needs.
-- **Own web UI** in the Codex style of this project (`dsh-codex web`) instead
-  of the DSH app. The original DSH plugin ([PLUGIN.md](PLUGIN.md)) still works.
-- **No JS plugins.** Extensions are skills, MCP servers and plugins in the
-  Codex/Claude formats (skills and MCP servers; hooks, commands and agents
-  are not loaded).
-- **Compaction between turns.** DSH condenses history only near the context
-  limit (about 678K of DeepSeek's 1M tokens), mid-turn. dsh-codex also
-  compacts when a turn ends, from 200K tokens by default or after every turn
-  (Settings → Context, `[codex.compaction]`), while DeepSeek still caches the
-  prefix. Summaries are written before oversized tool results are pruned and
-  with the chat's reasoning effort (DeepSeek's prefix depends on it), so the
-  summarizer reads the cached prefix; only the kept tail is pruned. The
-  checkpoint carries the open `todo_write` list.
-- Not ported: web search, workflows/`run_code`, voice, office documents, the
-  Electron app. Goals, schedules and Agent Teams are ported (see
-  [Configuration](#configuration)).
+Upgrading an earlier `dsh-codex.app`: quit it before opening Aether. Your data,
+provider credentials and saved instances retain their existing paths. Keep
+only one installed copy of this standalone app; the original DeepSeek Harness
+is a separate application. New installations start with one local instance;
+add your own remote servers through the instance editor.
 
-## Build
+## Modes
 
-```sh
-cargo build --release -p dsh-codex     # → target/release/dsh-codex
-```
+| Mode | Behavior |
+|---|---|
+| Standard | The model calls tools directly. |
+| PTC | The model writes TypeScript in `run_code`, calls `tools.<name>(args)`, and returns selected output instead of entire intermediate results. |
+| Minimal | One persistent shell and a minimal prompt. |
 
-On macOS also build the helper for `computer`, `app` and the mini window:
-`helper/build.sh --install` (see [PLUGIN.md](PLUGIN.md#install) for the
-macOS permissions it needs).
+Select **PTC** when creating a chat, or set it as the default under Settings.
+Existing chats retain the mode they were created with. PTC keeps Standard's
+skills, MCP, subagents, goals and compaction; tool permissions, approval and
+cancellation still apply. Programs run with fresh state, support erasable
+TypeScript syntax (types, interfaces and assertions), and default to a
+120-second limit, capped at 10 minutes. A TypeScript enum or other syntax
+requiring transpilation is not supported.
 
-## Use
+For example, the agent can read several files using `Promise.all`, filter the
+structured results, then `console.log` only the lines relevant to your task.
+The separate DSH `workflow` orchestration tool is not implemented.
 
-```sh
-dsh-codex login                        # store your DeepSeek API key (or set DEEPSEEK_API_KEY)
-dsh-codex "run the tests and fix what fails"
-dsh-codex --json "…"                   # DSH's NDJSON event stream
-dsh-codex --session-id <id> "continue"
-dsh-codex web                          # Codex-style UI in your browser
-dsh-codex sdk                          # DSH SDK JSON-RPC on stdio
-```
+## Messages while working
 
-Options: `-C <dir>`, `--model deepseek-flash|deepseek-v4-pro`,
-`--effort off|low|high|max`, `--sandbox read-only|workspace-write|danger-full-access`.
+By default, **Enter** steers a new message into the running task at its next
+step; **⌘Enter** (Ctrl+Enter in the browser) queues a new turn afterwards.
+Settings can swap those defaults. Pending steering and queued messages stay
+visible until consumed or explicitly removed. Queued follow-ups run in order.
+A failed submission keeps the draft and its attachments.
 
-## Web UI
+## Build from source
 
-`dsh-codex web` follows the layout of the Codex app:
-
-- **Sidebar:** Pinned, Projects (one group per folder, new chat per project)
-  and Chats without a project, each in a private folder under
-  `$DSHX_HOME/chats/`. Rename, pin, mark unread, archive and delete from the
-  row menu or with a right-click. The bell lists every chat by activity with
-  running, waiting and unread marks. ⌘K searches chats and actions.
-- **Side panel** (button top right): all file changes of the chat, the chat's
-  folder, open files and the live view. Files preview as code, Markdown,
-  CSV/TSV, JSON, images, PDF, video/audio or rendered HTML; they load through a
-  read-only grant for the chat's folder, and pages run sandboxed. Paths in tool
-  rows, links and inline code open in the panel.
-- **Live view:** the background browser's screencast (and the Mac tools'
-  screenshots) as a floating picture or in the panel, with Stop.
-- **Plugins** (sidebar): installed plugins and marketplaces (Codex or Claude
-  format), connectors with sign-in (OAuth or token), skills and MCP servers.
-- **Automations** (sidebar): reminders and recurring tasks the agent created
-  with `schedule_create`, with next run, chat, prompt and delivery history.
-  The **goal bar** above the composer shows a chat's goal (set one from the
-  composer's +), and a **Team** tab in the panel shows an Agent Team.
-- **While the agent works,** Enter adds a message to the running task and ⌘↩
-  queues it for afterwards (switchable in Settings). Notifications report
-  chats that finish, fail or wait for approval in the background.
-
-## Try it on a Mac
-
-Everything so far was tested on Linux and against a scripted DeepSeek
-stand-in. This is the checklist for a first run on macOS 14 or later (Apple
-silicon) with the real DeepSeek API.
-
-**1. Build** (about 3–5 minutes the first time)
+Install Rust 1.97.1 or newer. On a Mac, also install Xcode Command Line Tools
+and Python 3, then:
 
 ```sh
-xcode-select --install                 # once, if the command line tools are missing
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # once, installs Rust
 git clone https://github.com/NavidYSZ/dsh-codex-rs.git
 cd dsh-codex-rs
-cargo build --release -p dsh-codex
-helper/build.sh --install              # "DSH Computer Use.app" for computer, app and the mini window
+desktop/build.sh --ad-hoc
 ```
 
-Then allow "DSH Computer Use" in **System Settings → Privacy & Security**
-under **Accessibility** and **Screen & System Audio Recording**.
+This produces `desktop/build/Aether.app` and `desktop/build/Aether.dmg`.
+The build downloads a pinned Node.js runtime from nodejs.org and verifies its
+SHA-256 before packaging it. No personal settings or API keys enter the app.
+See [the desktop build notes](desktop/README.md) for signing and instance setup.
 
-**2. Key and first answer**
+For the CLI or web interface on macOS/Linux:
 
 ```sh
-./target/release/dsh-codex login       # paste your DeepSeek API key
-./target/release/dsh-codex "Say hello in one sentence."
+cargo build --locked --release -p dsh-codex
+./target/release/dsh-codex login
+./target/release/dsh-codex --preset ptc "Read the project and summarize it"
+./target/release/dsh-codex web
 ```
 
-**3. Web UI**
+PTC outside the app requires **Node.js 22.18 or newer** on PATH, or an explicit
+`DSHX_NODE` executable path. Restricted PTC execution also requires a working
+OS sandbox (`sandbox-exec` on macOS or bubblewrap on Linux); it fails with an
+error if confinement is unavailable. Standard and Minimal do not need Node.
+
+Useful options: `-C <folder>`, `--model <id>`, `--effort off|low|high|max`,
+`--sandbox read-only|workspace-write|danger-full-access`, `--json`,
+`--session-id <id>`, and `sdk` for the DSH-compatible SDK protocol.
+
+## Interface and capabilities
+
+- Projects, pinned chats, search, file/diff previews and a side panel.
+- Background browser, macOS app controls and optional foreground Computer Use.
+- Skills, MCP servers, OAuth connectors and Codex/Claude-format plugin catalogs.
+- Provider/model selection, goals, schedules, agent teams and context compaction.
+- Optional remote instances through SSH or an authenticated server URL.
+
+Session format v4 and the SDK follow DeepSeek Harness. Standard tool schemas
+and protocol compatibility are covered by fixtures from DSH 0.2.0-rc.2; PTC
+follows the `run_code` contract of DSH 0.2.1-rc.5. This is an independent
+implementation, not a claim of full feature parity. Web search providers,
+DSH workflows, voice and office-document integrations are not implemented.
+
+## Development and releases
 
 ```sh
-./target/release/dsh-codex web         # opens the Codex-style UI in your browser
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace
+for script in ui/dev/*_check.mjs; do node "$script"; done
 ```
 
-Pick a folder on the start page and try, one after another:
-
-| Try | Expect |
-|---|---|
-| "List the files here and summarize the README." | `Ran ls`, `Read …` rows, an answer |
-| "Create hello.py that prints hi, then run it." | an `Edited`/`Wrote` row with a diff, `Ran python3 hello.py` |
-| "Open example.com in the browser and tell me the heading." | `Browser · Open …` rows with screenshots; needs Chrome, Chromium, Brave or Edge in /Applications |
-| "Open Calculator and compute 7 × 6." | `Calculator · Click …` rows; the mini window at the bottom right shows the steps; Stop halts the agent |
-| "Take a screenshot of my screen and describe it." | `Computer · Look at screen`; the agent cursor and the "DeepSeek is using your computer" banner; Esc cancels |
-
-**If something fails**
-
-- Shell commands are refused with a sandbox message: switch the access mode
-  under the composer to **Full access**, or run with
-  `--sandbox danger-full-access`. The macOS sandbox profile (`sandbox-exec`)
-  is new and has not run on a Mac yet.
-- A tool is missing: Settings in the web UI lists Browser, Apps and Computer
-  as on or off. `computer` and `app` need the helper from step 1; without it
-  they fail with a clear error and everything else still works. The browser
-  looks for Chrome, Chromium, Brave and Edge; for another path set
-  `[codex.browser] chrome = "…"` in `~/.dsh-codex/config.toml`.
-- Run `cargo test --workspace` once; Chromium and bubblewrap tests skip
-  themselves where those are missing.
+GitHub Actions checks Linux and macOS and builds the standalone Mac app on each
+push to `main`. Releases are built from tagged source; see
+[CHANGELOG.md](CHANGELOG.md). Model tests use local scripted providers, so the
+suite needs no API keys. Browser/sandbox-specific checks may skip when their
+host dependencies are absent.
 
 ## Configuration
 
@@ -187,6 +152,27 @@ chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 [codex.mini]
 doneAfter = 6
 ```
+
+Settings → Models offers DeepSeek, Anthropic, OpenCode Go, Xiaomi Token Plan
+AMS, Z.ai Coding Plan and Command Code. Add a provider with its existing key;
+its models then appear together in the composer's model picker. Keys are
+stored separately in `credentials.toml` (0600). A chat can switch providers
+between turns; reasoning is replayed only to the provider and model that
+generated it.
+
+To transfer providers and keys from the original DSH desktop profile into a
+running instance (requires Python and PyYAML):
+
+```sh
+python3 tools/dev/import_dsh_providers.py --dry-run
+python3 tools/dev/import_dsh_providers.py \
+  --ready-file "$HOME/Library/Application Support/dsh-codex/run/local-local.json" \
+  --backup-home "$HOME/.dsh-codex"
+```
+
+Existing provider routes are skipped unless `--overwrite` is supplied.
+The import keeps the default model, permissions and other settings. See
+[provider compatibility and verification](docs/providers.md).
 
 Goals, schedules and Agent Teams work like in DSH 0.2.0-rc.2. Goals are on
 (as in dsh-base); schedules (with the request clock) and Agent Teams are

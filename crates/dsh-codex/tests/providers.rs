@@ -237,6 +237,11 @@ async fn providers_routes_and_a_chat_across_three_routes() {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600);
+        let config_mode = std::fs::metadata(home.path().join("config.toml"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(config_mode & 0o777, 0o600);
     }
     let config = std::fs::read_to_string(home.path().join("config.toml")).unwrap();
     assert!(

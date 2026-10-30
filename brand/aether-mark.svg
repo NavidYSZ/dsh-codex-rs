@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Aether">
+  <!-- Aether mark: a ring (the sphere of the upper air) and a point on it (what moves in it). One shape, nonzero fill; ink on light, light ink on dark. Construction: brand/BRAND.md. -->
+  <style>path{fill:#121420}@media (prefers-color-scheme:dark){path{fill:#F2F3F8}}</style>
+  <path fill-rule="nonzero" d="M4.100 16.000A11.9 11.9 0 1 1 27.900 16.000A11.9 11.9 0 1 1 4.100 16.000ZM7.100 16.000A8.9 8.9 0 1 0 24.900 16.000A8.9 8.9 0 1 0 7.100 16.000ZM19.354 8.646A4.0 4.0 0 1 1 27.354 8.646A4.0 4.0 0 1 1 19.354 8.646Z"/>
+</svg>

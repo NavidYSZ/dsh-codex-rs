@@ -227,16 +227,16 @@ async fn pressure_compaction_replaces_the_oldest_span() {
         .position(|x| x == "compaction/start")
         .expect("compaction ran");
     assert_eq!(
-        &k[start - 2..start + 10],
+        &k[start - 1..start + 11],
         [
             "turn/start",
-            "agent/inbox/spliced",
             "compaction/start",
             "compaction/summary",
             "user/message",
             "compaction/end",
             "step/start",
             "user/message",
+            "agent/inbox/spliced",
             "request/header",
             "assistant/message",
             "step/end",
@@ -245,13 +245,13 @@ async fn pressure_compaction_replaces_the_oldest_span() {
     );
     let all = h.log.events();
     let summary = &of_kind(&h.log, "compaction/summary")[0];
-    assert_eq!(summary.data["shadowedRange"], json!({"start": 8, "end": 9}));
+    assert_eq!(summary.data["shadowedRange"], json!({"start": 7, "end": 8}));
     assert_eq!(summary.data["llmStreamCall"], true);
     assert_eq!(summary.data["maxTokens"], 10_000);
     let checkpoint = &all[summary.seq as usize + 1];
     assert_eq!(
         checkpoint.extra["surfaceOp"],
-        json!({"op": "replace", "startSeq": 8, "endSeq": 9})
+        json!({"op": "replace", "startSeq": 7, "endSeq": 8})
     );
     assert_eq!(checkpoint.extra["sourceEventSeqs"][1], summary.seq);
     assert!(
@@ -679,7 +679,7 @@ async fn title_request_runs_beside_the_first_step() {
     let fallback = &of_kind(&h.log, "session/title")[0];
     assert_eq!(
         fallback.data,
-        json!({"title": "Bitte refactor the parser module", "messageSeqs": [8], "source": {"kind": "fallback"}})
+        json!({"title": "Bitte refactor the parser module", "messageSeqs": [7], "source": {"kind": "fallback"}})
     );
     let req = &of_kind(&h.log, "session/title-llm-request")[0];
     assert_eq!(req.data["maxTokens"], 64);
@@ -687,7 +687,7 @@ async fn title_request_runs_beside_the_first_step() {
         req.data["route"],
         json!({"provider": "deepseek-official", "model": M})
     );
-    assert!(req.data["messages"][0]["content"][0]["text"].as_str().unwrap().starts_with("Generate the session title from this JSON array of human messages:\n[{\"seq\":8,\"text\":"));
+    assert!(req.data["messages"][0]["content"][0]["text"].as_str().unwrap().starts_with("Generate the session title from this JSON array of human messages:\n[{\"seq\":7,\"text\":"));
     assert_eq!(
         title.data["source"]["model"],
         json!({"provider": "deepseek-official", "model": M})

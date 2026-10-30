@@ -319,6 +319,7 @@ fn tab_list(text: &str) -> Vec<(u64, bool, String)> {
 
 // ---- process inspection -----------------------------------------------------
 
+#[cfg(target_os = "linux")]
 fn group_members(pgid: i32) -> Vec<i32> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir("/proc").unwrap().flatten() {
@@ -340,6 +341,29 @@ fn group_members(pgid: i32) -> Vec<i32> {
     out
 }
 
+#[cfg(target_os = "macos")]
+fn group_members(pgid: i32) -> Vec<i32> {
+    let output = std::process::Command::new("/bin/ps")
+        .args(["-axo", "pid=,pgid=,stat="])
+        .output()
+        .expect("inspect Chrome's process group with ps");
+    assert!(
+        output.status.success(),
+        "ps failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pid = fields.next()?.parse::<i32>().ok()?;
+            let group = fields.next()?.parse::<i32>().ok()?;
+            let state = fields.next()?;
+            (group == pgid && !state.starts_with('Z')).then_some(pid)
+        })
+        .collect()
+}
+
 async fn assert_group_gone(pgid: i32) {
     let end = Instant::now() + Duration::from_secs(5);
     loop {
@@ -356,6 +380,7 @@ async fn assert_group_gone(pgid: i32) {
 }
 
 /// TCP sockets in LISTEN state owned by any process of the group.
+#[cfg(target_os = "linux")]
 fn listening_sockets(pgid: i32) -> Vec<String> {
     let mut inodes = std::collections::HashSet::new();
     for pid in group_members(pgid) {
@@ -389,10 +414,75 @@ fn listening_sockets(pgid: i32) -> Vec<String> {
     found
 }
 
+#[cfg(target_os = "macos")]
+fn listening_sockets(pgid: i32) -> Vec<String> {
+    let members = group_members(pgid);
+    if members.is_empty() {
+        return Vec::new();
+    }
+    let pids = members
+        .iter()
+        .map(i32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let output = std::process::Command::new("/usr/sbin/lsof")
+        .args(["-nP", "-a", "-p", &pids, "-iTCP", "-sTCP:LISTEN", "-Fn"])
+        .output()
+        .expect("inspect Chrome's listening sockets with lsof");
+    // lsof exits 1 when the selection matches no open files. Other failures
+    // must not make the no-debugging-port assertion pass vacuously.
+    assert!(
+        output.status.success() || (output.status.code() == Some(1) && output.stderr.is_empty()),
+        "lsof failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.strip_prefix('n').map(str::to_owned))
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
 fn cmdline(pid: i32) -> String {
     std::fs::read(format!("/proc/{pid}/cmdline"))
         .map(|b| String::from_utf8_lossy(&b).replace('\0', " "))
         .unwrap_or_default()
+}
+
+#[cfg(target_os = "macos")]
+fn cmdline(pid: i32) -> String {
+    let output = std::process::Command::new("/bin/ps")
+        .args(["-ww", "-p", &pid.to_string(), "-o", "command="])
+        .output()
+        .expect("inspect Chrome's full command line with ps");
+    assert!(
+        output.status.success(),
+        "ps could not inspect Chrome pid {pid}"
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_owned()
+}
+
+#[cfg(target_os = "linux")]
+fn display_available() -> bool {
+    ["DISPLAY", "WAYLAND_DISPLAY"]
+        .iter()
+        .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
+}
+
+#[cfg(target_os = "macos")]
+fn display_available() -> bool {
+    // Native macOS Chrome uses WindowServer, not X11/Wayland environment
+    // variables. Keep the show/hide test active on desktop and macOS CI hosts.
+    let output = std::process::Command::new("/bin/ps")
+        .args(["-axo", "comm="])
+        .output()
+        .expect("detect macOS WindowServer");
+    assert!(output.status.success(), "ps could not inspect WindowServer");
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        Path::new(line.trim())
+            .file_name()
+            .is_some_and(|name| name == "WindowServer")
+    })
 }
 
 fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
@@ -925,10 +1015,13 @@ async fn cancellation_stops_the_call_and_frees_the_browser() {
     h.finish().await;
 }
 
+// Missing DISPLAY/WAYLAND_DISPLAY is a Linux-specific refusal contract.
+// macOS exercises its native WindowServer path in show_and_hide below.
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn show_fails_gracefully_without_a_display() {
     let Some(chrome) = chrome() else { return };
-    if std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some() {
+    if display_available() {
         eprintln!("a display is available; skipping");
         return;
     }
@@ -1043,7 +1136,12 @@ async fn mini_window_gets_title_steps_frames_and_can_stop() {
         // `open` shows before navigating: still about:blank
         assert_eq!(shows[0].title, "Browser");
         assert_eq!(shows[0].activity, format!("Öffnet {host}"));
-        assert_eq!(shows[0].icon, "globe");
+        let expected_icon = chrome
+            .ancestors()
+            .find(|path| path.extension().is_some_and(|extension| extension == "app"))
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "globe".to_owned());
+        assert_eq!(shows[0].icon, expected_icon);
         assert_eq!((shows[0].width, shows[0].height), (1280, 800));
         assert_eq!(shows[1].title, format!("Browser · {host}"));
         assert_eq!(shows[1].activity, "Klickt „Search“");
@@ -1103,12 +1201,12 @@ async fn browser_tool_factory() {
     // lazy: building the tool starts nothing, so dropping it here is free
 }
 
-/// Needs a display (e.g. `xvfb-run -a cargo test -p dshx-browser --test chrome show_and_hide`).
+/// Needs X11/Wayland on Linux (e.g. xvfb-run) or WindowServer on macOS.
 #[tokio::test]
 async fn show_and_hide_keep_tabs_with_a_display() {
     let Some(chrome) = chrome() else { return };
-    if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none() {
-        eprintln!("no display; skipping");
+    if !display_available() {
+        eprintln!("no native display server; skipping only the visible-window test");
         return;
     }
     let _serial = SERIAL.lock().await;

@@ -117,7 +117,10 @@
 .qp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .qp-item { display: flex; align-items: center; gap: 2px; min-height: 30px; padding: 0 2px 0 6px; border-radius: 8px; }
 .qp-item:hover { background: var(--hover); }
-.qp-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.qp-message { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 4px 0; }
+.qp-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.qp-state { font-size: 11px; color: var(--ink-3); }
+.qp-controls { display: flex; }
 .qp-btn { width: 26px; height: 26px; color: var(--ink-3); }
 .qp-btn:hover:not(:disabled) { color: var(--ink); }
 .qp-item.is-editing { flex-direction: column; align-items: stretch; gap: 6px; padding: 4px; background: none; }

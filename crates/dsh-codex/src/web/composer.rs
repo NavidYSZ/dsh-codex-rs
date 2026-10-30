@@ -107,7 +107,7 @@ impl dshx_server::Composer for WebComposer {
         let b = self.backend()?;
         let chat = self.chat(id).await?;
         let active = match chat.preset {
-            Preset::Standard => b.runtime.active_mcp(id, &chat.events),
+            Preset::Standard | Preset::Ptc => b.runtime.active_mcp(id, &chat.events),
             Preset::Minimal => Vec::new(),
         };
         Ok(json!({ "active": active }))
@@ -117,7 +117,7 @@ impl dshx_server::Composer for WebComposer {
         let b = self.backend()?;
         let chat = self.chat(id).await?;
         anyhow::ensure!(
-            chat.preset == Preset::Standard,
+            chat.preset != Preset::Minimal,
             "MCP servers are not part of Minimal mode"
         );
         if !b.runtime.mcp_server_names().contains(server) {
@@ -131,7 +131,7 @@ impl dshx_server::Composer for WebComposer {
         let b = self.backend()?;
         let s = b.session_handle(id, &Overrides::default()).await?;
         anyhow::ensure!(
-            s.agent.config().preset == Preset::Standard,
+            s.agent.config().preset != Preset::Minimal,
             "context compaction is not part of Minimal mode"
         );
         Ok(match s.agent.compact_now().await? {

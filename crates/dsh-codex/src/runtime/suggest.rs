@@ -323,7 +323,7 @@ impl Runtime {
     }
 
     fn command_items(&self, ctx: &SuggestContext, q: &str) -> Vec<Value> {
-        let standard = ctx.preset == dshx_agent::Preset::Standard;
+        let standard = ctx.preset != dshx_agent::Preset::Minimal;
         let chat = ctx.session.is_some();
         let mut items = Vec::new();
         for (name, label, description) in COMMANDS {
