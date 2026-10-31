@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0-alpha.2 — 2026-10-31
+
+- Add Settings → Browser Use: saved and active browser configuration, explicit
+  restart status, an isolated local open/type/click/read diagnostic, and browser
+  MCP connection/tool checks. Existing tabs, profiles and sign-ins stay intact.
+- Refresh MCP tool handles and schemas between steps even when names do not
+  change; restore instructions after delayed connections, reconnects and
+  compaction. Bound cancellation-notification cleanup when a transport stalls.
+- Document the distinct browser and MCP result shapes in PTC. Keep website work
+  on the requested browser/profile; desktop interaction requires explicit user
+  intent. Configure newer helper previews for both Aether and DeepSeek Harness.
+- Add text pagination to browser `read`; long pages no longer repeat the same
+  prefix after scrolling. Invalid explicit browser paths no longer silently
+  select a different executable.
+- Apply configured compaction between completed PTC/active Goal work rounds as
+  well as at turn end. Every-round mode requires 1,024 new compactable tokens
+  for PTC/Goals; ordinary Standard retains its 8,000-token floor. Preserve the
+  newest tool batch, pending input and canonical Goal state. Stop during
+  compaction disarms further Goal rounds.
+- Add regression coverage for real browser interaction, dynamic MCP/PTC
+  connections, queued input during compaction, cancellation and Goal counters.
+
 
 ## 0.3.0-alpha.1 — 2026-10-31
 
@@ -20,7 +42,7 @@
 - Add Linux/macOS CI and regression coverage for busy-chat messages and PTC.
 
 
-## Unreleased (branch `codex-app`)
+## Earlier development (included in 0.3.0-alpha.1)
 
 ### Added
 
@@ -182,7 +204,7 @@
 - **Compaction between turns** (Settings → Context, `[codex.compaction]`): a
   finished turn condenses older history once the context reached a limit
   (200K tokens by default, 100K–500K in the UI) or after every turn that added
-  at least about 10,000 tokens; `off` keeps DSH's behaviour. It runs while the
+  at least about 8,000 tokens; `off` keeps DSH's behaviour. It runs while the
   provider still caches the prefix, prompts sent meanwhile wait for it, Stop
   cancels it, subagents and `dsh-codex "<task>"` skip it. The checkpoint
   carries the open `todo_write` list. The context ring fills up to the limit

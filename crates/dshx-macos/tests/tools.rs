@@ -339,7 +339,8 @@ async fn cancellation_stops_waiting_for_the_helper() {
 
 #[test]
 fn schemas_match_the_js_fixture() {
-    let fixture: Value = serde_json::from_str(include_str!("fixtures/js-schemas.json")).unwrap();
+    let mut fixture: Value =
+        serde_json::from_str(include_str!("fixtures/js-schemas.json")).unwrap();
     let tools = dshx_macos::tools(&Helper::new(
         Arc::new(CuaClient::with_socket_path("/nonexistent")),
         Settings::with_locale(&config(), "en"),
@@ -351,6 +352,20 @@ fn schemas_match_the_js_fixture() {
             json!({ "name": s.name, "description": s.description, "parameters": s.parameters })
         })
         .collect();
+    // Aether's routing paragraph requires explicit desktop intent for web
+    // work. The action workflow and wire schemas retain the original contract.
+    let description = ours[0]["description"].as_str().unwrap();
+    assert!(description.contains("only when the user explicitly requests desktop interaction"));
+    assert_eq!(
+        description.split_once("\n\nWorkflow:").unwrap().1,
+        fixture[0]["description"]
+            .as_str()
+            .unwrap()
+            .split_once("\n\nWorkflow:")
+            .unwrap()
+            .1
+    );
+    fixture[0]["description"] = ours[0]["description"].clone();
     // Serialized comparison: key order of the schemas counts too.
     assert_eq!(Value::Array(ours).to_string(), fixture.to_string());
     for tool in &tools {

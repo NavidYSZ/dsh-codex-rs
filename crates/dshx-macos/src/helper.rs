@@ -15,6 +15,7 @@ pub struct Settings {
     config: CodexConfig,
     locale: String,
     strings: Strings,
+    desktop: bool,
 }
 
 impl Settings {
@@ -25,7 +26,9 @@ impl Settings {
             .locale
             .clone()
             .unwrap_or_else(locale::system_locale);
-        Settings::with_locale(config, locale)
+        let mut settings = Settings::with_locale(config, locale);
+        settings.desktop = std::env::var_os("DSHX_DESKTOP").is_some_and(|v| !v.is_empty());
+        settings
     }
 
     /// Settings with an explicit locale (no system lookup).
@@ -35,6 +38,7 @@ impl Settings {
             config: config.clone(),
             strings: locale::strings(&locale),
             locale,
+            desktop: false,
         }
     }
 
@@ -84,6 +88,17 @@ impl Settings {
         (!apps.is_empty()).then(|| Value::from(apps.clone()))
     }
 
+    /// Newer shared helpers gate their floating preview on the host app.
+    /// Keep both independent applications visible; older helpers ignore this.
+    fn focus(&self) -> Option<Value> {
+        self.desktop.then(|| {
+            serde_json::json!({
+                "frontmostOnly":true,
+                "apps":["de.yousufzai.dsh-codex","com.deepseek.dsh"]
+            })
+        })
+    }
+
     /// What the `computer` tool configures before its first action.
     pub(crate) fn computer_configure(&self) -> Obj {
         let cu = &self.config.computer_use;
@@ -105,6 +120,7 @@ impl Settings {
             .set("maxWidth", self.max_width())
             .set("mini", self.mini())
             .opt("blockedApps", self.blocked_apps())
+            .opt("focus", self.focus())
     }
 
     /// What `app` and the browser's mini window configure (`helperSetup`).
@@ -114,6 +130,7 @@ impl Settings {
             .set("maxWidth", self.max_width())
             .set("mini", self.mini())
             .opt("blockedApps", self.blocked_apps())
+            .opt("focus", self.focus())
     }
 }
 

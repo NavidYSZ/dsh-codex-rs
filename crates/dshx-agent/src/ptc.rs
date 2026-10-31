@@ -101,7 +101,51 @@ fn sdk(schemas: &[ToolSchema]) -> String {
     let mut sorted: Vec<_> = schemas.iter().filter(|s| s.name != "run_code").collect();
     sorted.sort_by(|a, b| a.name.cmp(&b.name));
     let mut out = String::from(
-        "## Writing code for run_code\n\nrun_code takes code (the body of an async TypeScript function) and description (a short summary). Only erasable TypeScript is accepted: no enum or namespaces. Top-level await and return work. Each call starts a fresh Node process; variables do not persist.\n\nCall tools with await tools.name(args), or tools[\"my-tool\"](args) for exotic names. Arguments must be lossless JSON. Calls return their canonical JSON value; legacy tools without a structured value return {content: [...]}. A failed call throws ToolCallError with toolName and a human-readable message; use try/catch to handle it. Independent read-only calls may overlap with Promise.all; mutating calls run alone, in submission order. Sequence dependent work with await, and await every tool call before returning.\n\nOnly console output and the returned JSON value enter the conversation. Extract the relevant fields from large results. Successful image results are attached after the run, and deferred tool guidance is preserved. Direct Node operations follow this execution's file sandbox, while nested tools retain their own standing permissions and approval checks.\n\nProgram-only SDK bindings:\n\n```ts\ntype JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };\ndeclare class ToolCallError extends Error { readonly name: \"ToolCallError\"; readonly toolName: string; }\ndeclare const tools: {\n",
+        r#"## Writing code for run_code
+
+run_code takes code (the body of an async TypeScript function) and description (a short summary). Only erasable TypeScript is accepted: no enum or namespaces. Top-level await and return work. Each call starts a fresh Node process; variables do not persist.
+
+Call tools with await tools.name(args), or tools["my-tool"](args) for exotic names. Arguments must be lossless JSON. Calls return their canonical JSON value; legacy tools without a structured value return {content: [...]}. A failed call throws ToolCallError with toolName and a human-readable message; use try/catch to handle it. Independent read-only calls may overlap with Promise.all; mutating calls run alone, in submission order. Sequence dependent work with await, and await every tool call before returning.
+
+The tools bindings are fixed for one run_code execution. Newly connected or discovered MCP tools and updated schemas become available in the next model round and a new run_code call. Use the declarations in the latest SDK; do not invent tool names or replace an available binding with a shell script or another MCP client.
+
+The optional timeoutMs covers the whole program, including approvals, queued calls and all sequential tool calls. It defaults to 120000 and is capped at 600000. For a known long operation choose a sufficient, bounded budget; split longer workflows into separate runs. A nested tool still has its own timeout. After a timeout inspect completed effects before retrying; programs are never replayed automatically.
+
+Only console output and the returned JSON value enter the conversation. Extract the relevant fields from large results. Successful image results are attached after the run, and deferred tool guidance is preserved. Direct Node operations follow this execution's file sandbox, while nested tools retain their own standing permissions and approval checks.
+
+"#,
+    );
+    if sorted.iter().any(|schema| schema.name == "browser") {
+        out.push_str(
+            r#"Browser results are objects with a summary string and optional cursor, place, target, screen and image fields. Read page text or the current element list from result.summary, for example:
+```ts
+const page = await tools.browser({ action: "read" });
+console.log(page.summary);
+```
+Images are attached automatically; do not print their data.
+
+"#,
+        );
+    }
+    if sorted.iter().any(|schema| schema.name.starts_with("mcp__")) {
+        out.push_str(
+            r#"MCP bindings return {content: [...], structuredContent?: ...}. Use structuredContent when present; otherwise inspect the content blocks. Text blocks contain strings, which may be ordinary prose or JSON according to that tool's contract. Parse a text block only when its format is known to be JSON; do not assume every text result is JSON or that it has a summary field. For a result already returned by an MCP binding:
+```ts
+if (result.structuredContent !== undefined) {
+  console.log(result.structuredContent);
+} else {
+  for (const block of result.content ?? []) {
+    if (block.type === "text") console.log(block.text);
+  }
+}
+```
+MCP failures throw ToolCallError, including a server result with isError: true.
+
+"#,
+        );
+    }
+    out.push_str(
+        "Program-only SDK bindings:\n\n```ts\ntype JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };\ndeclare class ToolCallError extends Error { readonly name: \"ToolCallError\"; readonly toolName: string; }\ndeclare const tools: {\n",
     );
     for schema in sorted {
         for line in schema.description.replace("*/", "* /").lines() {
@@ -233,5 +277,31 @@ mod tests {
         assert!(text.contains("\"count\"?: number"));
         assert!(text.contains("{{literal}}"));
         assert!(sdk_sections(&[]).iter().all(|s| s.literal));
+    }
+
+    #[test]
+    fn sdk_explains_available_result_shapes_and_execution_boundaries() {
+        let tool = |name: &str| ToolSchema {
+            name: name.into(),
+            description: String::new(),
+            parameters: json!({"type": "object"}),
+        };
+        let text = sdk(&[tool("browser"), tool("mcp__fixture__read")]);
+        for guidance in [
+            "page.summary",
+            "result.structuredContent",
+            "block.type === \"text\"",
+            "Parse a text block only when its format is known to be JSON",
+            "fixed for one run_code execution",
+            "next model round and a new run_code call",
+            "including approvals, queued calls and all sequential tool calls",
+            "defaults to 120000 and is capped at 600000",
+            "inspect completed effects before retrying",
+        ] {
+            assert!(text.contains(guidance), "missing {guidance}");
+        }
+        let without_browser = sdk(&[tool("read")]);
+        assert!(!without_browser.contains("tools.browser("));
+        assert!(!without_browser.contains("MCP bindings return"));
     }
 }

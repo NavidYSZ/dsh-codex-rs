@@ -230,8 +230,11 @@ pub struct CompactionConfig {
     pub max_tokens: Option<u32>,
     pub compaction_retries: u32,
     pub max_overflow_retries: u32,
-    /// Compaction once a turn completed (dsh-codex); needs `auto`.
+    /// Configured policy at work-round and completed-turn boundaries; needs `auto`.
     pub turn_end: TurnEndCompaction,
+    /// Hosts that exit after one answer can skip its final checkpoint while
+    /// retaining the policy between PTC/Goal work rounds.
+    pub at_turn_end: bool,
 }
 
 impl Default for CompactionConfig {
@@ -247,6 +250,7 @@ impl Default for CompactionConfig {
             compaction_retries: 1,
             max_overflow_retries: 1,
             turn_end: TurnEndCompaction::Off,
+            at_turn_end: true,
         }
     }
 }

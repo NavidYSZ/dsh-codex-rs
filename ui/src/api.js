@@ -6,6 +6,7 @@ import { t } from './i18n.js';
 import { fixtureFs } from './fixture-fs.js';
 import { fixtureExt } from './fixture-ext.js';
 import { fixtureComposer } from './fixture-composer.js';
+import { createBrowserFixture } from './fixture-browser.js';
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -85,6 +86,8 @@ class HttpApi {
 
   info() { return this.req('GET', '/api/info'); }
   updateSettings(patch) { return this.req('PUT', '/api/settings', patch); }
+  browserStatus() { return this.req('GET', '/api/browser/status'); }
+  testBrowser() { return this.req('POST', '/api/browser/test'); }
   workspaces() { return this.req('GET', '/api/workspaces'); }
   addWorkspace(path) { return this.req('POST', '/api/workspaces', { path }); }
   // Project folder picker: listing, suggestions, new folder, the Mac's own dialog.
@@ -256,6 +259,7 @@ const DEFAULT_INFO = {
   settings: {
     model: 'deepseek-flash', effort: 'high', sandbox: 'workspace-write', approval: 'ask', defaultPreset: 'standard',
     compaction: { mode: 'threshold', thresholdTokens: 200000 },
+    browser: { enabled: true, chrome: null },
   },
   presets: [{ id: 'standard', name: 'Standard' }, { id: 'minimal', name: 'Minimal' }, { id: 'ptc', name: 'PTC' }],
   apiKeyConfigured: true,
@@ -340,6 +344,7 @@ class FixtureApi {
     this.fx = fx;
     this.shared = shared;
     this.infoData = { ...DEFAULT_INFO, ...shared.info, ...fx.info };
+    this.browserFixture = createBrowserFixture(this.infoData, new URLSearchParams(location.search).get('browser'));
     // ?view=compact|standard|detailed|verbose picks the work-details view for screenshots.
     const view = new URLSearchParams(location.search).get('view');
     if (view) this.infoData.ui = { ...this.infoData.ui, workDetails: view };
@@ -371,13 +376,17 @@ class FixtureApi {
 
   async updateSettings(patch) {
     await this.ready;
-    const { apiKey, ui, compaction, ...rest } = patch;
+    const { apiKey, ui, compaction, browser, ...rest } = patch;
+    if (browser !== undefined) this.browserFixture.patch(browser);
     this.infoData.settings = { ...this.infoData.settings, ...rest };
     if (compaction) this.infoData.settings.compaction = { ...this.infoData.settings.compaction, ...compaction };
     if (ui) this.infoData.ui = { ...this.infoData.ui, ...ui };
     if (apiKey) this.infoData.apiKeyConfigured = true;
     return clone(this.infoData);
   }
+
+  async browserStatus() { await this.ready; return this.browserFixture.status(); }
+  async testBrowser() { await this.ready; return this.browserFixture.test(); }
 
   async workspaces() { await this.ready; return clone(this.shared.workspaces ?? []); }
 

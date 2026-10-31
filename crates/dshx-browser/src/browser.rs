@@ -1004,24 +1004,33 @@ impl<'a> Ctl<'a> {
         )
     }
 
-    pub async fn read_text(&self, max: usize) -> Result<String> {
+    pub async fn read_text(&self, offset: usize, max: usize) -> Result<String> {
         let r = self.evaluate(scripts::TEXT).await?;
         let text = r["text"].as_str().unwrap_or("");
-        let n = js::len(text);
-        let text = if n > max {
-            format!(
-                "{}\n… ({} more characters; scroll and read again for more)",
-                js::slice(text, max),
-                n - max
-            )
-        } else {
-            text.to_owned()
-        };
+        let text = text_page(text, offset, max);
         Ok(format!(
             "Title: {}\nURL: {}\n\n{text}",
             js::display(r.get("title")),
             js::display(r.get("url"))
         ))
+    }
+}
+
+fn text_page(text: &str, offset: usize, max: usize) -> String {
+    let n = js::len(text);
+    let prefix = js::slice(text, offset);
+    let offset = js::len(prefix);
+    // A UTF-16 surrogate pair needs two units. Even a caller bypassing
+    // schema validation must make progress rather than repeat one offset.
+    let chunk = js::slice(&text[prefix.len()..], max.max(2));
+    let next = offset + js::len(chunk);
+    if n > next {
+        format!(
+            "{chunk}\n… ({} more characters; read again with offset: {next})",
+            n - next
+        )
+    } else {
+        chunk.to_owned()
     }
 }
 
@@ -1397,4 +1406,21 @@ pub(crate) fn describe_state(
         lines.push("(none visible; scroll, wait or read the text)".to_owned());
     }
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod pagination_tests {
+    #[test]
+    fn unicode_pages_always_advance_without_splitting_surrogate_pairs() {
+        assert_eq!(
+            super::text_page("😀tail", 0, 1),
+            "😀\n… (4 more characters; read again with offset: 2)"
+        );
+        assert_eq!(
+            super::text_page("😀tail", 1, 2),
+            "😀\n… (4 more characters; read again with offset: 2)"
+        );
+        assert_eq!(super::text_page("😀tail", 2, 10), "tail");
+        assert_eq!(super::text_page("😀tail", 100, 10), "");
+    }
 }

@@ -11,7 +11,7 @@ import { workspaceName } from './composer.js';
 import { setUiPref } from './worklog.js';
 import { VIEW_MODES } from '../worklog.js';
 
-const SETTINGS_PANES = ['general', 'appearance', 'models', 'defaults', 'usage', 'archived', 'about'];
+const SETTINGS_PANES = ['general', 'appearance', 'models', 'defaults', 'context', 'browser', 'usage', 'archived', 'about'];
 
 const matches = (hay, terms) => terms.every((w) => hay.includes(w));
 

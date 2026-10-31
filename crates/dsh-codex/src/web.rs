@@ -123,6 +123,7 @@ pub struct WebBackend {
     usage: Arc<UsageIndex>,
     /// This backend, for the composer routes.
     me: std::sync::OnceLock<std::sync::Weak<WebBackend>>,
+    browser_checks: Arc<tokio::sync::Semaphore>,
 }
 
 impl WebBackend {
@@ -144,6 +145,7 @@ impl WebBackend {
             chats,
             usage,
             me: std::sync::OnceLock::new(),
+            browser_checks: Arc::new(tokio::sync::Semaphore::new(1)),
         }
     }
 
@@ -249,6 +251,10 @@ impl WebBackend {
                     "mode": config.codex.compaction.mode,
                     "thresholdTokens": config.codex.compaction.threshold_tokens,
                 },
+                "browser": {
+                    "enabled": config.codex.browser.enabled,
+                    "chrome": config.codex.browser.chrome,
+                },
             },
             "presets": crate::presets::catalog(),
             "apiKeyConfigured": self.runtime.any_model_ready(),
@@ -325,6 +331,12 @@ impl Backend for WebBackend {
     }
 
     async fn update_settings(&self, patch: Value) -> anyhow::Result<Value> {
+        let browser = patch
+            .get("browser")
+            .map(|value| {
+                crate::runtime::parse_browser_settings(value, &self.runtime.config().codex.browser)
+            })
+            .transpose()?;
         if let Some(ui) = patch.get("ui") {
             self.chats.update_ui(ui)?;
         }
@@ -342,6 +354,9 @@ impl Backend for WebBackend {
             .map(|p| parse_compaction(p, &self.runtime.config().codex.compaction))
             .transpose()?;
         self.runtime.update_config(|c| {
+            if let Some(browser) = &browser {
+                c.codex.browser = browser.clone();
+            }
             if let Some(s) = &compaction {
                 c.codex.compaction = s.clone();
             }
@@ -372,6 +387,27 @@ impl Backend for WebBackend {
             }
         }
         Ok(self.info_value())
+    }
+
+    async fn browser_status(&self) -> anyhow::Result<Value> {
+        Ok(self.runtime.browser_status())
+    }
+
+    async fn browser_test(&self) -> anyhow::Result<Value> {
+        let permit = self
+            .browser_checks
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| anyhow::anyhow!("a browser check is already running"))?;
+        let config = self.runtime.config().codex.browser;
+        // A disconnected UI must not drop cleanup halfway through. This task
+        // owns the permit/profile until the bounded probe closes Chrome.
+        let result = tokio::spawn(async move {
+            let _permit = permit;
+            dshx_browser::diagnose(&config).await
+        })
+        .await?;
+        Ok(serde_json::to_value(result)?)
     }
 
     async fn workspaces(&self) -> anyhow::Result<Value> {

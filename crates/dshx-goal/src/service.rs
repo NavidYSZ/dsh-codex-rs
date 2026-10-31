@@ -313,6 +313,7 @@ impl GoalService {
         }
         agent.add_pre_step_hook(Arc::new(driver::RoundHook {
             entry: Arc::downgrade(&entry),
+            service: self.me.clone(),
         }));
         if drive {
             let handle = driver::start(self.me.clone(), entry.clone());

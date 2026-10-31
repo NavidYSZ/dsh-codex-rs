@@ -762,3 +762,32 @@ async fn session_presets_need_backend_support() {
         "agent presets are not supported"
     );
 }
+
+#[tokio::test]
+async fn browser_diagnostics_are_authenticated_and_require_backend_support() {
+    let (addr, _) = start().await;
+    let http = reqwest::Client::new();
+    for (method, path) in [
+        (reqwest::Method::GET, "status"),
+        (reqwest::Method::POST, "test"),
+    ] {
+        let url = format!("http://{addr}/api/browser/{path}");
+        assert_eq!(
+            http.request(method.clone(), &url)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert_eq!(
+            http.request(method, &url)
+                .bearer_auth("secret")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            404
+        );
+    }
+}

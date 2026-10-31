@@ -1,12 +1,15 @@
 //! Goal rounds end to end: the real DeepSeek client against the scripted
 //! mock, the goal tools in the agent's registry and the round driver on.
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use async_trait::async_trait;
 use dshx_agent::testing::{FixedApprover, MemoryAttachments};
-use dshx_agent::{Agent, AgentConfig, AgentDeps, AgentStatus};
+use dshx_agent::{Agent, AgentConfig, AgentDeps, AgentStatus, CancelCause, TurnEndCompaction};
 use dshx_core::{
-    ApprovalDecision, ContentBlock, LlmClient, SessionEvent, SessionLog, ToolRegistry,
+    ApprovalDecision, ContentBlock, LlmClient, NewEvent, SessionEvent, SessionHeader, SessionLog,
+    ToolRegistry,
 };
 use dshx_goal::{Activation, GoalCommand, GoalService, GoalSettings, Phase, goal_tools};
 use dshx_llm::{DeepSeekClient, DeepSeekConfig, StaticApiKey};
@@ -114,16 +117,90 @@ fn responder(
 
 struct Harness {
     mock: MockDeepSeek,
-    log: Arc<MemoryLog>,
+    log: Arc<dyn SessionLog>,
     agent: Agent,
     goals: Arc<GoalService>,
     _dir: tempfile::TempDir,
 }
 
+/// Holds the driver either in its terminal append or in the durability
+/// checkpoint after compaction/end, when no summary token remains installed.
+struct GatedEndLog {
+    log: MemoryLog,
+    terminal_append: bool,
+    armed: AtomicBool,
+    compaction_finished: AtomicBool,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+
+impl GatedEndLog {
+    fn new(cwd: &str, terminal_append: bool) -> Arc<Self> {
+        Arc::new(Self {
+            log: MemoryLog::new(cwd),
+            terminal_append,
+            armed: AtomicBool::new(true),
+            compaction_finished: AtomicBool::new(false),
+            entered: tokio::sync::Notify::new(),
+            release: tokio::sync::Notify::new(),
+        })
+    }
+
+    async fn hold_once(&self) {
+        if self.armed.swap(false, Ordering::SeqCst) {
+            self.entered.notify_one();
+            self.release.notified().await;
+        }
+    }
+}
+
+#[async_trait]
+impl SessionLog for GatedEndLog {
+    fn id(&self) -> &str {
+        self.log.id()
+    }
+    fn header(&self) -> SessionHeader {
+        self.log.header()
+    }
+    fn events(&self) -> Vec<SessionEvent> {
+        self.log.events()
+    }
+    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<SessionEvent> {
+        self.log.subscribe()
+    }
+    async fn append(&self, events: Vec<NewEvent>) -> anyhow::Result<Vec<SessionEvent>> {
+        if self.terminal_append && events.iter().any(|e| e.kind == "turn/end") {
+            self.hold_once().await;
+        }
+        let ends_compaction = events.iter().any(|e| e.kind == "compaction/end");
+        let stored = self.log.append(events).await?;
+        if ends_compaction {
+            self.compaction_finished.store(true, Ordering::SeqCst);
+        }
+        Ok(stored)
+    }
+    async fn flush(&self) -> anyhow::Result<()> {
+        if !self.terminal_append && self.compaction_finished.load(Ordering::SeqCst) {
+            self.hold_once().await;
+        }
+        self.log.flush().await
+    }
+}
+
 async fn harness_with(
     responder: impl Fn(&RecordedRequest) -> Reply + Send + Sync + 'static,
-    log: Option<Arc<MemoryLog>>,
+    log: Option<Arc<dyn SessionLog>>,
     goals: Option<Arc<GoalService>>,
+) -> Harness {
+    harness_configured(responder, log, goals, true, |_| {}).await
+}
+
+async fn harness_configured(
+    responder: impl Fn(&RecordedRequest) -> Reply + Send + Sync + 'static,
+    log: Option<Arc<dyn SessionLog>>,
+    goals: Option<Arc<GoalService>>,
+    drive: bool,
+    configure: impl FnOnce(&mut AgentConfig),
 ) -> Harness {
     let mock = MockDeepSeek::start().await;
     mock.set_responder(responder);
@@ -148,19 +225,20 @@ async fn harness_with(
     let mut agent_config = AgentConfig::new("deepseek-flash", dir.path());
     agent_config.instructions.harness_home = dir.path().join("home/.dsh-codex");
     agent_config.instructions.agents_home = dir.path().join("home/.agents");
+    configure(&mut agent_config);
     let agent = Agent::new(
         agent_config,
         AgentDeps {
             llm,
             tools,
-            log: log.clone() as Arc<dyn SessionLog>,
+            log: log.clone(),
             attachments: Arc::new(MemoryAttachments::default()),
             approver: Arc::new(FixedApprover(ApprovalDecision::Rejected)),
             observer: None,
             tool_state: None,
         },
     );
-    goals.attach(&agent, true);
+    goals.attach(&agent, drive);
     Harness {
         mock,
         log,
@@ -214,6 +292,255 @@ fn rounds(events: &[SessionEvent]) -> Vec<u64> {
         .filter(|e| e.kind == "user/message" && e.data["source"]["kind"] == "goal")
         .map(|e| e.data["source"]["round"].as_u64().unwrap())
         .collect()
+}
+
+fn is_summary(r: &RecordedRequest) -> bool {
+    blocks(r)
+        .last()
+        .is_some_and(|(_, b)| text(b).contains("compaction engine"))
+}
+
+fn round_config(config: &mut AgentConfig) {
+    config.title.enabled = false;
+    config.compaction.turn_end = TurnEndCompaction::EveryTurn;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn short_goal_rounds_compact_and_restore_canonical_goal_state() {
+    let h = harness_configured(
+        |r| {
+            if is_summary(r) {
+                Reply::text("Checkpoint: work has progressed; keep pursuing the objective.")
+            } else {
+                Reply::text("progress ".repeat(750))
+            }
+        },
+        None,
+        None,
+        true,
+        round_config,
+    )
+    .await;
+    let objective = "Ship the feature, preserve the accepted corrections, and verify the result.";
+    let initial = h
+        .goals
+        .command(
+            &h.agent.session_id(),
+            GoalCommand::Create(objective.into()),
+            Some(&json!(3)),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    h.until("round budget reached", |h| {
+        h.goals
+            .get(&h.agent.session_id())
+            .unwrap()
+            .is_some_and(|g| g.goal.phase == Phase::Blocked)
+            && h.idle()
+    })
+    .await;
+    let events = h.events();
+    assert_eq!(rounds(&events), [1, 2, 3]);
+    let summary = events
+        .iter()
+        .find(|e| e.kind == "compaction/summary")
+        .expect("6KB work rounds must compact below the standard 8K-token gate");
+    let start = events[..summary.seq as usize]
+        .iter()
+        .rev()
+        .find(|e| e.kind == "compaction/start")
+        .unwrap();
+    assert!(
+        start.data["turn"].is_null(),
+        "single-step round compacts after turn/end"
+    );
+    let snapshot = events
+        .iter()
+        .find(|e| e.kind == "user/message" && e.data["source"]["kind"] == "goal-state")
+        .expect("canonical state restored");
+    assert!(summary.seq < snapshot.seq);
+    let state = &snapshot.data["source"]["snapshot"]["goal"];
+    assert_eq!(state["id"], initial.goal.id);
+    assert_eq!(state["revision"], initial.goal.revision);
+    assert_eq!(state["objective"], objective);
+    assert_eq!(state["phase"], "active");
+    assert_eq!(state["activation"], "armed");
+    assert_eq!(
+        state["roundsStarted"], 3,
+        "snapshot and round admission share one commit"
+    );
+    assert_eq!(state["maxGoalRounds"], 3);
+    let goal = h.goals.get(&h.agent.session_id()).unwrap().unwrap();
+    assert_eq!(goal.goal.objective, objective);
+    assert_eq!(goal.rounds_started, 3);
+    assert_eq!(goal.goal.max_goal_rounds, 3);
+    assert_eq!(goal.goal.blocked_reason.unwrap().code, "round-limit");
+    dshx_session::validate::validate_log(&h.log.header(), &events).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stopping_summary_disarms_goal_without_a_next_model_request() {
+    for (inside_turn, parent) in [(true, false), (false, false), (true, true)] {
+        let h = harness_configured(
+            move |r| {
+                if is_summary(r) {
+                    return Reply::stream()
+                        .text("unfinished checkpoint")
+                        .stall_after(3)
+                        .into();
+                }
+                if inside_turn {
+                    Reply::tool_call("read-goal", "get_goal", json!({}))
+                } else {
+                    Reply::text("Progress made.")
+                }
+            },
+            None,
+            None,
+            true,
+            round_config,
+        )
+        .await;
+        h.goals
+            .command(
+                &h.agent.session_id(),
+                GoalCommand::Create("objective detail ".repeat(400)),
+                Some(&json!(5)),
+            )
+            .await
+            .unwrap();
+        h.until("blocked summarizer", |h| {
+            h.mock.requests().iter().any(is_summary)
+        })
+        .await;
+        let before = h.mock.requests().len();
+        if parent {
+            h.agent.cancel_with(CancelCause::Parent, true).await;
+        } else {
+            // Exact public stop entry point used by WebBackend::cancel.
+            h.agent.cancel_durable().await.unwrap();
+        }
+        h.until("stopped and disarmed", |h| {
+            h.idle()
+                && h.goals
+                    .get(&h.agent.session_id())
+                    .unwrap()
+                    .is_some_and(|g| g.activation == Activation::Disarmed)
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            h.mock.requests().len(),
+            before,
+            "stop must not start another request: inside_turn={inside_turn}, parent={parent}"
+        );
+        let events = h.events();
+        assert_eq!(rounds(&events), [1]);
+        assert!(!events.iter().any(|e| e.kind == "compaction/summary"));
+        let start = events
+            .iter()
+            .find(|e| e.kind == "compaction/start")
+            .unwrap();
+        assert_eq!(
+            start.data["turn"],
+            if inside_turn { json!(1) } else { Value::Null }
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| e.kind == "compaction/end" && e.data.get("error").is_some())
+        );
+        let goal = h.goals.get(&h.agent.session_id()).unwrap().unwrap();
+        assert_eq!(goal.rounds_started, 1);
+        assert_eq!(goal.goal.max_goal_rounds, 5);
+        assert_eq!(
+            goal.goal.phase,
+            if inside_turn {
+                Phase::Paused
+            } else {
+                Phase::Active
+            }
+        );
+        dshx_session::validate::validate_log(&h.log.header(), &events).unwrap();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stop_during_terminal_commit_or_post_summary_flush_prevents_continuation() {
+    for terminal_append in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let log = GatedEndLog::new(dir.path().to_str().unwrap(), terminal_append);
+        let h = harness_configured(
+            |r| {
+                if is_summary(r) {
+                    Reply::text("Checkpoint: continue the work.")
+                } else {
+                    Reply::text("Progress made.")
+                }
+            },
+            Some(log.clone()),
+            None,
+            true,
+            round_config,
+        )
+        .await;
+        let objective = "objective detail ".repeat(400).trim().to_owned();
+        h.goals
+            .command(
+                &h.agent.session_id(),
+                GoalCommand::Create(objective.clone()),
+                Some(&json!(5)),
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(5), log.entered.notified())
+            .await
+            .unwrap();
+        assert_eq!(h.agent.status(), AgentStatus::Running);
+        let events = h.events();
+        assert_eq!(rounds(&events), [1]);
+        assert_eq!(
+            events.iter().any(|e| e.kind == "compaction/end"),
+            !terminal_append
+        );
+        assert_eq!(
+            h.goals
+                .get(&h.agent.session_id())
+                .unwrap()
+                .unwrap()
+                .activation,
+            Activation::Armed
+        );
+        let before = h.mock.requests().len();
+        // Same stop method used by the public web endpoint. Its own flush
+        // must complete even while the driver's one-shot flush is held.
+        h.agent.cancel_durable().await.unwrap();
+        assert_eq!(
+            h.goals
+                .get(&h.agent.session_id())
+                .unwrap()
+                .unwrap()
+                .activation,
+            Activation::Disarmed
+        );
+        log.release.notify_one();
+        h.until("terminal stop released", |h| h.idle()).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            h.mock.requests().len(),
+            before,
+            "no new summary or goal request after stop, terminal_append={terminal_append}"
+        );
+        assert_eq!(rounds(&h.events()), [1]);
+        let goal = h.goals.get(&h.agent.session_id()).unwrap().unwrap();
+        assert_eq!(goal.goal.objective, objective);
+        assert_eq!(goal.goal.phase, Phase::Active);
+        assert_eq!(goal.rounds_started, 1);
+        assert_eq!(goal.goal.max_goal_rounds, 5);
+        assert_eq!(goal.activation, Activation::Disarmed);
+        dshx_session::validate::validate_log(&h.log.header(), &h.events()).unwrap();
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

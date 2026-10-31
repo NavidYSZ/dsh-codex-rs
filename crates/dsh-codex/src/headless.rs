@@ -5,7 +5,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use dshx_agent::{AgentObserver, DeltaKind, StreamDelta, TurnEndCompaction, TurnEndReason};
+use dshx_agent::{AgentObserver, DeltaKind, StreamDelta, TurnEndReason};
 use dshx_core::{ContentBlock, Message, SessionEvent, SessionLog, kinds};
 use serde_json::{Map, Value, json};
 
@@ -59,7 +59,7 @@ pub async fn run(runtime: Arc<Runtime>, args: HeadlessArgs) -> anyhow::Result<i3
     let observer = reasoning.clone().map(|r| r as Arc<dyn AgentObserver>);
     let mut config = runtime.agent_config(&cwd, &args.overrides);
     // One task, then exit: a summary after it would only cost time.
-    config.compaction.turn_end = TurnEndCompaction::Off;
+    config.compaction.at_turn_end = false;
     let agent = runtime.new_agent(config, log.clone(), Arc::new(NoApprover), observer);
 
     let mut events = log.subscribe();

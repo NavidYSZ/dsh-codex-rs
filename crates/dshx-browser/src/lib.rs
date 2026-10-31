@@ -8,6 +8,7 @@
 //! steps and a live preview; elsewhere [`NoMini`] keeps it headless and silent.
 mod browser;
 mod cdp;
+mod diagnostics;
 mod js;
 mod mini;
 mod scripts;
@@ -20,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use browser::{Browser, BrowserOptions};
+pub use diagnostics::{BrowserCheck, BrowserDiagnostic, diagnose};
 pub use mini::{MiniReply, MiniShow, MiniSink, MiniStep, NoMini};
 pub use tool::{ACTIONS, BrowserTool, DESCRIPTION, TOOL_NAME, describe, input_schema};
 
@@ -58,13 +60,30 @@ fn candidates() -> Vec<PathBuf> {
     list
 }
 
-/// The explicit binary if it exists, else the first browser found.
+/// An executable file, rather than a directory or an unusable browser path.
+pub fn is_executable(path: &Path) -> bool {
+    let Ok(meta) = path.metadata() else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    true
+}
+
+/// Resolve an explicit executable exactly; auto-detect only when none was set.
+/// A broken explicit path must not silently launch a different browser.
 pub fn find_chrome(explicit: Option<&Path>) -> Option<PathBuf> {
-    explicit
-        .map(Path::to_path_buf)
-        .into_iter()
-        .chain(candidates())
-        .find(|p| p.exists())
+    match explicit {
+        Some(path) => is_executable(path).then(|| path.to_path_buf()),
+        None => candidates().into_iter().find(|p| is_executable(p)),
+    }
 }
 
 /// `~/.dsh-codex/browser-profile` (`$DSHX_HOME` respected); on macOS the

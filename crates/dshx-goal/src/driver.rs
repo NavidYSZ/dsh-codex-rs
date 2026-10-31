@@ -446,6 +446,7 @@ async fn drive(service: &Arc<GoalService>, entry: &Arc<Entry>) -> Result<(), Str
 /// enters, and its step starts a request series.
 pub(crate) struct RoundHook {
     pub entry: Weak<Entry>,
+    pub service: Weak<GoalService>,
 }
 
 impl RoundHook {
@@ -467,20 +468,78 @@ impl RoundHook {
                     && round.2 == g.rounds_started + 1
             })
     }
+
+    /// Canonical goal state after compaction is model context, never a new
+    /// admitted goal round. The durable fold remains the budget authority.
+    fn restore_context(&self, step: &PreStep<'_>, entering: &mut Vec<Message>) {
+        let Some(entry) = self.entry.upgrade() else {
+            return;
+        };
+        let Ok(mut goal) = entry.view() else {
+            return;
+        };
+        if let Some(goal) = &mut goal
+            && let Some((id, revision, round)) =
+                step.claimed.iter().find_map(|m| source_round(&m.source))
+            && goal.goal.id == id
+            && goal.goal.revision == revision
+        {
+            // Admission was validated above; settle_claim commits this round
+            // and this snapshot in the same batch before the model request.
+            goal.rounds_started = round;
+        }
+        let snapshot = json!({"goal": goal.map(|goal| goal.to_json())});
+        let needed = step.read_history(|events, visible| {
+            if !events.iter().any(|e| {
+                e.kind == kinds::USER_MESSAGE && e.data["source"]["kind"] == "compact-checkpoint"
+            }) {
+                return false;
+            }
+            let previous = events.iter().rev().find(|e| {
+                e.kind == kinds::USER_MESSAGE && e.data["source"]["kind"] == "goal-state"
+            });
+            if snapshot["goal"].is_null() && previous.is_none() {
+                return false;
+            }
+            !previous.is_some_and(|e| visible(e.seq) && e.data["source"]["snapshot"] == snapshot)
+        });
+        if needed {
+            let mut message = Message::user_text(format!(
+                "<goal_state>\nCurrent goal state from the session journal (authoritative over earlier checkpoints):\n{snapshot}\n</goal_state>"
+            ));
+            message.source =
+                MessageSource::Other(json!({"kind": "goal-state", "snapshot": snapshot}));
+            entering.push(message);
+        }
+    }
 }
 
 #[async_trait]
 impl PreStepHook for RoundHook {
+    fn compact_between_steps(&self) -> bool {
+        self.entry
+            .upgrade()
+            .and_then(|entry| entry.view().ok().flatten())
+            .is_some_and(|goal| goal.goal.phase == Phase::Active)
+    }
+
+    fn cancel_between_turns(&self) {
+        if let (Some(entry), Some(service)) = (self.entry.upgrade(), self.service.upgrade()) {
+            service.set_activation(&entry, Activation::Disarmed);
+        }
+    }
+
     async fn pre_step(
         &self,
         step: &PreStep<'_>,
-        _entering: &mut Vec<Message>,
+        entering: &mut Vec<Message>,
     ) -> anyhow::Result<()> {
         let Some((submitted, round)) = step
             .claimed
             .iter()
             .find_map(|m| source_round(&m.source).map(|r| (m, r)))
         else {
+            self.restore_context(step, entering);
             return Ok(());
         };
         let Some(entry) = self.entry.upgrade() else {
@@ -498,6 +557,7 @@ impl PreStepHook for RoundHook {
         }
         if self.valid(&entry, submitted, round.clone()) {
             step.start_request_series();
+            self.restore_context(step, entering);
             return Ok(());
         }
         {

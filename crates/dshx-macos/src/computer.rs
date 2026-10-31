@@ -32,7 +32,7 @@ pub const ACTIONS: [&str; 12] = [
     "cursor_position",
 ];
 
-pub const DESCRIPTION: &str = r#"Operate the user's whole Mac screen like a person: look at the screen, move a visible agent cursor, click, type and press keys. This takes over the user's real mouse and keyboard while it runs, so prefer "browser" for websites and "app" for a single native app; both work in the background. Use "computer" when those cannot do the job (several apps at once, drag and drop, context menus) or when the user wants to watch on their own screen.
+pub const DESCRIPTION: &str = r#"Operate the user's whole Mac screen like a person: look at the screen, move a visible agent cursor, click, type and press keys. This takes over the user's real mouse and keyboard while it runs. Use "browser" or the selected browser MCP for websites, and "app" for a single native app; both work in the background. Use "computer" for desktop tasks such as interaction across native apps, drag and drop, or context menus. For website work, use computer/app control of a browser only when the user explicitly requests desktop interaction. A browser, proxy, connection, login or website error does not authorize switching to desktop control; diagnose or report the browser problem instead.
 
 Workflow:
 - Start with action "screenshot". All x/y coordinates are pixels in the most recent screenshot.

@@ -68,6 +68,13 @@ pub enum QueueAction {
 pub(crate) struct Running {
     pub cancel: CancellationToken,
     pub cause: Option<CancelCause>,
+    /// The body returned; its terminal event may still be awaiting storage.
+    pub ending: bool,
+}
+
+pub(crate) struct DriverCancellation {
+    pub cancel: CancellationToken,
+    pub cause: Option<CancelCause>,
 }
 
 /// Mutable loop state; never held across an await.
@@ -106,6 +113,10 @@ pub(crate) struct LoopState {
     pub titled: bool,
     /// Cancels the compaction that runs after a completed turn.
     pub compacting: Option<CancellationToken>,
+    /// One cancellation scope through turns, terminal commits and compaction.
+    pub driver_cancel: Option<DriverCancellation>,
+    /// Avoid retrying an unchanged span at adjacent automatic boundaries.
+    pub last_compaction_attempt: Option<(u64, u64)>,
 }
 
 impl LoopState {
@@ -254,6 +265,9 @@ impl Drop for ActiveDriverGuard {
         if let Some(cancel) = st.compacting.take() {
             cancel.cancel();
         }
+        if let Some(cancel) = st.driver_cancel.take() {
+            cancel.cancel.cancel();
+        }
         drop(st);
         self.0.inbox_changed.notify_waiters();
     }
@@ -361,6 +375,8 @@ impl Agent {
                 open_turn: None,
                 titled: false,
                 compacting: None,
+                driver_cancel: None,
+                last_compaction_attempt: None,
             }),
             driver: tokio::sync::Mutex::new(()),
             inbox_lock: tokio::sync::Mutex::new(()),
@@ -875,16 +891,29 @@ impl Agent {
     async fn cancel_inner(&self, cause: CancelCause, keep_inbox: bool) -> anyhow::Result<()> {
         let inner = &self.inner;
         let _guard = inner.inbox_lock.lock().await;
-        {
+        let between_turns = {
             let mut st = inner.state.lock().unwrap();
             if let Some(r) = st.running.as_mut() {
                 if r.cause.is_none() {
-                    r.cause = Some(cause);
+                    r.cause = Some(cause.clone());
                 }
                 r.cancel.cancel();
             }
             if let Some(c) = &st.compacting {
                 c.cancel();
+            }
+            if let Some(c) = st.driver_cancel.as_mut() {
+                if c.cause.is_none() {
+                    c.cause = Some(cause);
+                }
+                c.cancel.cancel();
+            }
+            st.running.as_ref().is_none_or(|running| running.ending)
+        };
+        if between_turns {
+            let hooks = inner.pre_step_hooks.lock().unwrap().clone();
+            for hook in hooks {
+                hook.cancel_between_turns();
             }
         }
         if !keep_inbox {
@@ -1383,11 +1412,16 @@ impl Inner {
 
     /// Runs turns while this caller's prompt (and late next-step input) is pending.
     async fn drive(self: &Arc<Self>, first: Target) -> anyhow::Result<TurnOutcome> {
+        let cancel = self.lifetime.child_token();
+        self.state.lock().unwrap().driver_cancel = Some(DriverCancellation {
+            cancel: cancel.clone(),
+            cause: None,
+        });
         self.set_status(AgentStatus::Running);
         let mut outcome;
         let mut target = first;
         loop {
-            outcome = self.turn(target).await;
+            outcome = self.turn(target, &cancel).await;
             target = Target::NextStep;
             let more = matches!(
                 &outcome,
@@ -1395,7 +1429,8 @@ impl Inner {
                     reason: TurnEndReason::Completed,
                     ..
                 })
-            ) && !self.state.lock().unwrap().next_step.is_empty();
+            ) && !cancel.is_cancelled()
+                && !self.state.lock().unwrap().next_step.is_empty();
             if !more {
                 break;
             }
@@ -1410,9 +1445,11 @@ impl Inner {
                 reason: TurnEndReason::Completed,
                 ..
             })
-        ) {
-            self.compact_after_turn().await;
+        ) && !cancel.is_cancelled()
+        {
+            self.compact_after_turn(&cancel).await;
         }
+        self.state.lock().unwrap().driver_cancel = None;
         match &outcome {
             Ok(TurnOutcome {
                 reason: TurnEndReason::Error { error },
@@ -1432,10 +1469,10 @@ impl Inner {
     /// driver lock (prompts sent meanwhile wait, like `/compact`) and
     /// while the status reads running. Subagents end with their turn and
     /// skip it. A failure leaves the history as it was.
-    async fn compact_after_turn(self: &Arc<Self>) {
+    async fn compact_after_turn(self: &Arc<Self>, driver_cancel: &CancellationToken) {
         let policy = {
             let c = self.config.lock().unwrap();
-            if c.compaction.auto {
+            if c.compaction.auto && c.compaction.at_turn_end {
                 c.compaction.turn_end
             } else {
                 TurnEndCompaction::Off
@@ -1444,9 +1481,16 @@ impl Inner {
         if policy == TurnEndCompaction::Off || self.journal.header().delegation_depth > 0 {
             return;
         }
-        let cancel = self.lifetime.child_token();
+        let cancel = driver_cancel.child_token();
         self.state.lock().unwrap().compacting = Some(cancel.clone());
-        let result = crate::compaction::compact_after_turn(self, policy, &cancel).await;
+        let result = crate::compaction::compact_at_boundary(
+            self,
+            policy,
+            None,
+            self.compact_between_steps(),
+            &cancel,
+        )
+        .await;
         self.state.lock().unwrap().compacting = None;
         match result {
             Err(e) if !is_aborted(&e) && !cancel.is_cancelled() => {
@@ -1459,14 +1503,70 @@ impl Inner {
         }
     }
 
-    async fn turn(self: &Arc<Self>, target: Target) -> anyhow::Result<TurnOutcome> {
-        let cancel = self.lifetime.child_token();
-        check(&cancel)?;
+    /// Product eligibility is live: a goal can be created, completed or
+    /// paused by the tool batch that just settled.
+    fn compact_between_steps(&self) -> bool {
+        if self.config.lock().unwrap().preset == crate::config::Preset::Ptc {
+            return true;
+        }
+        let hooks = self.pre_step_hooks.lock().unwrap().clone();
+        hooks.iter().any(|hook| hook.compact_between_steps())
+    }
+
+    async fn compact_after_step(
+        self: &Arc<Self>,
+        turn: u64,
+        cancel: &CancellationToken,
+    ) -> anyhow::Result<()> {
+        let policy = {
+            let config = self.config.lock().unwrap();
+            if !config.compaction.auto {
+                return Ok(());
+            }
+            config.compaction.turn_end
+        };
+        if policy == TurnEndCompaction::Off || !self.compact_between_steps() {
+            return Ok(());
+        }
+        check(cancel)?;
+        if let Err(error) =
+            crate::compaction::compact_at_boundary(self, policy, Some(turn), true, cancel).await
+        {
+            if is_aborted(&error) || cancel.is_cancelled() {
+                return Err(Aborted.into());
+            }
+            tracing::warn!("round-boundary compaction failed: {error:#}; continuing the turn");
+        }
+        check(cancel)
+    }
+
+    async fn turn(
+        self: &Arc<Self>,
+        target: Target,
+        driver_cancel: &CancellationToken,
+    ) -> anyhow::Result<TurnOutcome> {
+        let cancel = driver_cancel.child_token();
+        if cancel.is_cancelled() {
+            let cause = self
+                .state
+                .lock()
+                .unwrap()
+                .driver_cancel
+                .as_ref()
+                .and_then(|d| d.cause.clone());
+            return Ok(TurnOutcome {
+                turn: None,
+                reason: TurnEndReason::Aborted {
+                    reason: cause.unwrap_or(CancelCause::User),
+                },
+            });
+        }
         let turn = {
             let mut st = self.state.lock().unwrap();
             st.running = Some(Running {
                 cancel: cancel.clone(),
                 cause: None,
+                ending: false,
             });
             st.last_turn + 1
         };
@@ -1486,18 +1586,19 @@ impl Inner {
             st.open_turn = Some((turn, start.seq));
         }
         let result = self.turn_body(turn, target, &cancel).await;
-        let cause = self
-            .state
-            .lock()
-            .unwrap()
-            .running
-            .as_ref()
-            .and_then(|r| r.cause.clone());
+        let cause = {
+            let mut st = self.state.lock().unwrap();
+            let cause = st.running.as_mut().and_then(|r| {
+                r.ending = true;
+                r.cause.clone()
+            });
+            cause.or_else(|| st.driver_cancel.as_ref().and_then(|d| d.cause.clone()))
+        };
         let reason = match result {
-            Ok(reason) => reason,
-            Err(_) if cancel.is_cancelled() => TurnEndReason::Aborted {
+            _ if cancel.is_cancelled() => TurnEndReason::Aborted {
                 reason: cause.unwrap_or(CancelCause::User),
             },
+            Ok(reason) => reason,
             Err(e) => {
                 let failure = match e.downcast_ref::<LlmError>() {
                     Some(LlmError(f)) => f.clone(),
@@ -1590,6 +1691,7 @@ impl Inner {
             if turn_ends.is_some() && self.state.lock().unwrap().next_step.is_empty() {
                 break;
             }
+            self.compact_after_step(turn, cancel).await?;
             target = Target::NextStep;
         }
         Ok(turn_ends.unwrap_or(TurnEndReason::Completed))
@@ -1607,8 +1709,8 @@ impl Inner {
         // Job events logged so far; notices land in this step's batch.
         crate::jobs::drain(self).await;
         let claimed = self.claim(target).await?;
-        // dsh 0.2.0 projects the runtime context before the pre-step listeners run.
         let context = self.runtime_context();
+        let work_rounds = self.compact_between_steps();
         let (compaction_auto, reminder) = {
             let c = self.config.lock().unwrap();
             (c.compaction.auto, c.repeat_reminder.enabled)
@@ -1628,6 +1730,13 @@ impl Inner {
             }
         }
         check(cancel)?;
+        // Work-round compaction may have shadowed the last snapshot. Refresh
+        // it here while preserving the ordinary Standard/Minimal projection.
+        let context = if work_rounds {
+            self.runtime_context()
+        } else {
+            context
+        };
         if reminder && claimed.iter().any(|m| m.source.is_user()) {
             self.state.lock().unwrap().repeat_chain = None;
         }

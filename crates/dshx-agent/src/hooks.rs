@@ -13,7 +13,7 @@ use dshx_core::{Message, SessionEvent, ToolRegistry};
 use tokio_util::sync::CancellationToken;
 
 use crate::agent::Inner;
-use crate::config::ToolUpdate;
+use crate::config::{AgentConfig, ExtraSection, ToolUpdate};
 use crate::journal::Journal;
 
 /// What a [`PreStepHook`] sees of the step being prepared.
@@ -33,6 +33,7 @@ pub struct PreStep<'a> {
     pub step: u64,
     journal: &'a Journal,
     registry: &'a Mutex<ToolRegistry>,
+    config: &'a Mutex<AgentConfig>,
     decision: Mutex<Decision>,
 }
 
@@ -64,6 +65,16 @@ impl PreStep<'_> {
         self.registry.lock().unwrap().clone()
     }
 
+    /// Current product prompt sections, including earlier hooks' changes.
+    pub fn prompt_sections(&self) -> Vec<ExtraSection> {
+        self.config.lock().unwrap().prompt.extra_sections.clone()
+    }
+
+    /// Refreshes product guidance before this step's prompt is rendered.
+    pub fn update_prompt_sections(&self, f: impl FnOnce(&mut Vec<ExtraSection>)) {
+        f(&mut self.config.lock().unwrap().prompt.extra_sections);
+    }
+
     /// Rejects the step (dsh pre-step `{kind: "reject"}`): nothing enters,
     /// the turn ends `blocked`, and `restore` goes back to the front of the
     /// next-step inbox (claimed input that must not be lost).
@@ -88,6 +99,17 @@ impl PreStep<'_> {
 /// messages, so they stay reconstructable from the session log.
 #[async_trait]
 pub trait PreStepHook: Send + Sync {
+    /// Whether this product has active work that benefits from compaction
+    /// between completed model/tool steps. Queried live at each boundary.
+    fn compact_between_steps(&self) -> bool {
+        false
+    }
+
+    /// A stop arrived outside an executing turn body, including terminal
+    /// commits, compaction, flushing and idle gaps. Products with automatic
+    /// continuation must disarm it here: an aborted turn/end is not assured.
+    fn cancel_between_turns(&self) {}
+
     /// Edits `entering` in place. An error is logged and leaves the batch as
     /// the hook left it, so change it only once the work succeeded.
     async fn pre_step(&self, step: &PreStep<'_>, entering: &mut Vec<Message>)
@@ -127,6 +149,7 @@ pub(crate) async fn run(
         step,
         journal: &inner.journal,
         registry: &inner.tools,
+        config: &inner.config,
         decision: Mutex::new(Decision::default()),
     };
     for hook in hooks {

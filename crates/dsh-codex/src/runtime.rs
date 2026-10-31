@@ -21,11 +21,13 @@ use dshx_llm::{DeepSeekClient, DeepSeekConfig, ProviderRouter, SharedApiKey};
 use dshx_session::{Credentials, FileAttachments, FileLog, SessionStore};
 use dshx_tools::skill::{CatalogHistory, SkillConfig, SkillRegistry, SkillTool};
 
+mod browser;
 mod extensions;
 pub(crate) mod ondemand;
 mod providers;
 mod suggest;
 
+pub(crate) use browser::parse_settings as parse_browser_settings;
 pub use extensions::RuntimeExtensions;
 pub use providers::RuntimeProviders;
 pub use suggest::SuggestContext;
@@ -49,6 +51,8 @@ pub struct Runtime {
     provider_keys: providers::ProviderKeys,
     /// One background Chrome per process, shared by all sessions.
     browser: Option<Arc<dshx_browser::BrowserTool>>,
+    /// Saved launch settings at process start; edits take effect on restart.
+    browser_at_start: dshx_core::config::BrowserConfig,
     macos: Vec<Arc<dyn Tool>>,
     /// Browser frames and Mac tool screenshots for the web UI's live view.
     pub live: Arc<LiveHub>,
@@ -161,6 +165,7 @@ impl Runtime {
         subagents.set_child_tools(Arc::new(Automation::child_tools));
         let runtime = Arc::new(Runtime {
             home,
+            browser_at_start: config.codex.browser.clone(),
             config: RwLock::new(config),
             store,
             attachments,
@@ -219,6 +224,12 @@ impl Runtime {
             text: ondemand::FILE_REFERENCE_PROMPT.into(),
             literal: true,
         }];
+        sections.push(ExtraSection {
+            name: "tools:browser-routing".into(),
+            order: 950,
+            text: browser::ROUTING.into(),
+            literal: true,
+        });
         sections.extend(
             self.mcp
                 .prompt_sections_where(|server| config.mcp_availability(server).always)

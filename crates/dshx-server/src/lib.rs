@@ -138,6 +138,14 @@ pub trait Backend: Send + Sync + 'static {
     async fn info(&self) -> anyhow::Result<Value>;
     /// Applies `{model?, effort?, sandbox?, approval?, apiKey?}` and returns the new info.
     async fn update_settings(&self, patch: Value) -> anyhow::Result<Value>;
+    /// Saved and active browser settings; this does not start Chrome.
+    async fn browser_status(&self) -> anyhow::Result<Value> {
+        Err(NotFound("browser diagnostics".into()).into())
+    }
+    /// Isolated local open/type/click/read check; never uses a user's profile.
+    async fn browser_test(&self) -> anyhow::Result<Value> {
+        Err(NotFound("browser diagnostics".into()).into())
+    }
     async fn workspaces(&self) -> anyhow::Result<Value>;
     async fn add_workspace(&self, path: String) -> anyhow::Result<Value>;
     async fn list_sessions(&self, cwd: Option<String>) -> anyhow::Result<Value>;
@@ -343,6 +351,8 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
     let api = Router::new()
         .route("/info", get(info))
         .route("/settings", put(update_settings))
+        .route("/browser/status", get(browser_status))
+        .route("/browser/test", post(browser_test))
         .route("/workspaces", get(workspaces).post(add_workspace))
         .route("/sessions", get(list_sessions).post(create_session))
         .route(
@@ -524,6 +534,14 @@ async fn update_settings(
 ) -> ApiResult<Json<Value>> {
     let info = s.backend.update_settings(patch).await?;
     Ok(Json(extensions::with_summary(&s, info).await))
+}
+
+async fn browser_status(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.browser_status().await?))
+}
+
+async fn browser_test(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.browser_test().await?))
 }
 
 async fn workspaces(State(s): State<AppState>) -> ApiResult<Json<Value>> {

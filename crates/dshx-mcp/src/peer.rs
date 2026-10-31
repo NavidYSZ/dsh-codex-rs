@@ -13,6 +13,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::McpError;
 
+/// Best effort cancellation must not turn an expired request into a hung one.
+const CANCEL_NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(1);
+
 /// What a transport delivers to the peer.
 #[derive(Debug)]
 pub(crate) enum Incoming {
@@ -160,7 +163,8 @@ impl Peer {
     }
 
     /// Sends a request and waits for its result, at most `timeout`; on
-    /// timeout or `cancel` the server receives `notifications/cancelled`.
+    /// timeout or `cancel` attempts `notifications/cancelled` for at most one
+    /// additional second, including a stalled HTTP notification response.
     pub async fn request(
         &self,
         method: &str,
@@ -199,13 +203,75 @@ impl Peer {
             if let (true, Some(reason)) = (was_pending, reason)
                 && !self.is_closed()
             {
-                self.notify(
-                    "notifications/cancelled",
-                    Some(json!({"requestId": id, "reason": reason})),
+                let _ = tokio::time::timeout(
+                    CANCEL_NOTIFICATION_TIMEOUT,
+                    self.notify(
+                        "notifications/cancelled",
+                        Some(json!({"requestId": id, "reason": reason})),
+                    ),
                 )
                 .await;
             }
         }
         outcome
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct StalledCancellation {
+        notifications: Mutex<Vec<Value>>,
+    }
+
+    #[async_trait]
+    impl Transport for StalledCancellation {
+        async fn send(&self, message: Value) -> Result<(), McpError> {
+            if message["method"] == "notifications/cancelled" {
+                self.notifications.lock().unwrap().push(message);
+                std::future::pending().await
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn close(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn timeout_and_cancel_settle_when_notification_transport_stalls() {
+        for cancelled in [false, true] {
+            let transport = Arc::new(StalledCancellation {
+                notifications: Mutex::default(),
+            });
+            let (_inbox, incoming) = mpsc::unbounded_channel();
+            let (peer, _events) = Peer::start(transport.clone(), incoming, "fixture".into());
+            let cancel = CancellationToken::new();
+            let trigger = cancel.clone();
+            if cancelled {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    trigger.cancel();
+                });
+            }
+            let result = tokio::time::timeout(
+                Duration::from_secs(2),
+                peer.request("tools/call", None, Duration::from_millis(50), Some(&cancel)),
+            )
+            .await
+            .expect("cancellation cleanup must stay bounded");
+            if cancelled {
+                assert!(matches!(result, Err(McpError::Cancelled)));
+            } else {
+                assert!(matches!(result, Err(McpError::Timeout)));
+            }
+            assert!(peer.pending.lock().unwrap().is_empty());
+            let notifications = transport.notifications.lock().unwrap();
+            assert_eq!(notifications.len(), 1);
+            assert_eq!(notifications[0]["params"]["requestId"], 0);
+        }
     }
 }

@@ -244,7 +244,22 @@ async fn web_serves_goals_schedules_and_teams() {
         ))
         .await;
     assert_eq!(history["records"][0]["prompt"], "Check the deploy");
-    let session = server.get(&format!("/sessions/{id}")).await;
+    // Delivery acknowledgement means durable inbox admission. Wait for the
+    // agent to consume it before asserting the committed user-message shape.
+    let session = server
+        .until(
+            "the committed reminder",
+            &format!("/sessions/{id}"),
+            |session| {
+                session["events"].as_array().is_some_and(|events| {
+                    events.iter().any(|event| {
+                        event["type"] == "user/message"
+                            && event["data"]["source"]["kind"] == "schedule"
+                    })
+                })
+            },
+        )
+        .await;
     let reminder = session["events"]
         .as_array()
         .unwrap()

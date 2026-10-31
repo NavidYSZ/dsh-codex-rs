@@ -169,6 +169,7 @@ async fn promotion_failure_preserves_original_and_success_is_one_batch() {
     a.inner.state.lock().unwrap().running = Some(Running {
         cancel: CancellationToken::new(),
         cause: None,
+        ending: false,
     });
     let before = log.events();
     log.fail_promotion.store(true, Ordering::SeqCst);
@@ -387,6 +388,7 @@ async fn cancellation_cannot_readmit_a_reserved_prompt() {
         st.running = Some(Running {
             cancel: cancel.clone(),
             cause: None,
+            ending: false,
         });
     }
     let claimed = a.inner.claim(Target::NextTurn).await.unwrap();

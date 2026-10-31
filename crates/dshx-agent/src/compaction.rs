@@ -461,9 +461,13 @@ pub(crate) async fn compact_if_needed(
         // prefix the provider still caches; pruning first rewrites it from
         // the first oversized result on, usually near the start. Only the
         // retained tail is pruned afterwards, and it is re-read anyway.
-        let range = inner
-            .journal
-            .read(|events, _| select_range(events, &m, retain));
+        let boundary_attempt = inner.state.lock().unwrap().last_compaction_attempt;
+        let range = inner.journal.read(|events, _| {
+            select_range(events, &m, retain).filter(|range| {
+                boundary_attempt != Some(*range)
+                    && (boundary_attempt.is_none() || new_tokens(events, &m, *range) > 0)
+            })
+        });
         if let Some(range) = range {
             compact_region(inner, range, Some(turn), cancel).await?;
             done = true;
@@ -485,35 +489,54 @@ pub(crate) async fn compact_if_needed(
 /// earlier checkpoints: less is not worth a summary call.
 const MIN_EVERY_TURN_TOKENS: u64 = 8_000;
 
-/// dsh-codex: condenses history once a turn completed, between turns
-/// (`turn: null`, like `/compact`). The last request's prefix is still
-/// cached, so the summarizer reads it at cache price. Returns whether a
-/// summary replaced history.
-pub(crate) async fn compact_after_turn(
+/// PTC programs and active goals can produce useful checkpoints well before
+/// a whole interactive turn completes. Tiny results still keep their prefix.
+const MIN_ROUND_TOKENS: u64 = 1_024;
+
+/// Condenses history after a settled model/tool step, or after the whole
+/// turn (`turn: null`). The last request's prefix is still cached. Returns
+/// whether a summary replaced history; work rounds use the smaller gate.
+pub(crate) async fn compact_at_boundary(
     inner: &Arc<Inner>,
     policy: TurnEndCompaction,
+    turn: Option<u64>,
+    work_rounds: bool,
     cancel: &CancellationToken,
 ) -> anyhow::Result<bool> {
     if inner.journal.request_header().is_none() || compaction_open(inner) {
         return Ok(false);
     }
-    let range = inner.journal.read(|events, _| {
-        let m = measure(events);
-        let retain = match policy {
-            TurnEndCompaction::Off => return None,
-            TurnEndCompaction::Threshold(tokens) if m.total_tokens < tokens => return None,
-            TurnEndCompaction::Threshold(tokens) => tokens / 5,
-            TurnEndCompaction::EveryTurn => 0,
-        };
-        let range = select_range(events, &m, retain)?;
-        let worth = policy != TurnEndCompaction::EveryTurn
-            || new_tokens(events, &m, range) >= MIN_EVERY_TURN_TOKENS;
-        worth.then_some(range)
-    });
+    let range = inner
+        .journal
+        .read(|events, _| {
+            let m = measure(events);
+            let retain = match policy {
+                TurnEndCompaction::Off => return None,
+                TurnEndCompaction::Threshold(tokens) if m.total_tokens < tokens => return None,
+                TurnEndCompaction::Threshold(tokens) => tokens / 5,
+                TurnEndCompaction::EveryTurn => 0,
+            };
+            let range = select_range(events, &m, retain)?;
+            let fresh = new_tokens(events, &m, range);
+            let minimum = if work_rounds {
+                MIN_ROUND_TOKENS
+            } else {
+                MIN_EVERY_TURN_TOKENS
+            };
+            let worth = (policy != TurnEndCompaction::EveryTurn || fresh >= minimum)
+                && (!work_rounds || fresh > 0);
+            worth.then_some(range)
+        })
+        .filter(|range| {
+            !work_rounds || inner.state.lock().unwrap().last_compaction_attempt != Some(*range)
+        });
     let Some(range) = range else {
         return Ok(false);
     };
-    compact_region(inner, range, None, cancel).await?;
+    if work_rounds {
+        inner.state.lock().unwrap().last_compaction_attempt = Some(range);
+    }
+    compact_region(inner, range, turn, cancel).await?;
     prune_session(inner).await?;
     Ok(true)
 }
@@ -711,7 +734,11 @@ async fn summarize_and_commit(
             temperature: None,
             session_id: Some(inner.journal.id()),
         };
-        let mut stream = llm.stream(request, cancel.child_token()).await;
+        let mut stream = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return Err(Aborted.into()),
+            stream = llm.stream(request, cancel.child_token()) => stream,
+        };
         let mut asm = BlockAssembler::default();
         loop {
             tokio::select! {

@@ -4,7 +4,7 @@
 
 **Aether ist eine eigenständige App.** Sie wird neben DeepSeek Harness
 installiert und hat eigene Chats, Einstellungen und Zugangsdaten unter
-`~/.dsh-codex`. Das Repository und die CLI heißen weiterhin `dsh-codex`.
+`~/.dsh-codex`. Das Repository heißt `dsh-codex-rs`, die CLI weiterhin `dsh-codex`.
 
 ## Installation auf dem Mac
 
@@ -40,6 +40,26 @@ installiert lassen. Das originale DeepSeek Harness ist davon unabhängig.
   Durchlauf an. In den Einstellungen lassen sich die beiden Tastenbelegungen
   vertauschen. Fehlgeschlagene Sendungen behalten Text und Anhänge; ein
   Wiederholungsversuch derselben Sendung wird nicht doppelt ausgeführt.
+
+## Browser Use, HuntProxy und Kontext
+
+Unter **Einstellungen → Browser Use** lassen sich Browserpfad, Aktivierung und
+aktiver Status prüfen. **Browser testen** startet ein separates Testprofil und
+prüft Öffnen, Tippen, Klicken und Lesen auf einer lokalen Seite. Eigene Tabs und
+Anmeldungen bleiben erhalten. Änderungen an Pfad/Aktivierung erfordern einen
+Neustart der betroffenen Instanz; die Oberfläche zeigt das ausdrücklich an.
+
+HuntProxy muss in **Aether → Plugins → MCP-Server** eingerichtet sein, auch
+wenn es bereits mit einem anderen Agenten verbunden ist. „Immer laden“
+aktivieren oder im Chat `@huntproxy` nennen. PTC verwendet die MCP-Werkzeuge
+direkt. [Einrichtung und Fehlerdiagnose](docs/browser-use.md).
+
+Die Kontext-Einstellung greift auch zwischen abgeschlossenen PTC-/Goal-
+Arbeitsrunden. „Jede Runde“ komprimiert ältere Inhalte ab 1.024 neuen
+komprimierbaren Tokens; Standard ohne Goal behält die Grenze von 8.000 Tokens
+am Turn-Ende. Das jüngste zusammengehörige Tool-Ergebnis, wartende Nachrichten
+und der kanonische Goal-Zustand bleiben erhalten. Stop verhindert weitere
+automatische Goal-Runden, auch während einer Zusammenfassung.
 
 ## Unterschied zum alten Repository
 

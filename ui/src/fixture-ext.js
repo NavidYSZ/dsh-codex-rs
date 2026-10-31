@@ -2,7 +2,7 @@
 // ui/fixtures/extensions.json and shaped like the server's answers
 // (docs/rust/SPEC.md §6). Changes live in memory until the page reloads.
 // ?ext=empty shows the empty states, ?ext=many 200 skills and a server with
-// 50 tools, ?ext=error the error states.
+// 50 tools, ?ext=error the error states, ?ext=browser a browser MCP connection.
 import { ApiError } from './api.js';
 
 const variant = new URLSearchParams(location.search).get('ext') ?? '';
@@ -18,6 +18,16 @@ async function load() {
       const d = await r.json();
       if (variant === 'empty') { d.skills = []; d.servers = []; }
       if (variant === 'many') grow(d);
+      if (variant === 'browser') d.servers.push({
+        name: 'huntproxy', origin: 'config', plugin: null, enabled: true, transport: 'stdio',
+        command: 'node', args: ['/opt/example/browser-mcp.js'], env: [], envVars: [], headers: [],
+        secrets: { env: [], headers: [], bearerToken: false }, always: false, disabledTools: [],
+        auth: { oauth: false, login: null }, status: 'connected', retrying: false,
+        tools: ['open', 'type', 'click', 'read'].map((action) => ({
+          name: `mcp__huntproxy__browser_${action}`, rawName: `browser_${action}`,
+          description: `Fixture browser ${action}.`, inputSchema: { type: 'object', properties: {} },
+        })),
+      });
       const now = Date.now();
       for (const s of d.servers) {
         const login = s.auth?.login;
@@ -198,7 +208,7 @@ export const fixtureExt = {
   },
 
   async testServer(body) {
-    await load();
+    const d = await load();
     await sleep(900);
     const c = body.config ?? {};
     const target = c.url ?? [c.command, ...(c.args ?? [])].join(' ');
@@ -210,7 +220,10 @@ export const fixtureExt = {
     if (c.url && (c.oauth?.enabled ?? true) && !body.secrets?.bearerToken) {
       return { ok: false, tools: [], error: 'authorization required', needsLogin: true, stderr: [], elapsedMs: 310 };
     }
-    return { ok: true, tools: NEW_TOOLS.map(([name, description]) => ({ name, description })), needsLogin: false, stderr: [], elapsedMs: 870 };
+    const existing = d.servers.find((server) => server.name === body.name);
+    const tools = existing?.tools?.map((tool) => ({ name: tool.rawName, description: tool.description }))
+      ?? NEW_TOOLS.map(([name, description]) => ({ name, description }));
+    return { ok: true, tools, needsLogin: false, stderr: [], elapsedMs: 870 };
   },
 
   async log(name) {

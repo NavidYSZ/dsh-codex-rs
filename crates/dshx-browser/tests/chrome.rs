@@ -27,6 +27,23 @@ const PLAYWRIGHT_CHROME: &str = "/root/.cache/ms-playwright/chromium-1243/chrome
 /// One Chrome at a time: this host also runs production services.
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+#[tokio::test]
+async fn isolated_settings_diagnostic_exercises_real_browser_actions() {
+    let _serial = SERIAL.lock().await;
+    let Some(chrome) = chrome() else {
+        return;
+    };
+    let config = dshx_core::config::BrowserConfig {
+        chrome: Some(chrome),
+        ..Default::default()
+    };
+    let result = dshx_browser::diagnose(&config).await;
+    assert!(result.ok, "{result:?}");
+    assert_eq!(result.checks.len(), 5);
+    assert!(result.checks.iter().all(|c| c.ok));
+    assert!(result.isolated);
+}
+
 fn chrome() -> Option<PathBuf> {
     let explicit = std::env::var_os("DSHX_TEST_CHROME").map(PathBuf::from);
     let found = explicit
@@ -780,10 +797,16 @@ async fn actions_end_to_end() {
     let read = summary(&h.ok(json!({ "action": "read" })).await);
     assert!(read.contains("Paragraph 0: the quick brown fox"));
     assert!(
-        read.ends_with(" more characters; scroll and read again for more)"),
+        read.ends_with(" more characters; read again with offset: 12000)"),
         "{}",
         &read[read.len() - 200..]
     );
+    let rest = summary(
+        &h.ok(json!({"action":"read","offset":12000,"maxChars":40000}))
+            .await,
+    );
+    assert!(!rest.contains("Paragraph 0:"));
+    assert!(rest.contains("Paragraph 399:"), "{rest}");
     let text = summary(
         &h.ok(json!({ "action": "scroll", "direction": "down", "amount": 2 }))
             .await,

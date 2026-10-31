@@ -68,6 +68,22 @@ Settings can swap those defaults. Pending steering and queued messages stay
 visible until consumed or explicitly removed. Queued follow-ups run in order.
 A failed submission keeps the draft and its attachments.
 
+## Browser Use and HuntProxy
+
+**Settings → Browser Use** shows the browser executable, separate profile,
+saved versus active configuration and any required restart. **Test browser**
+checks launch, navigation, typing, clicking and reading with an isolated local
+page and temporary profile. Browser MCP connections have their own connection
+and tool-discovery check. These checks do not certify access to every website.
+
+Connect HuntProxy in Aether's **Plugins → MCP servers**, even if another agent
+already uses it: applications keep their own MCP configuration. Enable
+**Always load** or mention `@huntproxy` in the chat. PTC calls the connected
+tools directly. See [browser setup, HuntProxy and troubleshooting](docs/browser-use.md).
+
+Website errors should be diagnosed through the selected browser backend;
+desktop mouse/keyboard control for web work requires explicit user intent.
+
 ## Build from source
 
 Install Rust 1.97.1 or newer. For the native Mac app, use Xcode 26.5 or newer
@@ -201,7 +217,7 @@ max_pending_messages_per_member = 64
 max_message_bytes = 65536
 ```
 
-When a chat condenses older history between turns (Settings → Context in the
+When a chat condenses older history (Settings → Context in the
 web UI; open chats follow a change at once):
 
 ```toml
@@ -210,9 +226,13 @@ mode = "threshold"                     # "threshold", "every-turn" or "off"
 threshold_tokens = 200000              # context size that triggers it; a fifth stays verbatim
 ```
 
-`every-turn` keeps only the final answer verbatim and skips turns that added
-less than about 10,000 tokens. `off` leaves DSH's own compaction near the
-context limit, which stays on in every mode. Minimal chats never compact.
+For PTC and active Goals, the policy also runs between completed model/tool
+rounds. `every-turn` summarizes once at least 1,024 fresh compactable estimated
+tokens have accumulated; ordinary Standard checks at turn end with an
+8,000-token floor. The newest complete model/tool batch stays verbatim, pending
+input remains queued, and Goal state/counters are restored from the journal.
+Stop cancels compaction and prevents automatic Goal continuation. `off` leaves
+pressure compaction near the context limit enabled. Minimal chats never compact.
 
 Reminders live in `~/.dsh-codex/storages/schedule.json`. The web server
 exposes them, the session goal and the Team under `/api/schedules`,

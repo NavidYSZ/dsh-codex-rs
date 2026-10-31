@@ -8,6 +8,8 @@
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use dshx_testkit::{MockDeepSeek, RecordedRequest, Reply, scenarios};
@@ -277,7 +279,8 @@ async fn skills_and_mcp_join_a_chat_only_on_demand() {
     assert!(!names.contains(&"skill".to_owned()), "{names:?}");
     let text = all_text(&first);
     assert!(!text.contains("<available_skills>"), "{text}");
-    assert!(!text.contains("MCP server") && !text.contains("fixture tools carefully"));
+    assert!(!text.contains("MCP server: t") && !text.contains("MCP server \"t\""));
+    assert!(!text.contains("fixture tools carefully"));
     // dsh's file-reference guidance is part of the system prompt.
     assert!(
         first
@@ -470,4 +473,421 @@ async fn skills_and_mcp_join_a_chat_only_on_demand() {
     let saved: Value = serde_json::from_str(&saved).unwrap();
     assert_eq!(saved["name"], "notes.txt");
     assert!(Path::new(saved["path"].as_str().unwrap()).is_file());
+}
+
+fn live_fixture() -> String {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/mcp_live.py")
+        .display()
+        .to_string()
+}
+
+fn live_config(home: &Path, ws: &Path, always: bool, ready: bool, instructions: &str) {
+    write(
+        &home.join("server.json"),
+        &json!({"ready": home.join("ready"), "instructions": instructions}).to_string(),
+    );
+    if ready {
+        write(&home.join("ready"), "ready");
+    }
+    write(
+        &home.join("config.toml"),
+        &format!(
+            "sandbox = \"danger-full-access\"\napproval = \"never\"\n\
+             [codex.browser]\nenabled = false\n\
+             [codex.computerUse]\nenabled = false\n\
+             [codex.apps]\nenabled = false\n\
+             [codex.compaction]\nmode = \"off\"\n\
+             [mcp_servers.t]\ncommand = \"python3\"\nargs = [{}, {}, {}]\nalways = {always}\n",
+            json!(live_fixture()),
+            json!(home.join("server.json")),
+            json!(home.join("calls.jsonl")),
+        ),
+    );
+    write(
+        &ws.join("gate.py"),
+        "from pathlib import Path\nimport sys, time\nname = sys.argv[1]\nPath(name + '.started').touch()\ndeadline = time.monotonic() + 25\nwhile not Path(name + '.release').exists():\n    if time.monotonic() >= deadline: raise RuntimeError('test gate timed out')\n    time.sleep(0.01)\nprint('released')\n",
+    );
+}
+
+fn gate(name: &str) -> Value {
+    json!({"command": format!("python3 gate.py {name}"), "description": "Wait for the fixture to update", "timeoutMs": 30000})
+}
+
+fn calls_reply(preset: &str, id: &str, calls: &[(&str, Value)]) -> Reply {
+    if preset == "ptc" {
+        let mut code = String::from("let result;\n");
+        for (name, args) in calls {
+            code.push_str(&format!("result = await tools[{}]({args});\n", json!(name)));
+        }
+        code.push_str("return result;");
+        Reply::tool_call(
+            id,
+            "run_code",
+            json!({"code": code, "description": "Exercise the current MCP fixture bindings"}),
+        )
+    } else {
+        let mut reply = Reply::stream();
+        for (n, (name, args)) in calls.iter().enumerate() {
+            reply = reply.tool_call(format!("{id}-{n}"), *name, args.clone());
+        }
+        reply.into()
+    }
+}
+
+async fn wait_path(path: &Path) {
+    for _ in 0..200 {
+        if path.exists() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("fixture did not reach {}", path.display());
+}
+
+async fn connected(web: &Web, field: &str) {
+    for _ in 0..200 {
+        let server = web.get("/mcp/servers/t").await;
+        if server["status"] == "connected"
+            && server["tools"].as_array().is_some_and(|tools| {
+                tools.iter().any(|tool| {
+                    tool["rawName"] == "echo"
+                        && tool["inputSchema"]["properties"].get(field).is_some()
+                })
+            })
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!(
+        "server did not publish the {field} schema: {}",
+        web.get("/mcp/servers/t").await
+    );
+}
+
+async fn live_session(web: &Web, ws: &Path, preset: &str) -> String {
+    web.call(
+        reqwest::Method::POST,
+        "/sessions",
+        Some(json!({"cwd": ws.canonicalize().unwrap(), "preset": preset})),
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+async fn exported(web: &Web, session: &str) -> Vec<Value> {
+    let (status, jsonl) = web
+        .raw(
+            reqwest::Method::GET,
+            &format!("/sessions/{session}/export"),
+            None,
+        )
+        .await;
+    assert_eq!(status, 200, "{jsonl}");
+    jsonl
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+fn guidance_notes(events: &[Value]) -> Vec<&Value> {
+    events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event["data"]["source"]["kind"].as_str(),
+                Some("mcp-activation" | "mcp-guidance")
+            )
+        })
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn active_standard_and_ptc_turns_refresh_same_name_mcp_handles_and_schemas() {
+    for preset in ["standard", "ptc"] {
+        for always in [false, true] {
+            let home = tempfile::tempdir().unwrap();
+            let ws = tempfile::tempdir().unwrap();
+            let others = tempfile::tempdir().unwrap();
+            live_config(
+                home.path(),
+                ws.path(),
+                always,
+                true,
+                "LIVE_INSTRUCTIONS_ONE",
+            );
+            let mock = MockDeepSeek::start().await;
+            let round = Arc::new(AtomicUsize::new(0));
+            mock.set_responder(move |request| {
+                if scenarios::is_title_request(request) {
+                    return Reply::text("Live MCP test");
+                }
+                match round.fetch_add(1, Ordering::SeqCst) {
+                    0 => calls_reply(preset, "before", &[
+                        ("mcp__t__echo", json!({"old": "before-restart"})),
+                        ("bash", gate("first")),
+                    ]),
+                    1 => calls_reply(preset, "restart", &[
+                        ("mcp__t__echo", json!({"old": "after-restart"})),
+                        ("mcp__t__change", json!({"field": "new"})),
+                        ("bash", gate("second")),
+                    ]),
+                    2 => calls_reply(preset, "schema", &[("mcp__t__echo", json!({"new": "after-schema"}))]),
+                    3 if preset == "ptc" => Reply::tool_call("results", "run_code", json!({
+                        "description": "Read canonical MCP results and catch errors",
+                        "code": "const plain = await tools.mcp__t__echo({new:'unchanged'}); const json = await tools.mcp__t__json_text({}); const structured = await tools.mcp__t__structured({}); let failure; try { await tools.mcp__t__fail({}); } catch (error) { failure = {name:error.name,tool:error.toolName,message:error.message}; } return {plain:plain.content[0].text,parsed:JSON.parse(json.content[0].text).n,structured:structured.structuredContent.n,failure};"
+                    })),
+                    3 => calls_reply(preset, "unchanged", &[("mcp__t__echo", json!({"new": "unchanged"}))]),
+                    _ => Reply::text("done"),
+                }
+            });
+            let web = Web::start(home.path(), others.path(), &mock);
+            connected(&web, "old").await;
+            let session = live_session(&web, ws.path(), preset).await;
+            web.call(
+                reqwest::Method::POST,
+                &format!("/sessions/{session}/prompt"),
+                Some(json!({"text": "Use @t through its restart and schema update."})),
+            )
+            .await;
+            wait_path(&ws.path().join("first.started")).await;
+            write(&home.path().join("server.json"), &json!({"ready": home.path().join("ready"), "instructions": "LIVE_INSTRUCTIONS_TWO"}).to_string());
+            web.call(reqwest::Method::POST, "/mcp/servers/t/restart", None)
+                .await;
+            connected(&web, "old").await;
+            write(&ws.path().join("first.release"), "release");
+            wait_path(&ws.path().join("second.started")).await;
+            connected(&web, "new").await;
+            write(&ws.path().join("second.release"), "release");
+            wait_for(&mock, 5).await;
+            idle(&web, &session).await;
+
+            let requests = turns(&mock);
+            assert!(
+                all_text(&requests[1]).contains("LIVE_INSTRUCTIONS_TWO"),
+                "{preset} always={always}"
+            );
+            if preset == "ptc" {
+                for request in &requests {
+                    assert_eq!(tool_names(request), ["run_code"]);
+                }
+                assert!(
+                    all_text(&requests[2])
+                        .contains("\"mcp__t__echo\": (args: { \"new\": string })")
+                );
+                let text = all_text(&requests[4]);
+                for expected in [
+                    "plain new: unchanged",
+                    "ToolCallError",
+                    "mcp__t__fail",
+                    "fixture failure",
+                    "parsed",
+                    "structured",
+                ] {
+                    assert!(text.contains(expected), "missing {expected}: {text}");
+                }
+            } else {
+                let echo = requests[2].body["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|tool| tool["name"] == "mcp__t__echo")
+                    .unwrap();
+                assert!(
+                    echo["input_schema"]["properties"].get("new").is_some(),
+                    "{echo}"
+                );
+            }
+            let calls: Vec<Value> = std::fs::read_to_string(home.path().join("calls.jsonl"))
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            let echoes: Vec<_> = calls.iter().filter(|call| call["name"] == "echo").collect();
+            assert_eq!(echoes.len(), 4, "{preset} always={always}: {calls:?}");
+            assert_ne!(echoes[0]["pid"], echoes[1]["pid"]);
+            assert_eq!(echoes[1]["pid"], echoes[2]["pid"]);
+            assert_eq!(echoes[2]["args"], json!({"new": "after-schema"}));
+            let events = exported(&web, &session).await;
+            let notes = guidance_notes(&events);
+            assert_eq!(
+                notes.len(),
+                if always { 0 } else { 2 },
+                "{preset} always={always}: {notes:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn late_mcp_guidance_reaches_standard_and_ptc_once_and_survives_compaction() {
+    for preset in ["standard", "ptc"] {
+        for always in [false, true] {
+            let home = tempfile::tempdir().unwrap();
+            let ws = tempfile::tempdir().unwrap();
+            let others = tempfile::tempdir().unwrap();
+            live_config(home.path(), ws.path(), always, false, "LATE_MCP_GUIDANCE");
+            let mock = MockDeepSeek::start().await;
+            let round = Arc::new(AtomicUsize::new(0));
+            mock.set_responder(move |request| {
+                if scenarios::is_title_request(request) {
+                    return Reply::text("Late MCP test");
+                }
+                if all_text(request).contains("You are now acting as a compaction engine") {
+                    return Reply::text("## Primary Request and Intent\n- Test the delayed MCP connection.\n\n## Next Step\n- Continue with the active server.");
+                }
+                match round.fetch_add(1, Ordering::SeqCst) {
+                    0 => calls_reply(preset, "wait", &[("bash", gate("first"))]),
+                    1 => calls_reply(preset, "late", &[("mcp__t__echo", json!({"old":"late"}))]),
+                    2 => calls_reply(preset, "same", &[("mcp__t__echo", json!({"old":"same"}))]),
+                    _ => Reply::text("done"),
+                }
+            });
+            let web = Web::start(home.path(), others.path(), &mock);
+            let session = live_session(&web, ws.path(), preset).await;
+            web.call(reqwest::Method::POST, &format!("/sessions/{session}/prompt"), Some(json!({"text": format!("Use @t once it connects. {}", "Retain the current request while waiting for the fixture. ".repeat(400))}))).await;
+            wait_path(&ws.path().join("first.started")).await;
+            assert!(!all_text(&turns(&mock)[0]).contains("LATE_MCP_GUIDANCE"));
+            write(&home.path().join("ready"), "ready");
+            connected(&web, "old").await;
+            write(&ws.path().join("first.release"), "release");
+            wait_for(&mock, 4).await;
+            idle(&web, &session).await;
+            assert!(
+                all_text(&turns(&mock)[1]).contains("LATE_MCP_GUIDANCE"),
+                "{preset} always={always}"
+            );
+            let events = exported(&web, &session).await;
+            assert_eq!(
+                guidance_notes(&events).len(),
+                if always { 0 } else { 2 },
+                "{preset} always={always}: {events:?}"
+            );
+            if !always {
+                let compacted = web
+                    .call(
+                        reqwest::Method::POST,
+                        &format!("/sessions/{session}/compact"),
+                        None,
+                    )
+                    .await;
+                assert_eq!(compacted["compacted"], true, "{compacted}");
+                prompt(&web, &mock, &session, "Continue using the active server.").await;
+                let after = exported(&web, &session).await;
+                assert_eq!(guidance_notes(&after).len(), 3, "{after:?}");
+                prompt(&web, &mock, &session, "Keep the current guidance.").await;
+                assert_eq!(guidance_notes(&exported(&web, &session).await).len(), 3);
+            }
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn tool_disabling_and_chat_deactivation_apply_during_standard_and_ptc_turns() {
+    for preset in ["standard", "ptc"] {
+        let home = tempfile::tempdir().unwrap();
+        let ws = tempfile::tempdir().unwrap();
+        let others = tempfile::tempdir().unwrap();
+        live_config(home.path(), ws.path(), true, true, "DISABLE_MCP_GUIDANCE");
+        let mock = MockDeepSeek::start().await;
+        let round = Arc::new(AtomicUsize::new(0));
+        mock.set_responder(move |request| {
+            if scenarios::is_title_request(request) {
+                return Reply::text("Disable MCP test");
+            }
+            match round.fetch_add(1, Ordering::SeqCst) {
+                0 => calls_reply(preset, "first", &[
+                    ("mcp__t__echo", json!({"old": "before-disable"})),
+                    ("bash", gate("first")),
+                ]),
+                1 if preset == "ptc" => Reply::tool_call("disabled", "run_code", json!({
+                    "description": "Verify disabled bindings before the next update",
+                    "code": format!("if (typeof tools.mcp__t__echo !== 'undefined') throw Error('disabled binding retained'); await tools.mcp__t__structured({{}}); return await tools.bash({});", gate("second")),
+                })),
+                1 => calls_reply(preset, "disabled", &[
+                    ("mcp__t__echo", json!({"old": "must-not-execute"})),
+                    ("mcp__t__structured", json!({})),
+                    ("bash", gate("second")),
+                ]),
+                2 if preset == "ptc" => Reply::tool_call("off", "run_code", json!({
+                    "description": "Verify that deactivated MCP bindings remain absent",
+                    "code": "return {hasServerTools:Object.keys(tools).some(name => name.startsWith('mcp__t__'))};",
+                })),
+                2 => calls_reply(preset, "off", &[("mcp__t__structured", json!({}))]),
+                4 => calls_reply(preset, "reenabled", &[("mcp__t__structured", json!({}))]),
+                _ => Reply::text("done"),
+            }
+        });
+        let web = Web::start(home.path(), others.path(), &mock);
+        connected(&web, "old").await;
+        let session = live_session(&web, ws.path(), preset).await;
+        web.call(
+            reqwest::Method::POST,
+            &format!("/sessions/{session}/prompt"),
+            Some(json!({"text": "Check the current MCP tools."})),
+        )
+        .await;
+        wait_path(&ws.path().join("first.started")).await;
+        web.call(
+            reqwest::Method::PUT,
+            "/mcp/servers/t/settings",
+            Some(json!({"disabledTools": ["echo"]})),
+        )
+        .await;
+        write(&ws.path().join("first.release"), "release");
+        wait_path(&ws.path().join("second.started")).await;
+        web.call(
+            reqwest::Method::DELETE,
+            &format!("/sessions/{session}/mcp/t"),
+            None,
+        )
+        .await;
+        write(&ws.path().join("second.release"), "release");
+        wait_for(&mock, 4).await;
+        idle(&web, &session).await;
+        assert_eq!(
+            web.get(&format!("/sessions/{session}/mcp")).await["active"],
+            json!([])
+        );
+        let requests = turns(&mock);
+        let text = all_text(&requests[3]);
+        if preset == "ptc" {
+            assert!(text.contains("\"hasServerTools\": false"), "{text}");
+        } else {
+            assert!(text.contains("switched off the tool"), "{text}");
+            assert!(text.contains("turned off the MCP server"), "{text}");
+        }
+        // Explicit activation restores the server, but never restores a disabled tool.
+        prompt(&web, &mock, &session, "Use @t again.").await;
+        assert_eq!(
+            web.get(&format!("/sessions/{session}/mcp")).await["active"],
+            json!(["t"])
+        );
+        let calls: Vec<Value> = std::fs::read_to_string(home.path().join("calls.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(
+            calls.iter().filter(|call| call["name"] == "echo").count(),
+            1,
+            "{calls:?}"
+        );
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|call| call["name"] == "structured")
+                .count(),
+            2,
+            "{calls:?}"
+        );
+        let events = exported(&web, &session).await;
+        let activated = guidance_notes(&events);
+        assert_eq!(activated.len(), 1, "{activated:?}");
+        let content = activated[0]["data"]["content"].to_string();
+        assert!(!content.contains("mcp__t__echo"), "{content}");
+    }
 }

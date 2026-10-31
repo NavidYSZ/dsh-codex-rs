@@ -11,7 +11,7 @@ import {
   store, setTheme, updateSettings, closeSettings, toggleSidebar, setArchived, deleteSession, setFollowup, setNotify, openSettings,
 } from '../state.js';
 import {
-  IconChevronLeft, IconSidebar, IconArchive, IconGear, IconSun, IconCube, IconCompose, IconChart, IconInfo, IconContext,
+  IconChevronLeft, IconSidebar, IconArchive, IconGear, IconSun, IconCube, IconCompose, IconChart, IconInfo, IconContext, IconGlobe,
 } from '../icons.js';
 import { workspaceName } from './composer.js';
 import { ModeSetting } from './modes.js';
@@ -19,6 +19,7 @@ import { AppearanceCard } from './worklog.js';
 import { UsageCard, shortTokens } from './usage.js';
 import { ModelsSection, ModelSelect, modelHint } from './models.js';
 import { confirmFullAccess, FullAccessSetting } from './confirm.js';
+import { BrowserSection } from './browser-settings.js';
 
 export function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
@@ -106,6 +107,7 @@ function Context() {
         ${limits.map((n) => html`<option key=${n} value=${n}>${t.compactionLimitValue(shortTokens(n))}</option>`)}
       </select>
     </${Field}>` : null}
+    <p class="st-context-note">${t.compactionWorkRounds}</p>
   </section>`;
 }
 
@@ -147,6 +149,7 @@ const SECTIONS = [
   ['models', IconCube, () => html`<${ModelsSection} titled=${false} />`],
   ['defaults', IconCompose, Defaults],
   ['context', IconContext, Context],
+  ['browser', IconGlobe, BrowserSection],
   ['usage', IconChart, () => html`<${UsageCard} titled=${false} />`],
   ['archived', IconArchive, Archived],
   ['about', IconInfo, About],

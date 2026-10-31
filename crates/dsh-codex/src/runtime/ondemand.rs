@@ -18,13 +18,14 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::{Arc, Weak};
 
-use dshx_agent::{PreStep, PreStepHook, ToolUpdate};
+use dshx_agent::{ExtraSection, PreStep, PreStepHook, ToolUpdate};
 use dshx_core::config::Config;
 use dshx_core::{
     ContentBlock, Message, MessageSource, Role, SessionEvent, Tool, ToolContext, ToolError,
     ToolOutput, ToolRegistry, ToolSchema, kinds,
 };
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use super::Runtime;
 
@@ -35,6 +36,7 @@ pub const FILE_REFERENCE_PROMPT: &str = "Tokens prefixed with @ are paths the us
 /// Source kinds of the activation notes.
 pub const ACTIVATION: &str = "mcp-activation";
 pub const DEACTIVATION: &str = "mcp-deactivation";
+const GUIDANCE: &str = "mcp-guidance";
 
 /// A chat's explicit choice for one server; servers without one follow
 /// their `always` setting.
@@ -51,8 +53,10 @@ pub struct McpHistory {
     pub choices: BTreeMap<String, Choice>,
     /// Every tool name a request of this session declared.
     pub declared: HashSet<String>,
-    /// `seq` of each server's latest activation note.
+    /// `seq` of each server's latest activation or guidance note.
     pub notes: BTreeMap<String, u64>,
+    /// Canonical guidance last delivered in a note, without storing its text twice.
+    pub guidance: BTreeMap<String, String>,
 }
 
 fn header_tools(event: &SessionEvent) -> Vec<String> {
@@ -104,14 +108,22 @@ impl McpHistory {
                 kinds::USER_MESSAGE => {
                     let source = &event.data["source"];
                     let choice = match source["kind"].as_str() {
-                        Some(ACTIVATION) => Choice::On,
-                        Some(DEACTIVATION) => Choice::Off,
+                        Some(ACTIVATION) => Some(Choice::On),
+                        Some(DEACTIVATION) => Some(Choice::Off),
+                        Some(GUIDANCE) => None,
                         _ => continue,
                     };
                     if let Some(server) = source["server"].as_str() {
-                        history.choices.insert(server.to_owned(), choice);
-                        if choice == Choice::On {
+                        if let Some(choice) = choice {
+                            history.choices.insert(server.to_owned(), choice);
+                        }
+                        if choice != Some(Choice::Off) {
                             history.notes.insert(server.to_owned(), event.seq);
+                            if let Some(stamp) = source["guidance"].as_str() {
+                                history.guidance.insert(server.to_owned(), stamp.to_owned());
+                            } else {
+                                history.guidance.remove(server);
+                            }
                         }
                     }
                 }
@@ -267,9 +279,34 @@ pub fn activation_message(
     resources: bool,
     instructions: &str,
 ) -> Message {
+    server_message(server, tools, resources, instructions, true)
+}
+
+fn guidance_stamp(tools: &[String], resources: bool, instructions: &str) -> String {
+    let content =
+        json!({"tools": tools, "resources": resources, "instructions": instructions.trim_end()});
+    format!("{:x}", Sha256::digest(content.to_string().as_bytes()))
+}
+
+fn server_message(
+    server: &str,
+    tools: &[String],
+    resources: bool,
+    instructions: &str,
+    activation: bool,
+) -> Message {
     let mut lines = vec![
         "<system-reminder>".to_owned(),
-        if tools.is_empty() {
+        if !activation {
+            let availability = if tools.is_empty() {
+                "It currently has no available tools.".to_owned()
+            } else {
+                format!("Its current tools are: {}.", tools.join(", "))
+            };
+            format!(
+                "Updated guidance for the MCP server \"{server}\" (@{server}) in this chat. This replaces earlier guidance for this server. {availability}"
+            )
+        } else if tools.is_empty() {
             format!(
                 "The user turned on the MCP server \"{server}\" (@{server}) for this chat. It has no tools yet (it is still connecting or needs a login); they become available once it is connected."
             )
@@ -292,7 +329,11 @@ pub fn activation_message(
     lines.push("</system-reminder>".into());
     note(
         lines.join("\n"),
-        json!({"kind": ACTIVATION, "server": server}),
+        json!({
+            "kind": if activation { ACTIVATION } else { GUIDANCE },
+            "server": server,
+            "guidance": guidance_stamp(tools, resources, instructions),
+        }),
     )
 }
 
@@ -497,7 +538,7 @@ impl PreStepHook for McpHook {
         let names = rt.mcp_server_names();
         let (logged, compacted) = step.read_history(|events, visible| {
             let history = McpHistory::from_events(events, |t| server_of(t, &names));
-            // Activation notes a compaction folded away: their instructions are gone.
+            // Notes a compaction folded away no longer carry their instructions.
             let compacted: BTreeSet<String> = history
                 .notes
                 .iter()
@@ -528,35 +569,75 @@ impl PreStepHook for McpHook {
             ..before
         };
         let tools = rt.mcp_tools(&after);
-        let wanted: BTreeSet<String> = tools.iter().map(|t| t.schema().name).collect();
-        let current: BTreeSet<String> = step
-            .tools
-            .iter()
-            .filter(|n| dshx_mcp::is_bridged_tool(n))
-            .cloned()
+        // A restart replaces Server handles; list_changed can replace schemas
+        // without changing names. Neither may leave stale bindings for this step.
+        step.update_tools(|registry| Runtime::swap_mcp_tools(registry, tools));
+
+        // Always-on guidance belongs to the system prompt. Refresh it here too:
+        // a connection can finish or restart during the current turn. Keep other
+        // products' sections and do not record an explicit per-chat activation.
+        let sections: Vec<ExtraSection> = rt
+            .mcp
+            .prompt_sections_where(|server| {
+                config.mcp_availability(server).always && after.offered(server)
+            })
+            .into_iter()
+            .map(|section| ExtraSection {
+                name: section.name,
+                order: section.order,
+                text: section.text,
+                literal: true,
+            })
             .collect();
-        // Same names can still mean other tools (a switched-off server's
-        // declared tools turn into stubs), so a changed choice swaps too.
-        if wanted != current || choices != logged.choices {
-            step.update_tools(|registry| Runtime::swap_mcp_tools(registry, tools));
+        let is_mcp = |section: &ExtraSection| {
+            section.name.starts_with("mcp:") || section.name == "mcp-resource-servers"
+        };
+        if step
+            .prompt_sections()
+            .into_iter()
+            .filter(is_mcp)
+            .collect::<Vec<_>>()
+            != sections
+        {
+            step.update_prompt_sections(|current| {
+                current.retain(|section| !is_mcp(section));
+                current.extend(sections);
+            });
         }
+        let available = rt.mcp.server_tools();
         for server in &names {
-            // After a compaction an active server's note comes back once.
-            let renew =
-                compacted.contains(server) && logged.choices.get(server) == Some(&Choice::On);
             let (was, now) = (before.offered(server), after.offered(server));
-            if now && (!was || renew) {
-                let tool_names: Vec<String> = wanted
+            if now {
+                let availability = config.mcp_availability(server);
+                let mut tool_names: Vec<String> = available
                     .iter()
-                    .filter(|t| server_of(t, &names).as_deref() == Some(server))
-                    .cloned()
+                    .filter(|entry| {
+                        &entry.server == server
+                            && !availability.disabled_tools.contains(&entry.raw_name)
+                    })
+                    .map(|entry| entry.tool.schema().name)
                     .collect();
-                entering.push(activation_message(
-                    server,
-                    &tool_names,
-                    rt.mcp.has_resources(server),
-                    &rt.mcp.instructions(server),
-                ));
+                tool_names.sort();
+                let resources = rt.mcp.has_resources(server);
+                let instructions = rt.mcp.instructions(server);
+                let changed = logged.guidance.get(server)
+                    != Some(&guidance_stamp(&tool_names, resources, &instructions));
+                if !was {
+                    entering.push(activation_message(
+                        server,
+                        &tool_names,
+                        resources,
+                        &instructions,
+                    ));
+                } else if !availability.always && (changed || compacted.contains(server)) {
+                    entering.push(server_message(
+                        server,
+                        &tool_names,
+                        resources,
+                        &instructions,
+                        false,
+                    ));
+                }
             } else if was && !now {
                 entering.push(deactivation_message(server));
             }
@@ -631,5 +712,31 @@ mod tests {
         assert_eq!(h.choices["u"], Choice::Off);
         assert_eq!(h.choices["v"], Choice::On);
         assert!(h.declared.contains("mcp__t__echo") && h.declared.contains("mcp__u__x"));
+    }
+
+    #[test]
+    fn renewed_guidance_does_not_activate_a_server_and_tracks_its_last_delivery() {
+        let first = server_message("t", &["mcp__t__echo".into()], false, "first", false);
+        let next = server_message("t", &["mcp__t__echo".into()], false, "second", false);
+        let events = vec![
+            ev(
+                0,
+                kinds::USER_MESSAGE,
+                serde_json::to_value(&first).unwrap(),
+            ),
+            ev(1, kinds::USER_MESSAGE, serde_json::to_value(&next).unwrap()),
+        ];
+        let history = McpHistory::from_events(&events, |_| None);
+        assert!(history.choices.is_empty());
+        assert_eq!(history.notes["t"], 1);
+        assert_eq!(
+            history.guidance["t"],
+            guidance_stamp(&["mcp__t__echo".into()], false, "second")
+        );
+        assert_ne!(first.source, next.source);
+        assert_eq!(
+            guidance_stamp(&["echo".into()], false, "same\n"),
+            guidance_stamp(&["echo".into()], false, "same"),
+        );
     }
 }

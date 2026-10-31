@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use common::*;
 use dshx_agent::testing::{FakeTool, Response, failure, offload_failure, text, tool_calls};
 use dshx_agent::{
-    ApprovalPolicy, PromptConfig, RouteCapabilities, TurnEndCompaction, TurnEndReason,
+    ApprovalPolicy, Preset, PromptConfig, RouteCapabilities, TurnEndCompaction, TurnEndReason,
     render_system_prompt,
 };
 use dshx_core::{
@@ -627,6 +627,81 @@ async fn every_turn_compaction_keeps_the_answer_and_skips_short_turns() {
     assert!(!second.iter().any(|m| m.plain_text() == long));
     drop(requests);
     validate(&h.log);
+}
+
+#[tokio::test]
+async fn short_ptc_turns_compact_without_changing_standard_or_minimal() {
+    for (preset, policy, expected) in [
+        (Preset::Ptc, TurnEndCompaction::EveryTurn, 1),
+        (Preset::Ptc, TurnEndCompaction::Off, 0),
+        (Preset::Ptc, TurnEndCompaction::Threshold(200_000), 0),
+        (Preset::Standard, TurnEndCompaction::EveryTurn, 0),
+        (Preset::Minimal, TurnEndCompaction::EveryTurn, 0),
+    ] {
+        let h = harness(vec![text(M, "done"), text(M, "thanks")], vec![], |c, _| {
+            c.compaction.turn_end = policy;
+            c.apply_preset(preset);
+        });
+        h.agent
+            .run_turn(vec![ContentBlock::text("x".repeat(6000))])
+            .await
+            .unwrap();
+        h.agent
+            .run_turn(vec![ContentBlock::text("a tiny follow-up")])
+            .await
+            .unwrap();
+        assert_eq!(
+            of_kind(&h.log, "compaction/summary").len(),
+            expected,
+            "{preset:?} {policy:?}"
+        );
+        validate(&h.log);
+    }
+}
+
+#[tokio::test]
+async fn invalid_work_boundary_summaries_preserve_history_and_continue() {
+    let truncated = Response::Chunks(dshx_agent::testing::chunks(
+        M,
+        &[dshx_agent::testing::Block::Text("incomplete".into())],
+        dshx_core::FinishReason::MaxTokens,
+    ));
+    for summary in [
+        failure("SUMMARY_FAILED", "try later"),
+        text(M, ""),
+        text(M, &"larger ".repeat(10_000)),
+        truncated,
+    ] {
+        let h = harness(
+            vec![text(M, "answer"), text(M, "continued")],
+            vec![],
+            |c, _| {
+                c.apply_preset(Preset::Ptc);
+                c.compaction.turn_end = TurnEndCompaction::EveryTurn;
+            },
+        );
+        *h.llm.summary_response.lock().unwrap() = Some(summary);
+        let original = "work remains ".repeat(500);
+        h.agent
+            .run_turn(vec![ContentBlock::text(original.clone())])
+            .await
+            .unwrap();
+        h.agent
+            .run_turn(vec![ContentBlock::text("continue")])
+            .await
+            .unwrap();
+        assert!(of_kind(&h.log, "compaction/summary").is_empty());
+        assert!(
+            h.llm.requests.lock().unwrap()[1]
+                .messages
+                .iter()
+                .any(|m| m.plain_text() == original)
+        );
+        let ends = of_kind(&h.log, "compaction/end");
+        assert!(!ends.is_empty());
+        assert!(ends.iter().all(|e| e.data["error"].as_str().is_some()));
+        validate(&h.log);
+    }
 }
 
 #[tokio::test]

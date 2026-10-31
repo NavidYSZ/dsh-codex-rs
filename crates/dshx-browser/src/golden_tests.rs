@@ -11,15 +11,22 @@ fn golden() -> Value {
 }
 
 #[test]
-fn name_description_and_schema_are_verbatim() {
+fn original_browser_contract_is_preserved_with_read_pagination() {
     let g = golden();
     assert_eq!(g["name"], TOOL_NAME);
-    assert_eq!(g["description"], DESCRIPTION);
+    // Aether adds recovery/result guidance and fixes the original truncation
+    // advice; the tool name, actions and existing argument contracts remain.
+    assert!(DESCRIPTION.contains("result.summary"));
+    assert!(DESCRIPTION.contains("unless the user explicitly requests desktop interaction"));
     assert_eq!(g["actions"], serde_json::json!(ACTIONS));
     // Same keys in the same order, byte for byte.
+    let mut schema = input_schema();
+    let properties = schema["properties"].as_object_mut().unwrap();
+    assert_eq!(properties.remove("offset").unwrap()["minimum"], 0);
+    assert_eq!(properties.remove("maxChars").unwrap()["maximum"], 40000);
     assert_eq!(
         serde_json::to_string(&g["schema"]).unwrap(),
-        serde_json::to_string(&input_schema()).unwrap()
+        serde_json::to_string(&schema).unwrap()
     );
 }
 

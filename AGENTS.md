@@ -13,6 +13,12 @@ existing DeepSeek Harness installation.
   `run_code`; nested calls must use the normal tool policies and cancellation.
 - Accepted input must remain visible and recoverable until a user message is
   committed or the user explicitly removes it. Queued follow-ups run FIFO.
+- Compact PTC/active Goal work only at settled model/tool boundaries. Keep the
+  latest batch, pending input and canonical Goal state; Stop must prevent
+  continuation through terminal commits, compaction and flush.
+- Browser diagnostics use temporary profiles and local test pages. Distinguish
+  MCP discovery from actual interaction, bind results to the tested executable,
+  and never silently use desktop control to work around a website failure.
 - Run relevant regression checks, `cargo fmt --all -- --check`,
   `cargo clippy --locked --workspace --all-targets -- -D warnings`,
   `cargo test --locked --workspace` and the `ui/dev/*_check.mjs` scripts before
