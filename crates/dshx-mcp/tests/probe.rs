@@ -42,8 +42,10 @@ async fn probe_reports_the_error_and_stderr_of_a_failing_server() {
     assert!(!probe.ok);
     assert!(probe.tools.is_empty());
     let error = probe.error.unwrap();
+    // The child can exit before either side of the initialization exchange:
+    // the reader sees EOF, or the writer reaches the already closed pipe.
     assert!(
-        error.contains("exited") || error.contains("closed"),
+        error.contains("exited") || error.contains("closed") || error.contains("Broken pipe"),
         "{error}"
     );
     assert_eq!(

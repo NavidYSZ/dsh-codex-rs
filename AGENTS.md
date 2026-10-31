@@ -17,9 +17,10 @@ existing DeepSeek Harness installation.
   `cargo clippy --locked --workspace --all-targets -- -D warnings`,
   `cargo test --locked --workspace` and the `ui/dev/*_check.mjs` scripts before
   a release. Test the app with its bundled runtime and a clean data directory.
-- Publish release binaries built from the exact tagged source. Keep `main` at
-  the released source revision; do not leave completed work only on a local
-  branch. Never force-push or publish unfinished unrelated experiments.
+- Publish release binaries built from the exact tagged source. Keep `main`
+  current with verified changes; test/documentation maintenance may advance it
+  beyond a release tag. Do not leave completed work only on a local branch.
+  Never force-push or publish unfinished unrelated experiments.
 - Installing a build must preserve existing user data. Check running tasks
   before restarting the installed app; a public build starts with a local
   instance only, while existing users keep their saved instances.
