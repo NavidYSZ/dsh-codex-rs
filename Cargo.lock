@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "dsh-codex"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -513,7 +513,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-agent"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-browser"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-core"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -568,7 +568,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-goal"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -588,7 +588,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-llm"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -610,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-macos"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -628,7 +628,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-mcp"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-plugins"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "dshx-core",
@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-schedule"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -689,7 +689,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-server"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -712,7 +712,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-session"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-subagent"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-team"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -780,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-testkit"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -790,7 +790,7 @@ dependencies = [
 
 [[package]]
 name = "dshx-tools"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",

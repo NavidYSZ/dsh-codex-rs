@@ -99,13 +99,15 @@ tools when appropriate.
 
 ## Compaction between rounds
 
-Settings → Context controls both turn-end compaction and intermediate work
-rounds in PTC or an active Goal. Only completed model/tool batches form a
-boundary; a running program is never cut in half. The newest full batch stays
-verbatim. In every-round mode, 1,024 fresh compactable tokens are required for
-PTC/Goals (8,000 at turn end for ordinary Standard) so tiny calls do not cause
-repeated summary requests. Threshold mode respects its configured limit;
-pressure recovery remains available even when extra compaction is off.
+Settings → Context applies after a complete answer, including all of its tool
+calls, in PTC and active Goals as well as Standard. A tool call, `run_code`
+program or model step is not a round. The latest answer stays verbatim, and
+the next automatic Goal round starts after any summary finishes. In
+`every-turn` mode, 1,024 fresh compactable tokens are required for PTC/Goals
+(8,000 for ordinary Standard). Threshold mode checks its configured limit at
+the same completed-answer boundary. Delegated subagents and one-shot CLI
+runs skip final checkpoints. Context-pressure and overflow recovery remain
+available during a long answer, even when extra compaction is off.
 
 The append-only chat log, pending steering/queue, Goal status and round cap
 remain intact. Goal context is restored from its canonical state after a

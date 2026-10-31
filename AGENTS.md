@@ -13,9 +13,11 @@ existing DeepSeek Harness installation.
   `run_code`; nested calls must use the normal tool policies and cancellation.
 - Accepted input must remain visible and recoverable until a user message is
   committed or the user explicitly removes it. Queued follow-ups run FIFO.
-- Compact PTC/active Goal work only at settled model/tool boundaries. Keep the
-  latest batch, pending input and canonical Goal state; Stop must prevent
-  continuation through terminal commits, compaction and flush.
+- Proactive compaction runs after a complete answer/Goal round, never after
+  individual tools, PTC programs or model steps (including in subagents).
+  Context-pressure/overflow recovery is a separate safeguard. Keep the latest
+  answer, pending input and canonical Goal state; Stop must prevent continuation
+  through terminal commits, compaction and flush.
 - Browser diagnostics use temporary profiles and local test pages. Distinguish
   MCP discovery from actual interaction, bind results to the tested executable,
   and never silently use desktop control to work around a website failure.

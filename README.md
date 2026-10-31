@@ -226,11 +226,13 @@ mode = "threshold"                     # "threshold", "every-turn" or "off"
 threshold_tokens = 200000              # context size that triggers it; a fifth stays verbatim
 ```
 
-For PTC and active Goals, the policy also runs between completed model/tool
-rounds. `every-turn` summarizes once at least 1,024 fresh compactable estimated
-tokens have accumulated; ordinary Standard checks at turn end with an
-8,000-token floor. The newest complete model/tool batch stays verbatim, pending
-input remains queued, and Goal state/counters are restored from the journal.
+A round is a complete agent answer, including all of its tool calls and PTC
+programs. This policy runs after that answer, before the next Goal round or
+follow-up; individual tool calls never trigger it. `every-turn` requires at
+least 1,024 fresh compactable estimated tokens for PTC/active Goals, or 8,000
+for ordinary Standard. The latest answer stays verbatim, pending input remains
+queued, and Goal state/counters are restored from the journal. Delegated
+subagents and one-shot CLI runs skip this final checkpoint.
 Stop cancels compaction and prevents automatic Goal continuation. `off` leaves
 pressure compaction near the context limit enabled. Minimal chats never compact.
 

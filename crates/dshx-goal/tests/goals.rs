@@ -1,15 +1,17 @@
 //! Goal rounds end to end: the real DeepSeek client against the scripted
 //! mock, the goal tools in the agent's registry and the round driver on.
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use dshx_agent::testing::{FixedApprover, MemoryAttachments};
-use dshx_agent::{Agent, AgentConfig, AgentDeps, AgentStatus, CancelCause, TurnEndCompaction};
+use dshx_agent::{
+    Agent, AgentConfig, AgentDeps, AgentStatus, CancelCause, Preset, TurnEndCompaction,
+};
 use dshx_core::{
-    ApprovalDecision, ContentBlock, LlmClient, NewEvent, SessionEvent, SessionHeader, SessionLog,
-    ToolRegistry,
+    ApprovalDecision, ContentBlock, LlmClient, NewEvent, SandboxMode, SessionEvent, SessionHeader,
+    SessionLog, ToolRegistry,
 };
 use dshx_goal::{Activation, GoalCommand, GoalService, GoalSettings, Phase, goal_tools};
 use dshx_llm::{DeepSeekClient, DeepSeekConfig, StaticApiKey};
@@ -399,7 +401,14 @@ async fn stopping_summary_disarms_goal_without_a_next_model_request() {
             None,
             None,
             true,
-            round_config,
+            |config| {
+                round_config(config);
+                if inside_turn {
+                    // Only genuine context pressure can interrupt a tool loop.
+                    config.compaction.threshold_ratio = 0.001;
+                    config.compaction.retain_tokens = Some(0);
+                }
+            },
         )
         .await;
         h.goals
@@ -462,6 +471,93 @@ async fn stopping_summary_disarms_goal_without_a_next_model_request() {
                 Phase::Active
             }
         );
+        dshx_session::validate::validate_log(&h.log.header(), &events).unwrap();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn multistep_goal_rounds_compact_once_after_the_complete_answer() {
+    for preset in [Preset::Standard, Preset::Ptc] {
+        let requests = AtomicUsize::new(0);
+        let h = harness_configured(
+            move |r| {
+                if is_summary(r) {
+                    return Reply::text("Checkpoint: continue toward the objective.");
+                }
+                let n = requests.fetch_add(1, Ordering::SeqCst);
+                if n % 3 == 2 {
+                    return Reply::text("Round finished; continue the goal.");
+                }
+                if preset == Preset::Ptc {
+                    Reply::tool_call(
+                        format!("p{n}"),
+                        "run_code",
+                        json!({
+                            "code": "return await tools.get_goal({});",
+                            "description": "Read the goal state",
+                        }),
+                    )
+                } else {
+                    Reply::tool_call(format!("g{n}"), "get_goal", json!({}))
+                }
+            },
+            None,
+            None,
+            true,
+            |config| {
+                config.apply_preset(preset);
+                config.sandbox = SandboxMode::DangerFullAccess;
+                round_config(config);
+            },
+        )
+        .await;
+        h.goals
+            .command(
+                &h.agent.session_id(),
+                GoalCommand::Create("objective detail ".repeat(400)),
+                Some(&json!(3)),
+            )
+            .await
+            .unwrap();
+        h.until("three completed multistep rounds", |h| {
+            h.idle()
+                && h.goals
+                    .get(&h.agent.session_id())
+                    .unwrap()
+                    .is_some_and(|g| g.goal.phase == Phase::Blocked)
+        })
+        .await;
+        let events = h.events();
+        assert_eq!(rounds(&events), [1, 2, 3]);
+        assert_eq!(events.iter().filter(|e| e.kind == "tool/call").count(), 6);
+        let starts: Vec<_> = events
+            .iter()
+            .filter(|e| e.kind == "compaction/start")
+            .collect();
+        assert_eq!(
+            starts.len(),
+            3,
+            "one summary per whole {preset:?} Goal round"
+        );
+        for (index, start) in starts.iter().enumerate() {
+            assert!(start.data["turn"].is_null());
+            let previous_end = events[..start.seq as usize]
+                .iter()
+                .rev()
+                .find(|e| e.kind == "turn/end")
+                .unwrap();
+            assert_eq!(previous_end.data["turn"], index + 1);
+            let summary_end = events[start.seq as usize..]
+                .iter()
+                .find(|e| e.kind == "compaction/end")
+                .unwrap();
+            if let Some(next_turn) = events[start.seq as usize..]
+                .iter()
+                .find(|e| e.kind == "turn/start")
+            {
+                assert!(summary_end.seq < next_turn.seq);
+            }
+        }
         dshx_session::validate::validate_log(&h.log.header(), &events).unwrap();
     }
 }

@@ -1483,11 +1483,10 @@ impl Inner {
         }
         let cancel = driver_cancel.child_token();
         self.state.lock().unwrap().compacting = Some(cancel.clone());
-        let result = crate::compaction::compact_at_boundary(
+        let result = crate::compaction::compact_after_turn(
             self,
             policy,
-            None,
-            self.compact_between_steps(),
+            self.compact_short_turns(),
             &cancel,
         )
         .await;
@@ -1503,41 +1502,14 @@ impl Inner {
         }
     }
 
-    /// Product eligibility is live: a goal can be created, completed or
-    /// paused by the tool batch that just settled.
-    fn compact_between_steps(&self) -> bool {
+    /// PTC and active Goals use a lower size floor after a complete answer.
+    /// Tool calls and model steps do not themselves form a work round.
+    fn compact_short_turns(&self) -> bool {
         if self.config.lock().unwrap().preset == crate::config::Preset::Ptc {
             return true;
         }
         let hooks = self.pre_step_hooks.lock().unwrap().clone();
-        hooks.iter().any(|hook| hook.compact_between_steps())
-    }
-
-    async fn compact_after_step(
-        self: &Arc<Self>,
-        turn: u64,
-        cancel: &CancellationToken,
-    ) -> anyhow::Result<()> {
-        let policy = {
-            let config = self.config.lock().unwrap();
-            if !config.compaction.auto {
-                return Ok(());
-            }
-            config.compaction.turn_end
-        };
-        if policy == TurnEndCompaction::Off || !self.compact_between_steps() {
-            return Ok(());
-        }
-        check(cancel)?;
-        if let Err(error) =
-            crate::compaction::compact_at_boundary(self, policy, Some(turn), true, cancel).await
-        {
-            if is_aborted(&error) || cancel.is_cancelled() {
-                return Err(Aborted.into());
-            }
-            tracing::warn!("round-boundary compaction failed: {error:#}; continuing the turn");
-        }
-        check(cancel)
+        hooks.iter().any(|hook| hook.compact_short_turns())
     }
 
     async fn turn(
@@ -1691,7 +1663,6 @@ impl Inner {
             if turn_ends.is_some() && self.state.lock().unwrap().next_step.is_empty() {
                 break;
             }
-            self.compact_after_step(turn, cancel).await?;
             target = Target::NextStep;
         }
         Ok(turn_ends.unwrap_or(TurnEndReason::Completed))
@@ -1710,7 +1681,7 @@ impl Inner {
         crate::jobs::drain(self).await;
         let claimed = self.claim(target).await?;
         let context = self.runtime_context();
-        let work_rounds = self.compact_between_steps();
+        let refresh_context = self.compact_short_turns();
         let (compaction_auto, reminder) = {
             let c = self.config.lock().unwrap();
             (c.compaction.auto, c.repeat_reminder.enabled)
@@ -1730,9 +1701,9 @@ impl Inner {
             }
         }
         check(cancel)?;
-        // Work-round compaction may have shadowed the last snapshot. Refresh
+        // Pressure compaction may have shadowed the last snapshot. Refresh
         // it here while preserving the ordinary Standard/Minimal projection.
-        let context = if work_rounds {
+        let context = if refresh_context {
             self.runtime_context()
         } else {
             context

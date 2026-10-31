@@ -99,9 +99,9 @@ impl PreStep<'_> {
 /// messages, so they stay reconstructable from the session log.
 #[async_trait]
 pub trait PreStepHook: Send + Sync {
-    /// Whether this product has active work that benefits from compaction
-    /// between completed model/tool steps. Queried live at each boundary.
-    fn compact_between_steps(&self) -> bool {
+    /// Whether this product benefits from the lower size floor for compaction
+    /// after a completed turn. This never enables compaction between tool calls.
+    fn compact_short_turns(&self) -> bool {
         false
     }
 

@@ -16,7 +16,7 @@ use dshx_agent::{
 };
 use dshx_core::{
     ApprovalDecision, ContentBlock, GenerateRequest, LlmClient, Message, ModelInfo, Role,
-    SandboxMode, StreamChunk, Tool, ToolError, ToolOutput,
+    SandboxMode, SessionLog, StreamChunk, Tool, ToolError, ToolOutput,
 };
 use futures::stream::BoxStream;
 use serde_json::json;
@@ -416,7 +416,7 @@ async fn images_deferred_context_and_todo_events_survive_program_curation() {
 }
 
 #[tokio::test]
-async fn compaction_between_programs_keeps_the_latest_complete_batch() {
+async fn compaction_waits_for_the_complete_ptc_answer() {
     let run = |id: &str, code: &str| {
         tool_calls(
             MODEL,
@@ -436,6 +436,7 @@ async fn compaction_between_programs_keeps_the_latest_complete_batch() {
             run("p1", "await tools.read_fake({}); return 'a'.repeat(6000);"),
             run("p2", "return 'b'.repeat(6000);"),
             text(MODEL, "done"),
+            text(MODEL, "continued"),
         ],
         vec![echo_tool(
             "read_fake",
@@ -453,33 +454,15 @@ async fn compaction_between_programs_keeps_the_latest_complete_batch() {
         .await
         .unwrap();
     let log = h.agent.events();
-    let summaries = of_kind(&h.log, "compaction/summary");
     let starts = of_kind(&h.log, "compaction/start");
-    assert_eq!(
-        starts.len(),
-        3,
-        "two work boundaries and one final turn boundary"
-    );
-    assert_eq!(starts[0].data["turn"], 1);
-    assert_eq!(starts[1].data["turn"], 1);
-    assert!(starts[2].data["turn"].is_null());
-    for (index, start) in starts[..2].iter().enumerate() {
-        let prior_step = log[..start.seq as usize]
-            .iter()
-            .rev()
-            .find(|e| e.kind == "step/end")
-            .unwrap();
-        assert_eq!(prior_step.data["step"], index + 1);
-        let next_step = log[start.seq as usize..]
-            .iter()
-            .find(|e| e.kind == "step/start")
-            .unwrap();
-        assert!(summaries[index].seq < next_step.seq);
-    }
+    assert_eq!(starts.len(), 1, "one summary after the whole answer");
+    assert!(starts[0].data["turn"].is_null());
+    let end = log.iter().find(|e| e.kind == "turn/end").unwrap();
+    assert!(end.seq < starts[0].seq);
     let nested = log.iter().find(|e| e.kind == "tool/ptc-dispatch").unwrap();
     let root = log.iter().find(|e| e.kind == "tool/result").unwrap();
     assert!(nested.seq < root.seq && root.seq < starts[0].seq);
-    let requests = h.llm.requests.lock().unwrap();
+    let requests = h.llm.requests.lock().unwrap().clone();
     for (index, (id, output)) in [("p1", "a".repeat(6000)), ("p2", "b".repeat(6000))]
         .iter()
         .enumerate()
@@ -508,9 +491,15 @@ async fn compaction_between_programs_keeps_the_latest_complete_batch() {
             request
                 .messages
                 .iter()
-                .any(|m| m.plain_text().contains("<compacted-summary>"))
+                .all(|m| !m.plain_text().contains("<compacted-summary>"))
         );
     }
+    assert!(
+        requests[2].messages.iter().any(|m| {
+            m.tool_call_id.as_deref() == Some("p1") && m.plain_text().contains(&"a".repeat(6000))
+        }),
+        "earlier tool output stays available throughout the answer"
+    );
     drop(requests);
     assert!(
         h.llm
@@ -520,6 +509,25 @@ async fn compaction_between_programs_keeps_the_latest_complete_batch() {
             .iter()
             .all(|r| r.messages.iter().all(|m| !m.plain_text().contains(&hidden)))
     );
+    h.agent
+        .run_turn(vec![ContentBlock::text("continue")])
+        .await
+        .unwrap();
+    let requests = h.llm.requests.lock().unwrap();
+    let next_turn = &requests[3];
+    assert!(
+        next_turn
+            .messages
+            .iter()
+            .any(|m| m.plain_text().contains("<compacted-summary>"))
+    );
+    assert!(next_turn.messages.iter().any(|m| m.plain_text() == "done"));
+    assert_eq!(
+        of_kind(&h.log, "compaction/start").len(),
+        1,
+        "a tiny follow-up needs no new checkpoint"
+    );
+    drop(requests);
     validate(&h.log);
 }
 
@@ -529,8 +537,9 @@ async fn steering_and_fifo_followups_survive_a_running_summary() {
         vec![
             program("return 'selected';"),
             text(MODEL, "work done"),
-            text(MODEL, "A done"),
-            text(MODEL, "B done"),
+            text(MODEL, "Follow-up processed"),
+            text(MODEL, "Follow-up processed"),
+            text(MODEL, "Follow-up processed"),
         ],
         vec![],
         |c, dir| {
@@ -565,7 +574,7 @@ async fn steering_and_fifo_followups_survive_a_running_summary() {
     assert_eq!(first.await.unwrap().reason, TurnEndReason::Completed);
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if h.agent.is_idle() && h.agent.inbox_is_empty() && h.llm.request_count() == 4 {
+            if h.agent.is_idle() && h.agent.inbox_is_empty() {
                 break;
             }
             tokio::task::yield_now().await;
@@ -587,22 +596,34 @@ async fn steering_and_fifo_followups_survive_a_running_summary() {
         [&steering.id, &a.id, &b.id]
     );
     let requests = h.llm.requests.lock().unwrap();
-    assert!(requests[1].messages.iter().any(|m| m.id == steering.id));
+    assert!(requests[2].messages.iter().any(|m| m.id == steering.id));
+    let first_request = |id: &str| {
+        requests
+            .iter()
+            .position(|r| r.messages.iter().any(|m| m.id == id))
+            .unwrap()
+    };
+    assert!(first_request(&steering.id) <= first_request(&a.id));
     assert!(
-        requests[1]
+        first_request(&a.id) < first_request(&b.id),
+        "queued prompts remain FIFO even when steering shares the first resumed step"
+    );
+    assert!(
+        requests[2]
             .messages
             .iter()
-            .any(|m| m.tool_call_id.as_deref() == Some("program"))
+            .any(|m| m.plain_text() == "work done")
     );
     drop(requests);
     validate(&h.log);
 }
 
 #[tokio::test]
-async fn parent_cancel_interrupts_summary_startup_before_another_program() {
+async fn parent_cancel_interrupts_turn_end_summary_and_clears_followups() {
     let mut h = harness(
         vec![
             program("return 'settled';"),
+            text(MODEL, "done"),
             program("throw new Error('must not run');"),
         ],
         vec![],
@@ -624,25 +645,29 @@ async fn parent_cancel_interrupts_summary_startup_before_another_program() {
     tokio::time::timeout(Duration::from_secs(5), gate.started.notified())
         .await
         .unwrap();
-    h.agent.cancel_with(CancelCause::Parent, true).await;
+    h.agent
+        .followup(Message::user_text("must not run"))
+        .await
+        .unwrap();
+    h.agent.cancel_with(CancelCause::Parent, false).await;
     let done = tokio::time::timeout(Duration::from_secs(5), run)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(
         done.reason,
-        TurnEndReason::Aborted {
-            reason: CancelCause::Parent
-        }
+        TurnEndReason::Completed,
+        "the answer was already committed before its summary"
     );
-    assert_eq!(h.llm.request_count(), 1);
+    assert_eq!(h.llm.request_count(), 2);
+    assert!(h.agent.inbox_is_empty());
     assert!(of_kind(&h.log, "compaction/summary").is_empty());
     assert_eq!(of_kind(&h.log, "tool/result").len(), 1);
     validate(&h.log);
 }
 
 #[tokio::test]
-async fn intermediate_program_boundaries_honor_threshold_and_off() {
+async fn complete_ptc_answers_honor_threshold_and_off() {
     for (policy, expected) in [
         (TurnEndCompaction::Threshold(1_000), 1),
         (TurnEndCompaction::Threshold(200_000), 0),
@@ -666,7 +691,8 @@ async fn intermediate_program_boundaries_honor_threshold_and_off() {
         let starts = of_kind(&h.log, "compaction/start");
         assert_eq!(starts.len(), expected, "{policy:?}");
         if let Some(start) = starts.first() {
-            assert_eq!(start.data["turn"], 1);
+            assert!(start.data["turn"].is_null());
+            assert!(of_kind(&h.log, "turn/end")[0].seq < start.seq);
         }
         assert!(
             h.llm.requests.lock().unwrap()[1]
@@ -679,7 +705,7 @@ async fn intermediate_program_boundaries_honor_threshold_and_off() {
 }
 
 #[tokio::test]
-async fn one_shot_hosts_keep_round_compaction_without_a_final_checkpoint() {
+async fn one_shot_hosts_skip_proactive_compaction_throughout_the_answer() {
     for preset in [Preset::Ptc, Preset::Standard] {
         let script = if preset == Preset::Ptc {
             vec![
@@ -700,8 +726,10 @@ async fn one_shot_hosts_keep_round_compaction_without_a_final_checkpoint() {
             .await
             .unwrap();
         let starts = of_kind(&h.log, "compaction/start");
-        assert_eq!(starts.len(), usize::from(preset == Preset::Ptc));
-        assert!(starts.iter().all(|e| e.data["turn"] == 1));
+        assert!(
+            starts.is_empty(),
+            "one-shot {preset:?} has no intermediate or final checkpoint"
+        );
         let events = h.agent.events();
         let end = events.iter().rposition(|e| e.kind == "turn/end").unwrap();
         assert!(
@@ -711,6 +739,58 @@ async fn one_shot_hosts_keep_round_compaction_without_a_final_checkpoint() {
         );
         validate(&h.log);
     }
+}
+
+#[tokio::test]
+async fn delegated_ptc_work_does_not_summarize_after_each_program() {
+    let dir = Arc::new(tempfile::tempdir().unwrap());
+    let cwd = dir.path().to_path_buf();
+    let mut header = dshx_session::SessionStore::new_header(cwd.to_str().unwrap());
+    header.delegation_depth = 1;
+    let log = Arc::new(dshx_session::MemoryLog::with_events(header, vec![]));
+    let llm = ScriptedLlm::new(vec![
+        tool_calls(
+            MODEL,
+            &[(
+                "p1",
+                "run_code",
+                &json!({"code":"return 'a'.repeat(6000);", "description":"First step"}).to_string(),
+            )],
+        ),
+        tool_calls(
+            MODEL,
+            &[(
+                "p2",
+                "run_code",
+                &json!({"code":"return 'b'.repeat(6000);", "description":"Second step"})
+                    .to_string(),
+            )],
+        ),
+        text(MODEL, "delegated work done"),
+    ]);
+    let h = with_log(llm, vec![], dir, cwd, log, |c, dir| {
+        ptc(c, dir);
+        c.compaction.turn_end = TurnEndCompaction::EveryTurn;
+    });
+    h.agent
+        .run_turn(vec![ContentBlock::text("x".repeat(6000))])
+        .await
+        .unwrap();
+    assert!(of_kind(&h.log, "compaction/start").is_empty());
+    assert_eq!(of_kind(&h.log, "tool/result").len(), 2);
+    assert_eq!(h.log.header().delegation_depth, 1);
+    assert_eq!(h.llm.request_count(), 3);
+    let requests = h.llm.requests.lock().unwrap();
+    for id in ["p1", "p2"] {
+        assert!(
+            requests[2]
+                .messages
+                .iter()
+                .any(|m| m.tool_call_id.as_deref() == Some(id))
+        );
+    }
+    drop(requests);
+    validate(&h.log);
 }
 
 #[tokio::test]

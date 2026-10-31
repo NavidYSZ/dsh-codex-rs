@@ -230,10 +230,10 @@ pub struct CompactionConfig {
     pub max_tokens: Option<u32>,
     pub compaction_retries: u32,
     pub max_overflow_retries: u32,
-    /// Configured policy at work-round and completed-turn boundaries; needs `auto`.
+    /// Configured policy after a completed answer/Goal round; needs `auto`.
     pub turn_end: TurnEndCompaction,
-    /// Hosts that exit after one answer can skip its final checkpoint while
-    /// retaining the policy between PTC/Goal work rounds.
+    /// Hosts that exit after one answer can skip its final checkpoint.
+    /// Pressure compaction and overflow recovery remain available.
     pub at_turn_end: bool,
 }
 

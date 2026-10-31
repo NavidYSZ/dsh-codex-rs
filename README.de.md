@@ -54,12 +54,16 @@ wenn es bereits mit einem anderen Agenten verbunden ist. „Immer laden“
 aktivieren oder im Chat `@huntproxy` nennen. PTC verwendet die MCP-Werkzeuge
 direkt. [Einrichtung und Fehlerdiagnose](docs/browser-use.md).
 
-Die Kontext-Einstellung greift auch zwischen abgeschlossenen PTC-/Goal-
-Arbeitsrunden. „Jede Runde“ komprimiert ältere Inhalte ab 1.024 neuen
-komprimierbaren Tokens; Standard ohne Goal behält die Grenze von 8.000 Tokens
-am Turn-Ende. Das jüngste zusammengehörige Tool-Ergebnis, wartende Nachrichten
-und der kanonische Goal-Zustand bleiben erhalten. Stop verhindert weitere
-automatische Goal-Runden, auch während einer Zusammenfassung.
+Eine Runde umfasst die vollständige Antwort des Agenten samt allen
+Tool-Aufrufen und PTC-Programmen. **„Nach jeder Antwort“** komprimiert erst
+danach, bevor die nächste Goal-Runde oder Folgefrage beginnt. Einzelne
+Tool-Aufrufe lösen diese Komprimierung nicht aus. Für PTC/aktive Goals sind
+mindestens 1.024 neue komprimierbare Tokens nötig, für Standard ohne Goal
+8.000. Die letzte Antwort, wartende Nachrichten und der kanonische Goal-Zustand
+bleiben erhalten. Subagenten und einmalige CLI-Aufgaben überspringen den
+abschließenden Checkpoint. Der Schutz bei vollem Kontext bleibt verfügbar.
+Stop verhindert weitere automatische Goal-Runden, auch während einer
+Zusammenfassung.
 
 ## Unterschied zum alten Repository
 

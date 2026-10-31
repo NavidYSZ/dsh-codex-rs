@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0-alpha.3 — 2026-10-31
+
+- Fix overly frequent PTC/Goal compaction introduced in alpha.2: a work round
+  is a complete agent answer, including all tool calls. Proactive compaction
+  now runs only after that answer, before a follow-up or automatic Goal round.
+  Delegated PTC subagents no longer summarize after individual programs.
+- Clarify Settings → Context as “After each answer”. Preserve context-pressure
+  and overflow recovery, queued/steered input, canonical Goal state and Stop
+  handling during a summary. Add multistep PTC/Goal and subagent regressions.
+
 ## 0.3.0-alpha.2 — 2026-10-31
 
 - Add Settings → Browser Use: saved and active browser configuration, explicit

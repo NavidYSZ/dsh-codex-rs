@@ -516,7 +516,7 @@ impl RoundHook {
 
 #[async_trait]
 impl PreStepHook for RoundHook {
-    fn compact_between_steps(&self) -> bool {
+    fn compact_short_turns(&self) -> bool {
         self.entry
             .upgrade()
             .and_then(|entry| entry.view().ok().flatten())

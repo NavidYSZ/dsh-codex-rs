@@ -489,21 +489,20 @@ pub(crate) async fn compact_if_needed(
 /// earlier checkpoints: less is not worth a summary call.
 const MIN_EVERY_TURN_TOKENS: u64 = 8_000;
 
-/// PTC programs and active goals can produce useful checkpoints well before
-/// a whole interactive turn completes. Tiny results still keep their prefix.
-const MIN_ROUND_TOKENS: u64 = 1_024;
+/// Completed PTC answers and Goal rounds can benefit from shorter checkpoints.
+const MIN_SHORT_TURN_TOKENS: u64 = 1_024;
 
-/// Condenses history after a settled model/tool step, or after the whole
-/// turn (`turn: null`). The last request's prefix is still cached. Returns
-/// whether a summary replaced history; work rounds use the smaller gate.
-pub(crate) async fn compact_at_boundary(
+/// Condenses history only after the entire turn (`turn: null`). The latest
+/// answer stays verbatim; intermediate tool results remain available until
+/// that answer is complete. Pressure/overflow compaction is a separate path.
+pub(crate) async fn compact_after_turn(
     inner: &Arc<Inner>,
     policy: TurnEndCompaction,
-    turn: Option<u64>,
-    work_rounds: bool,
+    short_turns: bool,
     cancel: &CancellationToken,
 ) -> anyhow::Result<bool> {
-    if inner.journal.request_header().is_none() || compaction_open(inner) {
+    let turn_open = inner.state.lock().unwrap().open_turn.is_some();
+    if turn_open || inner.journal.request_header().is_none() || compaction_open(inner) {
         return Ok(false);
     }
     let range = inner
@@ -518,25 +517,25 @@ pub(crate) async fn compact_at_boundary(
             };
             let range = select_range(events, &m, retain)?;
             let fresh = new_tokens(events, &m, range);
-            let minimum = if work_rounds {
-                MIN_ROUND_TOKENS
+            let minimum = if short_turns {
+                MIN_SHORT_TURN_TOKENS
             } else {
                 MIN_EVERY_TURN_TOKENS
             };
             let worth = (policy != TurnEndCompaction::EveryTurn || fresh >= minimum)
-                && (!work_rounds || fresh > 0);
+                && (!short_turns || fresh > 0);
             worth.then_some(range)
         })
         .filter(|range| {
-            !work_rounds || inner.state.lock().unwrap().last_compaction_attempt != Some(*range)
+            !short_turns || inner.state.lock().unwrap().last_compaction_attempt != Some(*range)
         });
     let Some(range) = range else {
         return Ok(false);
     };
-    if work_rounds {
+    if short_turns {
         inner.state.lock().unwrap().last_compaction_attempt = Some(range);
     }
-    compact_region(inner, range, turn, cancel).await?;
+    compact_region(inner, range, None, cancel).await?;
     prune_session(inner).await?;
     Ok(true)
 }
