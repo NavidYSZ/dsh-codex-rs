@@ -70,8 +70,8 @@ A failed submission keeps the draft and its attachments.
 
 ## Build from source
 
-Install Rust 1.97.1 or newer. On a Mac, also install Xcode Command Line Tools
-and Python 3, then:
+Install Rust 1.97.1 or newer. For the native Mac app, use Xcode 26.5 or newer
+(including the macOS 26 SDK) and Python 3, then:
 
 ```sh
 git clone https://github.com/NavidYSZ/dsh-codex-rs.git
@@ -80,6 +80,7 @@ desktop/build.sh --ad-hoc
 ```
 
 This produces `desktop/build/Aether.app` and `desktop/build/Aether.dmg`.
+The newer SDK is a build requirement; the resulting app still targets macOS 14+.
 The build downloads a pinned Node.js runtime from nodejs.org and verifies its
 SHA-256 before packaging it. No personal settings or API keys enter the app.
 See [the desktop build notes](desktop/README.md) for signing and instance setup.

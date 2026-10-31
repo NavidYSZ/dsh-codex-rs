@@ -18,6 +18,10 @@ Aether.app/Contents/
 
 ## Bauen
 
+Voraussetzungen: Apple Silicon, Xcode 26.5 oder neuer (macOS-26-SDK), Rust
+1.97.1 und Python 3. Die fertige App läuft weiterhin ab macOS 14. Der neuere
+SDK wird für die optionale `NSGlassEffectView`-Darstellung benötigt.
+
 ```bash
 desktop/build.sh
 ```
