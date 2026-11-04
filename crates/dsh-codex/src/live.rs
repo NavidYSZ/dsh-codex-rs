@@ -153,15 +153,24 @@ impl MiniSink for LiveMini {
             .split_once(" · ")
             .map_or("", |(_, host)| host)
             .to_owned();
-        self.hub.with_owner(json!({
+        let patch = json!({
             "activity": show.activity,
             "place": place,
             "width": show.width,
             "height": show.height,
-        }));
+        });
         if self.inner.enabled() {
-            self.inner.show(show).await
+            let reply = self.inner.show(show).await;
+            // A native mini window (the macOS helper) shows the picture; the
+            // web UI keeps its floating picture away so there is only one.
+            let mut patch = patch;
+            patch["native"] = json!(reply.displayed);
+            self.hub.with_owner(patch);
+            reply
         } else {
+            let mut patch = patch;
+            patch["native"] = json!(false);
+            self.hub.with_owner(patch);
             MiniReply::default()
         }
     }
@@ -196,7 +205,7 @@ impl MiniSink for LiveMini {
 
     async fn done(&self) {
         self.hub
-            .with_owner(json!({ "ended": true, "active": false }));
+            .with_owner(json!({ "ended": true, "active": false, "native": false }));
         if self.inner.enabled() {
             self.inner.done().await;
         }
@@ -276,5 +285,59 @@ mod tests {
         mini.done().await;
         let (_, d) = data(rx.try_recv().unwrap());
         assert_eq!(d["ended"], true);
+    }
+
+    struct NativeMini;
+
+    #[async_trait]
+    impl MiniSink for NativeMini {
+        fn enabled(&self) -> bool {
+            true
+        }
+        async fn show(&self, _: MiniShow) -> MiniReply {
+            MiniReply {
+                displayed: true,
+                ..Default::default()
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn web_viewers_learn_whether_a_native_window_shows_the_browser() {
+        let hub = LiveHub::new();
+        hub.enable_viewers();
+        let mut rx = hub.subscribe();
+        hub.begin("s1", "browser", &json!({ "action": "open" }));
+        let _ = rx.try_recv();
+        let show = MiniShow {
+            title: "Browser · example.com".into(),
+            icon: "globe".into(),
+            width: 1280,
+            height: 800,
+            activity: "Opening".into(),
+        };
+        let web_only = LiveMini {
+            inner: Arc::new(dshx_browser::NoMini),
+            hub: hub.clone(),
+        };
+        web_only.show(show.clone()).await;
+        let (_, d) = data(rx.try_recv().unwrap());
+        assert_eq!(
+            (d["native"].as_bool(), d["place"].as_str()),
+            (Some(false), Some("example.com"))
+        );
+        let native = LiveMini {
+            inner: Arc::new(NativeMini),
+            hub: hub.clone(),
+        };
+        native.show(show).await;
+        let (_, d) = data(rx.try_recv().unwrap());
+        assert_eq!(d["native"], true, "the helper took the picture");
+        native.done().await;
+        let (_, d) = data(rx.try_recv().unwrap());
+        assert_eq!(
+            (d["native"].as_bool(), d["ended"].as_bool()),
+            (Some(false), Some(true))
+        );
     }
 }

@@ -50,6 +50,9 @@ pub struct MiniReply {
     /// Set when the user stopped the agent (`ok:false, cancelled:true`); the
     /// helper's error text, which becomes the tool error the model sees.
     pub stopped: Option<String>,
+    /// The helper answered, so a native window shows the browser (the web
+    /// UI then keeps its own floating picture out of the way).
+    pub displayed: bool,
 }
 
 #[async_trait]

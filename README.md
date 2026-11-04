@@ -131,6 +131,16 @@ checks launch, navigation, typing, clicking and reading with an isolated local
 page and temporary profile. Browser MCP connections have their own connection
 and tool-discovery check. These checks do not certify access to every website.
 
+**Your own Chrome.** Ask for “my Chrome”, “the open Chrome” or an open tab and
+the agent attaches to your running Google Chrome (or Chromium, Brave, Edge)
+with your tabs and sign-ins instead of starting a second browser
+(`browser: "user"`). Allow it once in Chrome under
+`chrome://inspect/#remote-debugging` → “Allow remote debugging for this
+browser instance”, and click Allow if Chrome asks when the agent connects.
+The agent starts on the tab you are looking at, opens its own tab for new
+pages, never navigates your tab away and never closes your browser.
+Settings → Browser Use shows whether attaching is possible right now.
+
 Connect HuntProxy in Aether's **Plugins → MCP servers**, even if another agent
 already uses it: applications keep their own MCP configuration. Switch it on
 for a chat under **Connectors** in the composer, mention `@huntproxy`, or turn

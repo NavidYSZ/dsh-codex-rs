@@ -124,11 +124,9 @@ impl Runtime {
                 .clone()
                 .unwrap_or_else(dshx_browser::system_locale);
             let opts = dshx_browser::BrowserOptions::from_config(&config.codex.browser, &locale);
-            opts.chrome.is_some().then(|| {
-                Arc::new(dshx_browser::BrowserTool::new(dshx_browser::Browser::new(
-                    opts, mini,
-                )))
-            })
+            opts.chrome
+                .is_some()
+                .then(|| Arc::new(dshx_browser::browser_tool_with(opts, mini)))
         } else {
             None
         };

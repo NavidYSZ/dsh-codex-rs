@@ -311,7 +311,8 @@ function appendEvent(ev) {
 function onLive(m) {
   const prev = store.get().live;
   const fresh = m.active && (!prev?.active || JSON.stringify(prev.args) !== JSON.stringify(m.args));
-  store.set({ live: m });
+  // A hidden floating picture stays hidden for this call; a new call brings it back.
+  store.set(fresh ? { live: m, liveHidden: null } : { live: m });
   const p = store.get().panel;
   if (fresh && p.open && (p.tab === 'changes' || p.tab === 'files')) setPanelTab('live');
 }
@@ -372,7 +373,7 @@ function loadTeamSoon(id) {
 
 export const setDraft = (draft) => store.set({ draft });
 
-export const hideLive = () => store.set((s) => ({ liveHidden: s.live?.time ?? Date.now() }));
+export const hideLive = () => store.set({ liveHidden: true });
 
 /** Status of every chat (running dots, unread after a background run finishes). */
 function watchAll() {

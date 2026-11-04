@@ -49,6 +49,17 @@ prüft Öffnen, Tippen, Klicken und Lesen auf einer lokalen Seite. Eigene Tabs u
 Anmeldungen bleiben erhalten. Änderungen an Pfad/Aktivierung erfordern einen
 Neustart der betroffenen Instanz; die Oberfläche zeigt das ausdrücklich an.
 
+**Dein eigenes Chrome.** Sag „nutze mein Chrome“, „das offene Chrome“ oder
+nenne einen offenen Tab: Der Agent verbindet sich dann mit deinem laufenden
+Google Chrome (auch Chromium, Brave, Edge) samt Tabs und Anmeldungen, statt
+einen zweiten Browser zu starten (`browser: "user"`). Einmalig in Chrome unter
+`chrome://inspect/#remote-debugging` → „Allow remote debugging for this
+browser instance“ erlauben; fragt Chrome beim Verbinden „Allow remote
+debugging?“, auf „Allow“ klicken. Der Agent beginnt auf dem Tab, den du gerade
+siehst, öffnet für neue Seiten einen eigenen Tab, navigiert deinen Tab nie weg
+und schließt deinen Browser nie. Einstellungen → Browser Use zeigt, ob die
+Verbindung gerade möglich ist.
+
 HuntProxy muss in **Aether → Plugins → MCP-Server** eingerichtet sein, auch
 wenn es bereits mit einem anderen Agenten verbunden ist. Im Eingabefeld unter
 **Konnektoren** für den Chat einschalten, im Chat `@huntproxy` nennen oder auf

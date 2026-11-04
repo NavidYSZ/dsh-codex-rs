@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Fix: “use my Chrome” no longer opens a second Chrome with a fresh profile.
+  The `browser` tool gains `browser: "user"`: it attaches to the user's own
+  running Chrome (Chromium, Brave or Edge) over the DevTools WebSocket the
+  browser publishes once remote debugging is allowed in
+  `chrome://inspect/#remote-debugging`, with all tabs, cookies and sign-ins.
+  The first action works on the tab the user is looking at, `open` takes a
+  new tab instead of navigating the user's tab away, the choice sticks for
+  the chat, idle or shutdown only detaches and never closes the user's
+  browser. Settings → Browser Use shows whether the agent can attach and what
+  to enable; errors carry the same instructions. The routing prompt tells the
+  model to use it for “my Chrome”, “the open Chrome” or an open tab and never
+  to fall back to a new window or desktop control.
+- Fix: only one live preview. The web UI's floating picture stays away while
+  the macOS helper's own mini window shows the browser (`native` in the live
+  stream), and it is now borderless like that window: the picture is the
+  surface, caption and buttons appear on hover. Hiding it lasts for the whole
+  call instead of one frame. The bundled Computer Use helper is 0.4.1 (the
+  232-px borderless mini window with hover controls, focus rule and one card
+  per app window) instead of the old bordered 0.2.0.
 - Add the Aether iPhone app (`ios/`): pair this Mac or a VPS by QR code or
   link, browse the chats of each device, send prompts, answer approvals and
   watch the live view. A device is reached directly over pinned TLS, through

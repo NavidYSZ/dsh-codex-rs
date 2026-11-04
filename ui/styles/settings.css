@@ -116,3 +116,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .st-pane { animation: none; } }
+.bu-user-chrome { border-top: .5px solid var(--line-2); padding-bottom: 12px; }
+.bu-user-chrome > .field { border-top: 0; }
+.bu-user-chrome-off { color: var(--ink-2); }

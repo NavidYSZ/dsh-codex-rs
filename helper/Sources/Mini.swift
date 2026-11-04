@@ -25,38 +25,98 @@ private class FlippedView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// The header drags the panel; a click on it (or the preview) opens the target.
+/// The header drags the whole stack; a click on it (or the preview) opens the target.
 private final class HandleView: FlippedView {
     var onClick: (() -> Void)?
-    private var downAt: NSPoint?
-    private var originAt: NSPoint?
+    var onDrag: ((NSSize) -> Void)?
+    var cursor: NSCursor = .pointingHand
+    private var down: NSPoint?
+    private var last: NSPoint?
     private var moved = false
+
     override func mouseDown(with event: NSEvent) {
-        downAt = NSEvent.mouseLocation
-        originAt = window?.frame.origin
+        let p = NSEvent.mouseLocation
+        down = p
+        last = p
         moved = false
     }
+
     override func mouseDragged(with event: NSEvent) {
-        guard let downAt, let originAt, let window else { return }
+        guard let down, let last else { return }
         let p = NSEvent.mouseLocation
-        if hypot(p.x - downAt.x, p.y - downAt.y) > 3 { moved = true }
-        if moved { window.setFrameOrigin(NSPoint(x: originAt.x + p.x - downAt.x, y: originAt.y + p.y - downAt.y)) }
+        let d = NSSize(width: p.x - last.x, height: p.y - last.y)
+        self.last = p
+        if !moved, hypot(p.x - down.x, p.y - down.y) > 3 { moved = true }
+        if moved { onDrag?(d) }
     }
+
     override func mouseUp(with event: NSEvent) {
         if !moved { onClick?() }
-        downAt = nil
+        down = nil
+        last = nil
     }
-    override func resetCursorRects() { if onClick != nil { addCursorRect(bounds, cursor: .pointingHand) } }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
 }
 
-/// Codex-style "Mini": a small floating glass window that shows a live view
-/// of what the agent operates in the background (an app window or the
-/// headless browser), its own cursor inside that view, the current step and
-/// a stop button. It never takes focus and is invisible to screenshots.
+/// The visible card: a flat, borderless surface with rounded corners and a
+/// hairline edge. No window material, no titlebar, no shadow.
+private final class MiniCard: NSView {
+    var radius: CGFloat = 3 { didSet { needsDisplay = true } }
+    var onHover: ((Bool) -> Void)?
+    private var tracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let next = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(next)
+        tracking = next
+    }
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
+
+    override var isFlipped: Bool { true }
+    override var wantsUpdateLayer: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func updateLayer() {
+        guard let layer else { return }
+        // Always dark, like the Codex preview: the card is its own surface and
+        // must not turn into a bright macOS panel over a dark DSH window.
+        layer.cornerRadius = radius
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = true
+        layer.backgroundColor = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 1).cgColor
+        layer.borderWidth = 1
+        layer.borderColor = NSColor(white: 1, alpha: 0.10).cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+/// Codex-style "Mini": a small floating card that shows a live view of what
+/// the agent operates in the background (an app window or the headless
+/// browser), its own cursor inside that view, the current step and a stop
+/// button. It never takes focus and is invisible to screenshots. Position,
+/// size and visibility are owned by `MiniCenter`.
 @MainActor
 final class Mini {
-    enum Source: Equatable { case window(CGWindowID, CGRect), frames }
+    enum Source: Equatable { case window(CGWindowID, CGRect), display(CGDirectDisplayID, CGRect), frames }
 
+    static let width: CGFloat = 232
+    static let headerHeight: CGFloat = 36
+
+    let owner: String
     var strings = MiniStrings()
     var accent = NSColor(srgbRed: 0x33 / 255.0, green: 0x9c / 255.0, blue: 0xff / 255.0, alpha: 1) { didSet { restyle() } }
     /// Seconds without a step before the window says "done", then hides.
@@ -64,16 +124,29 @@ final class Mini {
     var hideAfter: Double = 24
     var onStop: (() -> Void)?
     var onOpen: (() -> Void)?
+    var onDrag: ((NSSize) -> Void)?
+    /// The card changed its size (preview aspect), so the stack has to re-flow.
+    var onResize: (() -> Void)?
+    /// The card went away and can be dropped from the stack.
+    var onHidden: (() -> Void)?
 
-    private(set) var visible = false
+    private(set) var wantsVisible = false
+    /// Hidden because DSH is not the frontmost app; the card keeps its state.
+    var suppressed = false { didSet { applyVisibility() } }
+    /// Not the bottom card of the stack: its body is covered, so stop capturing.
+    var occluded = false { didSet { if occluded { stopLive() } else { startLive() } } }
+
+    var visible: Bool { wantsVisible && !suppressed }
+    var onScreen: Bool { panel.isVisible && panel.alphaValue > 0.01 }
+
     private(set) var source: Source?
     private var requests: [String] = []
 
-    private let width: CGFloat = 340
-    private let headerHeight: CGFloat = 56
-    private var expanded = UserDefaults.standard.object(forKey: "miniExpanded") as? Bool ?? true
+    private var expanded: Bool
+    private let target = MiniTarget()
 
     private let panel: MiniPanel
+    private let card = MiniCard(frame: .zero)
     private let root = FlippedView()
     private let header = HandleView()
     private let icon = NSImageView()
@@ -91,8 +164,7 @@ final class Mini {
     private let arrow = CAShapeLayer()
 
     private var aspect = CGSize(width: 16, height: 10)
-    private var hasImage = false
-    private var liveTimer: Timer?
+    private let liveCapture = LiveCapture()
     private var capturing = false
     private var doneWork: DispatchWorkItem?
     private var hideWork: DispatchWorkItem?
@@ -100,8 +172,10 @@ final class Mini {
     private var motion: Timer?
     private var finishMotion: (() -> Void)?
 
-    init() {
-        panel = MiniPanel(contentRect: NSRect(x: 0, y: 0, width: 340, height: 56),
+    init(owner: String) {
+        self.owner = owner
+        self.expanded = UserDefaults.standard.object(forKey: "miniExpanded") as? Bool ?? true
+        panel = MiniPanel(contentRect: NSRect(x: 0, y: 0, width: Mini.width, height: Mini.headerHeight),
                           styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -111,66 +185,59 @@ final class Mini {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.sharingType = .none
-        panel.isMovable = true
+        panel.isMovable = false
+        panel.isMovableByWindowBackground = false
         panel.alphaValue = 0
         build()
-        NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, self.visible else { return }
-                UserDefaults.standard.set(NSStringFromPoint(self.panel.frame.origin), forKey: "miniOrigin")
-            }
+        card.onHover = { [weak self] on in
+            guard let self else { return }
+            self.header.alphaValue = on || !self.expanded ? 1 : 0
         }
+        liveCapture.onFrame = { [weak self] image in self?.setImage(image) }
+        liveCapture.onStopped = { [weak self] in self?.onStop?() }
     }
 
     // MARK: construction
 
     private func build() {
-        let frame = NSRect(x: 0, y: 0, width: width, height: headerHeight)
-        root.frame = frame
-        root.autoresizingMask = [.width, .height]
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: frame)
-            glass.cornerRadius = 20
-            glass.contentView = root
-            panel.contentView = glass
-        } else {
-            let fx = NSVisualEffectView(frame: frame)
-            fx.material = .popover
-            fx.blendingMode = .behindWindow
-            fx.state = .active
-            fx.wantsLayer = true
-            fx.layer?.cornerRadius = 18
-            fx.layer?.masksToBounds = true
-            fx.addSubview(root)
-            panel.contentView = fx
-        }
+        card.appearance = NSAppearance(named: .darkAqua)
+        panel.contentView = card
 
-        header.frame = NSRect(x: 0, y: 0, width: width, height: headerHeight)
+        root.frame = NSRect(x: 0, y: 0, width: Mini.width, height: Mini.headerHeight)
+        root.autoresizingMask = [.width, .height]
+        card.addSubview(root)
+
+        header.frame = NSRect(x: 0, y: 0, width: Mini.width, height: Mini.headerHeight)
         header.autoresizingMask = [.width]
+        header.cursor = .openHand
         header.onClick = { [weak self] in self?.open() }
+        header.onDrag = { [weak self] delta in self?.onDrag?(delta) }
         root.addSubview(header)
 
-        icon.frame = NSRect(x: 12, y: 12, width: 32, height: 32)
+        header.wantsLayer = true
+        header.layer?.backgroundColor = NSColor(white: 0, alpha: 0.78).cgColor
+        header.alphaValue = expanded ? 0 : 1
+        icon.frame = NSRect(x: 8, y: 9, width: 18, height: 18)
         icon.imageScaling = .scaleProportionallyUpOrDown
         header.addSubview(icon)
-        busyDot.frame = CGRect(x: 26, y: 0, width: 9, height: 9)
-        busyDot.cornerRadius = 4.5
+        busyDot.frame = CGRect(x: 14, y: 0, width: 6, height: 6)
+        busyDot.cornerRadius = 3
         busyDot.borderWidth = 1.5
         busyDot.borderColor = NSColor.white.cgColor
         icon.wantsLayer = true
         icon.layer?.masksToBounds = false
         icon.layer?.addSublayer(busyDot)
 
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         titleLabel.textColor = .labelColor
         titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.frame = NSRect(x: 54, y: 10, width: width - 54 - 84, height: 18)
+        titleLabel.frame = NSRect(x: 32, y: 3, width: Mini.width - 32 - 60, height: 15)
         header.addSubview(titleLabel)
 
-        subtitle.font = .systemFont(ofSize: 12, weight: .regular)
+        subtitle.font = .systemFont(ofSize: 10, weight: .regular)
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byTruncatingTail
-        subtitle.frame = NSRect(x: 54, y: 28, width: width - 54 - 84, height: 17)
+        subtitle.frame = NSRect(x: 32, y: 18, width: Mini.width - 32 - 60, height: 14)
         subtitle.wantsLayer = true
         header.addSubview(subtitle)
         shimmer.colors = [NSColor(white: 0, alpha: 0.45).cgColor, NSColor.black.cgColor, NSColor(white: 0, alpha: 0.45).cgColor]
@@ -191,18 +258,19 @@ final class Mini {
             button.toolTip = tip
             button.wantsLayer = true
             button.layer?.cornerRadius = 14
-            button.target = MiniTarget.shared
+            button.target = target
             button.action = action
             header.addSubview(button)
         }
         stopButton.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.09).cgColor
-        stopButton.frame = NSRect(x: width - 12 - 28 - 4 - 28, y: 14, width: 28, height: 28)
-        toggleButton.frame = NSRect(x: width - 12 - 28, y: 14, width: 28, height: 28)
-        MiniTarget.shared.mini = self
+        stopButton.frame = NSRect(x: Mini.width - 54, y: 7, width: 22, height: 22)
+        toggleButton.frame = NSRect(x: Mini.width - 28, y: 7, width: 22, height: 22)
+        target.mini = self
 
         preview.onClick = { [weak self] in self?.open() }
+        preview.onDrag = { [weak self] delta in self?.onDrag?(delta) }
         preview.wantsLayer = true
-        preview.layer?.cornerRadius = 12
+        preview.layer?.cornerRadius = 3
         preview.layer?.masksToBounds = true
         preview.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
         preview.toolTip = strings.open
@@ -212,6 +280,7 @@ final class Mini {
         buildCursor()
         preview.layer?.addSublayer(cursor)
         root.addSubview(preview)
+        root.addSubview(header, positioned: .above, relativeTo: preview)
         restyle()
     }
 
@@ -251,38 +320,31 @@ final class Mini {
     // MARK: layout
 
     private var previewHeight: CGFloat {
-        let w = width - 16
+        let w = Mini.width
         return max(120, min(236, w * aspect.height / max(1, aspect.width)))
     }
 
     private var showsPreview: Bool { expanded && source != nil }
 
-    private func layout(animated: Bool) {
-        let height = headerHeight + (showsPreview ? previewHeight + 8 : 0)
+    var desiredHeight: CGFloat { showsPreview ? previewHeight : Mini.headerHeight }
+
+    /// The stack owns position and size; the card only lays its content out.
+    func applyFrame(_ rect: NSRect, animated: Bool = false) {
+        if panel.frame != rect { panel.setFrame(rect, display: true, animate: animated && visible) }
+        layoutContent()
+    }
+
+    private func layoutContent() {
         preview.isHidden = !showsPreview
-        preview.frame = NSRect(x: 8, y: headerHeight, width: width - 16, height: previewHeight)
+        preview.frame = NSRect(x: 0, y: 0, width: Mini.width, height: previewHeight)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         imageLayer.frame = preview.bounds
         CATransaction.commit()
         placeCursor()
-        var frame = panel.frame
-        frame.size = NSSize(width: width, height: height)   // bottom edge stays put
-        panel.setFrame(frame, display: true, animate: animated && visible)
         toggleButton.image = NSImage(systemSymbolName: expanded ? "chevron.down" : "chevron.up", accessibilityDescription: strings.collapse)?
             .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
         toggleButton.isHidden = source == nil
-    }
-
-    private func initialOrigin(height: CGFloat) -> NSPoint {
-        if let saved = UserDefaults.standard.string(forKey: "miniOrigin") {
-            let p = NSPointFromString(saved)
-            if NSScreen.screens.contains(where: { $0.visibleFrame.insetBy(dx: -20, dy: -20).contains(NSPoint(x: p.x + 40, y: p.y + 20)) }) { return p }
-        }
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
-        let vf = screen.visibleFrame
-        return NSPoint(x: vf.maxX - width - 20, y: vf.minY + 20)
     }
 
     // MARK: public API
@@ -292,25 +354,24 @@ final class Mini {
         self.source = source
         if let aspect, aspect.width > 0, aspect.height > 0 { self.aspect = aspect }
         if case .window(_, let frame)? = source, aspect == nil { self.aspect = frame.size }
-        if changed { hasImage = false; imageLayer.contents = nil; cursorPoint = nil; cursor.opacity = 0 }
+        if changed { imageLayer.contents = nil; cursorPoint = nil; cursor.opacity = 0 }
+        if changed { stopLive() }
         titleLabel.stringValue = title
         icon.image = iconImage ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
-        layout(animated: true)
-        if !visible {
-            visible = true
-            let height = panel.frame.height
-            panel.setFrameOrigin(initialOrigin(height: height))
-            panel.orderFrontRegardless()
-            if let layer = panel.contentView?.layer {
+        let wasVisible = visible
+        wantsVisible = true
+        onResize?()
+        if !wasVisible {
+            applyVisibility()
+            if let layer = card.layer {
                 let pop = CASpringAnimation(keyPath: "transform.scale")
-                pop.fromValue = 0.92
+                pop.fromValue = 0.96
                 pop.toValue = 1
-                pop.damping = 18
-                pop.initialVelocity = 4
+                pop.damping = 20
+                pop.initialVelocity = 2
                 pop.duration = pop.settlingDuration
                 layer.add(pop, forKey: "pop")
             }
-            NSAnimationContext.runAnimationGroup { $0.duration = 0.22; panel.animator().alphaValue = 1 }
         }
         busy()
         startLive()
@@ -329,8 +390,7 @@ final class Mini {
         CATransaction.setDisableActions(true)
         imageLayer.contents = image
         CATransaction.commit()
-        hasImage = true
-        if relayout { layout(animated: false) }
+        if relayout { onResize?() }
     }
 
     func setImage(base64 data: String) {
@@ -357,13 +417,34 @@ final class Mini {
         doneWork?.cancel()
         hideWork?.cancel()
         stopLive()
-        guard visible else { return }
-        visible = false
-        NSAnimationContext.runAnimationGroup({ $0.duration = 0.22; panel.animator().alphaValue = 0 },
-                                             completionHandler: { [weak self] in
-            MainActor.assumeIsolated { if self?.visible == false { self?.panel.orderOut(nil) } }
-        })
+        guard wantsVisible else { return }
+        wantsVisible = false
         source = nil
+        let gone = { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.wantsVisible else { return }
+                self.panel.orderOut(nil)
+                self.panel.alphaValue = 0
+                self.onHidden?()
+            }
+        }
+        if suppressed {
+            gone()
+        } else {
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.18; panel.animator().alphaValue = 0 },
+                                                 completionHandler: { gone() })
+        }
+    }
+
+    /// Drops the panel for good; `MiniCenter` calls this once the card is gone.
+    func teardown() {
+        doneWork?.cancel()
+        hideWork?.cancel()
+        motion?.invalidate()
+        stopLive()
+        wantsVisible = false
+        panel.orderOut(nil)
+        panel.close()
     }
 
     /// Debug aid: let our own screenshots include the panel.
@@ -373,12 +454,32 @@ final class Mini {
 
     fileprivate func toggle() {
         expanded.toggle()
+        header.alphaValue = expanded ? 0 : 1
         UserDefaults.standard.set(expanded, forKey: "miniExpanded")
-        layout(animated: true)
-        if expanded { startLive() } else { stopLive() }
+        onResize?()
+        if !occluded { startLive() }
     }
 
     private func open() { onOpen?() }
+
+    // MARK: visibility
+
+    /// Orders the card in or out without touching its state. The controller
+    /// calls this when the stack re-flows and when DSH gains or loses focus.
+    func applyVisibility() {
+        if visible {
+            panel.orderFrontRegardless()
+            if panel.alphaValue < 1 {
+                NSAnimationContext.runAnimationGroup { $0.duration = 0.18; panel.animator().alphaValue = 1 }
+            }
+            if !occluded { startLive() }
+        } else {
+            // The capture belongs to the operation, not to whether its viewer
+            // is in front. Keep macOS's native sharing indicator on the target.
+            panel.orderOut(nil)
+            panel.alphaValue = 0
+        }
+    }
 
     // MARK: status
 
@@ -433,25 +534,18 @@ final class Mini {
     // MARK: live view of a window
 
     private func startLive() {
-        guard case .window(let id, let frame)? = source, expanded, liveTimer == nil else { return }
-        let refresh = { [weak self] in
-            guard let self, !self.capturing else { return }
-            self.capturing = true
-            Task { @MainActor in
-                defer { self.capturing = false }
-                if let image = try? await AppControl.captureWindow(id, frame: frame, maxWidth: 680),
-                   self.source == .window(id, frame) { self.setImage(image) }
-            }
+        guard let source, source != .frames, !occluded, wantsVisible, !capturing else { return }
+        capturing = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do { try await self.liveCapture.start(source: source) }
+            catch { self.capturing = false }
         }
-        refresh()
-        let timer = Timer(timeInterval: 0.5, repeats: true) { _ in MainActor.assumeIsolated { refresh() } }
-        RunLoop.main.add(timer, forMode: .common)
-        liveTimer = timer
     }
 
     private func stopLive() {
-        liveTimer?.invalidate()
-        liveTimer = nil
+        capturing = false
+        liveCapture.stop()
     }
 
     // MARK: cursor
@@ -588,7 +682,6 @@ final class Mini {
 /// Objective-C target for the buttons (Mini itself is not an NSObject).
 @MainActor
 private final class MiniTarget: NSObject {
-    static let shared = MiniTarget()
     weak var mini: Mini?
     @objc func stop() { mini?.stopPressed() }
     @objc func toggle() { mini?.toggle() }

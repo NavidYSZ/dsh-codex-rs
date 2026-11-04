@@ -727,11 +727,13 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "dshx-core",
+ "futures",
  "libc",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-tungstenite 0.28.0",
  "tokio-util",
  "tracing",
 ]

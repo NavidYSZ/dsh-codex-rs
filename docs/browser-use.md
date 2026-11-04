@@ -24,6 +24,47 @@ belong to the optional native app/computer controls.
 The persistent profile path shown in settings is separate from ordinary Chrome.
 For a website login, ask Aether to show that browser, sign in there, then resume.
 
+## The user's own Chrome
+
+`browser` takes `browser: "user"` to work in the user's running Google Chrome
+(Chromium, Brave or Edge) instead of the background browser: their tabs,
+cookies and sign-ins, no second window. The model is told to use it whenever
+the user asks for “my Chrome”, “the open Chrome”, their logged-in browser or
+an open tab, and the choice sticks for the chat until `browser: "background"`
+is passed.
+
+How it attaches: Chrome 136+ no longer accepts `--remote-debugging-port` for
+the default profile. Instead the user allows remote debugging once in
+`chrome://inspect/#remote-debugging` (“Allow remote debugging for this browser
+instance”); Chrome then writes its DevTools port and browser WebSocket path to
+`DevToolsActivePort` in the profile directory, which Aether reads
+(`~/Library/Application Support/Google/Chrome` on macOS, `~/.config/google-chrome`
+on Linux, plus the Chromium, Brave and Edge equivalents). Chrome 144+ may show
+“Allow remote debugging?” once per browser run when Aether connects; the
+handshake waits up to 60 s for Allow. Chrome 147+ answers 404 on
+`/json/version` for the default profile; the WebSocket path from the file is
+used then.
+
+Behaviour in the user's browser:
+
+- The first action without a tab of its own attaches to the tab the user is
+  looking at (`document.visibilityState`), so `state` and `read` describe it.
+- `open` on a tab the user opened takes a new tab (Chrome brings it to the
+  front); `open` on a tab Aether opened navigates in place. `new_tab`,
+  `switch_tab` and `close_tab` work as usual; DevTools and extension pages
+  are hidden from the tab list.
+- `show` activates the current tab; `hide` does nothing. Downloads, device
+  metrics and the user's settings are not changed.
+- The idle timeout and host shutdown only detach; the user's Chrome keeps
+  running. Never type passwords there either.
+- Errors name the fix (allow remote debugging, click Allow, reopen Chrome);
+  the model must relay them instead of silently starting the background
+  browser or desktop control.
+
+Settings → Browser Use → **Your own Chrome** shows whether a running browser
+allows remote debugging and whether Aether is attached right now
+(`GET /api/browser/status` → `userChrome`).
+
 PTC example:
 
 ```ts

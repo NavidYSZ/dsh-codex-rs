@@ -34,7 +34,10 @@ export function createBrowserFixture(info, variant = '') {
     },
     status() {
       const configured = browserConfig(info.settings.browser);
-      return clone({ configured, active, resolvedChrome: resolve(configured), restartRequired: browserConfigKey(initial) !== browserConfigKey(configured) });
+      const userChrome = variant === 'missing'
+        ? { status: { available: false, name: 'Google Chrome', profile: null, port: null, state: 'toggle-off' }, attached: false }
+        : { status: { available: true, name: 'Google Chrome', profile: '/Users/alex/Library/Application Support/Google/Chrome', port: 9222, state: 'ready' }, attached: false };
+      return clone({ configured, active, userChrome, resolvedChrome: resolve(configured), restartRequired: browserConfigKey(initial) !== browserConfigKey(configured) });
     },
     async test() {
       const configured = browserConfig(info.settings.browser);

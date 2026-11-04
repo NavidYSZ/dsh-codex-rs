@@ -1,6 +1,9 @@
-//! DevTools protocol over `--remote-debugging-pipe`: Chrome reads commands on
-//! fd 3 and writes replies and events on fd 4, one NUL-terminated JSON
-//! message each. No debugging port is ever opened.
+//! DevTools protocol transport. The background browser talks over
+//! `--remote-debugging-pipe`: Chrome reads commands on fd 3 and writes replies
+//! and events on fd 4, one NUL-terminated JSON message each, and no debugging
+//! port is ever opened. The user's own Chrome is reached over the WebSocket
+//! endpoint it publishes in `DevToolsActivePort` once remote debugging is
+//! allowed in `chrome://inspect`; the messages are the same JSON.
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -10,15 +13,21 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use futures::{SinkExt, StreamExt};
 use serde_json::{Map, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio::net::unix::pipe;
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot};
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use crate::js;
 
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+
+pub(crate) type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// An event Chrome pushed (a message with `method` and no pending `id`).
 pub(crate) struct Event {
@@ -30,8 +39,8 @@ pub(crate) struct Event {
 type Reply = Result<Value, String>;
 
 pub(crate) struct Cdp {
-    /// Outgoing messages; a writer task owns the pipe so a cancelled caller
-    /// can never leave half a message in it.
+    /// Outgoing JSON messages; a writer task owns the transport so a
+    /// cancelled caller can never leave half a message in it.
     outbox: Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>,
     pending: Mutex<HashMap<u64, oneshot::Sender<Reply>>>,
     next_id: AtomicU64,
@@ -51,6 +60,15 @@ impl Drop for PendingGuard<'_> {
 }
 
 impl Cdp {
+    fn new(out_tx: mpsc::UnboundedSender<Vec<u8>>) -> Arc<Cdp> {
+        Arc::new(Cdp {
+            outbox: Mutex::new(Some(out_tx)),
+            pending: Mutex::new(HashMap::new()),
+            next_id: AtomicU64::new(1),
+            closed: AtomicBool::new(false),
+        })
+    }
+
     /// Wires up both pipe ends and starts the reader and writer tasks.
     /// `on_event` runs on the reader task and must not block; `on_close`
     /// runs once when Chrome closes the pipe.
@@ -63,14 +81,10 @@ impl Cdp {
         let mut tx = pipe::Sender::from_owned_fd(writer)?;
         let mut rx = pipe::Receiver::from_owned_fd(reader)?;
         let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let cdp = Arc::new(Cdp {
-            outbox: Mutex::new(Some(out_tx)),
-            pending: Mutex::new(HashMap::new()),
-            next_id: AtomicU64::new(1),
-            closed: AtomicBool::new(false),
-        });
+        let cdp = Cdp::new(out_tx);
         tokio::spawn(async move {
-            while let Some(bytes) = out_rx.recv().await {
+            while let Some(mut bytes) = out_rx.recv().await {
+                bytes.push(0);
                 if tx.write_all(&bytes).await.is_err() {
                     break;
                 }
@@ -103,6 +117,52 @@ impl Cdp {
             on_close();
         });
         Ok(cdp)
+    }
+
+    /// The same protocol over a DevTools WebSocket (the user's own browser).
+    /// `on_close` runs once when the browser closes the socket or goes away.
+    pub fn start_ws(
+        ws: Ws,
+        mut on_event: impl FnMut(&Arc<Cdp>, Event) + Send + 'static,
+        on_close: impl FnOnce() + Send + 'static,
+    ) -> Arc<Cdp> {
+        let (mut sink, mut stream) = ws.split();
+        let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let cdp = Cdp::new(out_tx);
+        tokio::spawn(async move {
+            while let Some(bytes) = out_rx.recv().await {
+                let text = match String::from_utf8(bytes) {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+                if sink.send(Message::text(text)).await.is_err() {
+                    break;
+                }
+            }
+            // Our side is done: a close frame detaches without touching the browser.
+            let _ = sink.send(Message::Close(None)).await;
+            let _ = sink.close().await;
+        });
+        let reader_cdp = cdp.clone();
+        tokio::spawn(async move {
+            while let Some(Ok(msg)) = stream.next().await {
+                let text = match msg {
+                    Message::Text(t) => t.to_string(),
+                    Message::Binary(b) => match String::from_utf8(b.to_vec()) {
+                        Ok(t) => t,
+                        Err(_) => continue,
+                    },
+                    Message::Close(_) => break,
+                    _ => continue,
+                };
+                if let Ok(msg) = serde_json::from_str::<Value>(&text) {
+                    reader_cdp.dispatch(msg, &mut on_event);
+                }
+            }
+            reader_cdp.fail_all();
+            on_close();
+        });
+        cdp
     }
 
     fn dispatch(self: &Arc<Self>, mut msg: Value, on_event: &mut impl FnMut(&Arc<Cdp>, Event)) {
@@ -156,7 +216,8 @@ impl Cdp {
         self.closed.load(Ordering::SeqCst)
     }
 
-    /// Closes our end of the command pipe.
+    /// Closes our end of the transport (the command pipe, or the WebSocket
+    /// to the user's browser, which keeps running).
     pub fn shutdown(&self) {
         self.outbox.lock().unwrap().take();
     }
@@ -183,8 +244,7 @@ impl Cdp {
         if let Some(s) = session_id {
             msg.insert("sessionId".into(), s.into());
         }
-        let mut bytes = serde_json::to_vec(&msg).map_err(|e| e.to_string())?;
-        bytes.push(0);
+        let bytes = serde_json::to_vec(&msg).map_err(|e| e.to_string())?;
         let queued = match self.outbox.lock().unwrap().as_ref() {
             Some(out) => out.send(bytes).is_ok(),
             None => false,
@@ -220,6 +280,31 @@ fn is_truthy(v: &Value) -> bool {
         Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
         Value::String(s) => !s.is_empty(),
         _ => true,
+    }
+}
+
+/// Opens the DevTools WebSocket of a running browser. Chrome 144+ may first
+/// show an "Allow remote debugging?" prompt and answers only once the user
+/// clicks Allow, so the handshake is given `timeout`.
+pub(crate) async fn connect_ws(url: &str, timeout: Duration) -> Result<Ws, String> {
+    let connect = tokio_tungstenite::connect_async(url);
+    match tokio::time::timeout(timeout, connect).await {
+        Ok(Ok((ws, _))) => Ok(ws),
+        Ok(Err(tokio_tungstenite::tungstenite::Error::Http(res))) => {
+            let status = res.status().as_u16();
+            Err(if status == 403 {
+                "the browser refused the connection (HTTP 403): Chrome's \"Allow remote debugging?\" prompt was not accepted for this browser session".to_owned()
+            } else {
+                format!(
+                    "the browser answered HTTP {status} instead of upgrading to the DevTools WebSocket"
+                )
+            })
+        }
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => Err(format!(
+            "no answer from the browser within {}s; if Chrome shows an \"Allow remote debugging?\" prompt, the user has to click Allow",
+            js::num(timeout.as_secs_f64())
+        )),
     }
 }
 

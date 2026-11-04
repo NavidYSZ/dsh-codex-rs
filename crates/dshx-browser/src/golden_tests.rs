@@ -24,6 +24,11 @@ fn original_browser_contract_is_preserved_with_read_pagination() {
     let properties = schema["properties"].as_object_mut().unwrap();
     assert_eq!(properties.remove("offset").unwrap()["minimum"], 0);
     assert_eq!(properties.remove("maxChars").unwrap()["maximum"], 40000);
+    // The user's own Chrome is an addition as well.
+    assert_eq!(
+        properties.shift_remove("browser").unwrap()["enum"],
+        serde_json::json!(["background", "user"])
+    );
     assert_eq!(
         serde_json::to_string(&g["schema"]).unwrap(),
         serde_json::to_string(&schema).unwrap()
@@ -106,7 +111,7 @@ fn page_outline_matches() {
             &snap,
             &tabs,
             case["current"].as_str(),
-            case["visible"].as_bool().unwrap(),
+            &crate::browser::mode_text(case["visible"].as_bool().unwrap(), None),
             &dialogs,
         );
         assert_eq!(text, case["text"].as_str().unwrap());
@@ -136,6 +141,8 @@ fn launch_flags_match_browser_js() {
         locale: "de".into(),
         quality: 0.7,
         mock_keychain: false,
+        user_chrome: false,
+        user_profiles: Vec::new(),
     };
     // SAFETY: geteuid has no preconditions.
     let root = cfg!(target_os = "linux") && unsafe { libc::geteuid() } == 0;

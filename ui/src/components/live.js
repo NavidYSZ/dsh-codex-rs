@@ -1,6 +1,9 @@
 // Live view of browser and computer work, like the plugin's 0.4 preview: a
 // small floating picture while the panel is closed, a full "Live" tab in it.
 // Browser frames arrive as JPEG; computer/app steps show their screenshot.
+// The floating picture is borderless (the image is the surface, controls on
+// hover) and stays away while the macOS helper's own mini window shows the
+// same picture (`live.native`), so there is never more than one preview.
 import { useEffect, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
@@ -87,8 +90,9 @@ export function LiveFloat() {
     return () => clearTimeout(id);
   }, [live?.time, live?.active]);
   if (!live || live.ended) return null;
+  if (live.native) return null;
   if (panel.open && panel.tab === 'live') return null;
-  if (hidden && hidden >= (live.time ?? 0) - 1) return null;
+  if (hidden) return null;
   if (!live.active && Date.now() - (live.time ?? 0) > LINGER_MS) return null;
   return html`<div class=${cx('live-float', `is-${phase(live)}`)} role="region" aria-label=${t.live}>
     <${Picture} live=${live} />

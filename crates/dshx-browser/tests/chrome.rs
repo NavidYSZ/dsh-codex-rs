@@ -242,6 +242,8 @@ fn options(chrome: PathBuf, profile: &Path) -> BrowserOptions {
         quality: 0.7,
         // Throwaway profiles: never touch the developer's login keychain.
         mock_keychain: true,
+        user_chrome: false,
+        user_profiles: Vec::new(),
     }
 }
 
@@ -921,6 +923,216 @@ async fn actions_end_to_end() {
     h.finish().await;
 }
 
+/// The user's own Chrome, stood in for by a Chrome of our own that publishes
+/// its DevTools port in a private profile (`--remote-debugging-port=0`).
+struct UserChrome {
+    child: std::process::Child,
+    profile: tempfile::TempDir,
+}
+
+impl UserChrome {
+    async fn start(chrome: &Path, url: &str) -> UserChrome {
+        let profile = tempfile::tempdir().unwrap();
+        let mut cmd = std::process::Command::new(chrome);
+        cmd.args([
+            &format!("--user-data-dir={}", profile.path().display()),
+            "--remote-debugging-port=0",
+            "--headless=new",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-sync",
+            "--window-size=1100,700",
+        ]);
+        if cfg!(target_os = "macos") {
+            cmd.arg("--use-mock-keychain");
+        }
+        if cfg!(target_os = "linux") && unsafe { libc::geteuid() } == 0 {
+            cmd.arg("--no-sandbox");
+        }
+        cmd.arg(url)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let child = cmd.spawn().unwrap();
+        let start = Instant::now();
+        loop {
+            let status = dshx_browser::user_chrome_status_in(&[profile.path().to_path_buf()]);
+            if status.available {
+                break;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(20),
+                "DevToolsActivePort: {status:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        UserChrome { child, profile }
+    }
+    fn running(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None))
+    }
+}
+
+impl Drop for UserChrome {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+#[tokio::test]
+async fn attaches_to_the_users_running_chrome_without_a_second_window() {
+    let Some(chrome) = chrome() else { return };
+    let _serial = SERIAL.lock().await;
+    let site = start_site().await;
+    let mut user = UserChrome::start(&chrome, &format!("{}/page2", site.base)).await;
+    let profile = tempfile::tempdir().unwrap();
+    let mut opts = options(chrome.clone(), &profile.path().join("profile"));
+    opts.idle = Duration::from_secs(1);
+    opts.user_profiles = vec![user.profile.path().to_path_buf()];
+    let background = Browser::new(opts.clone(), Arc::new(NoMini));
+    let attached = Browser::new(opts.for_user_chrome(), Arc::new(NoMini));
+    let tool = BrowserTool::with_user(background, attached);
+    let store = MemStore::new(1);
+    let call = |args: Value| {
+        tool.execute(
+            args,
+            ctx_with(store.clone(), true, CancellationToken::new()),
+        )
+    };
+
+    // Nothing of ours runs: the user's tab is read as it is.
+    let out = call(json!({ "action": "state", "browser": "user" }))
+        .await
+        .unwrap();
+    let text = summary(&out);
+    assert!(
+        text.starts_with(
+            "The user's own Chrome (their tabs and sign-ins) · tab 1/1\nTitle: Second Page\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("Viewport 1100×"),
+        "the user's window size, not ours: {text}"
+    );
+    assert_eq!(out.value.as_ref().unwrap()["browser"], "user");
+    assert_eq!(out.meta.as_ref().unwrap()["browser"], "user");
+    assert_eq!(
+        tool.browser().pid(),
+        None,
+        "no background Chrome was started"
+    );
+    assert!(tool.user_browser().unwrap().attached());
+
+    // Sticky: the next call without "browser" stays in the user's Chrome, and
+    // "open" takes a new tab instead of navigating the user's tab away.
+    let out = call(json!({ "action": "open", "url": format!("{}/", site.base) }))
+        .await
+        .unwrap();
+    let text = summary(&out);
+    assert!(
+        text.starts_with(
+            "The user's own Chrome (their tabs and sign-ins) · tab 2/2\nTitle: Test Home\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("Tabs: 1 Second Page | 2* Test Home"),
+        "{text}"
+    );
+    assert_eq!(
+        out.meta.as_ref().unwrap()["label"],
+        format!("Open {}/", site.base)
+    );
+
+    // Our own tab is navigated in place.
+    let out = call(json!({ "action": "open", "url": format!("{}/popup", site.base) }))
+        .await
+        .unwrap();
+    assert!(
+        summary(&out).contains(" · tab 2/2\nTitle: Popup Page\n"),
+        "{}",
+        summary(&out)
+    );
+    // "show"/"hide" never relaunch the user's browser.
+    let out = call(json!({ "action": "hide" })).await.unwrap();
+    assert!(
+        summary(&out).starts_with("The user's own Chrome"),
+        "{}",
+        summary(&out)
+    );
+
+    // Explicitly back to the background browser: its own Chrome, own profile.
+    let out = call(
+        json!({ "action": "open", "url": format!("{}/page2", site.base), "browser": "background" }),
+    )
+    .await
+    .unwrap();
+    assert!(
+        summary(&out).starts_with("Background browser (headless"),
+        "{}",
+        summary(&out)
+    );
+    let bg = tool.browser().pid().expect("background Chrome runs now");
+    assert!(cmdline(bg).contains("--remote-debugging-pipe"));
+    // ... and back again, still attached.
+    let out = call(json!({ "action": "tabs", "browser": "user" }))
+        .await
+        .unwrap();
+    assert!(
+        summary(&out).contains("Tabs: 1 Second Page | 2* Popup Page"),
+        "{}",
+        summary(&out)
+    );
+
+    // Idle: the attachment is released, the user's Chrome keeps running.
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    assert!(
+        !tool.user_browser().unwrap().attached(),
+        "detached after the idle time"
+    );
+    assert!(user.running(), "the user's Chrome must never be closed");
+    // Closing the tool is just as harmless.
+    tool.user_browser().unwrap().close().await;
+    tool.browser().close().await;
+    assert_group_gone(bg).await;
+    assert!(user.running());
+}
+
+#[tokio::test]
+async fn user_chrome_errors_explain_what_to_enable() {
+    let profile = tempfile::tempdir().unwrap();
+    let mut opts = options(
+        PathBuf::from("/nonexistent/chrome"),
+        &profile.path().join("profile"),
+    );
+    opts.user_profiles = vec![profile.path().join("no-such-browser")];
+    let tool = BrowserTool::with_user(
+        Browser::new(opts.clone(), Arc::new(NoMini)),
+        Browser::new(opts.for_user_chrome(), Arc::new(NoMini)),
+    );
+    let err = tool
+        .execute(
+            json!({ "action": "state", "browser": "user" }),
+            ctx_with(MemStore::new(1), true, CancellationToken::new()),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("no running Google Chrome"), "{err}");
+    assert!(err.contains("chrome://inspect/#remote-debugging"), "{err}");
+    let err = tool
+        .execute(
+            json!({ "action": "state", "browser": "elsewhere" }),
+            ctx_with(MemStore::new(1), true, CancellationToken::new()),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("\"browser\" must be"), "{err}");
+}
+
 #[tokio::test]
 async fn text_only_models_and_scaled_attachments() {
     let Some(chrome) = chrome() else { return };
@@ -1116,6 +1328,7 @@ impl MiniSink for RecordingMini {
         MiniReply {
             requests: vec![],
             stopped: self.stop.lock().unwrap().clone(),
+            displayed: true,
         }
     }
     async fn step(&self, step: MiniStep) -> MiniReply {

@@ -184,6 +184,7 @@ function BackgroundBrowser() {
       ${status?.restartRequired && !loading ? html`<p class="bu-notice" role="status"><${IconAlert} size=${14} />${b.restart}</p>` : null}
       <p class="bu-note">${b.profileHint}</p>
     </div>
+    ${status?.userChrome ? html`<${UserChrome} info=${status.userChrome} />` : null}
     <div class="bu-test">
       <div class="bu-test-heading"><h3>${b.testHeading}</h3>
         <button type="button" class="btn btn-small" disabled=${locked || loading || !!loadError || dirty || !saved.enabled} onClick=${test}>
@@ -194,6 +195,21 @@ function BackgroundBrowser() {
       <${BrowserResult} result=${result?.identity === diagnosticKey ? result.report : null} busy=${testing} />
     </div>
   </section>`;
+}
+
+/** The user's own running Chrome: whether the agent can attach to it. */
+function UserChrome({ info }) {
+  const state = info.status?.state ?? 'no-browser';
+  const name = info.status?.name ?? 'Chrome';
+  const text = (b.userChromeState[state] ?? b.userChromeState['no-browser'])(name, info.status?.port);
+  const ok = info.status?.available === true;
+  return html`<div class="bu-user-chrome" data-state=${state}>
+    <${Field} label=${b.userChrome} hint=${text}>
+      <span class="bu-status-actions"><${Pill} tone=${ok ? 'ok' : 'warn'}>${ok ? (info.attached ? b.userChromeAttached : b.userChromeIdle) : t.browserUse.unavailable}</${Pill}></span>
+    </${Field}>
+    <p class="bu-note">${b.userChromeHint}</p>
+    ${state === 'toggle-off' || state === 'no-browser' ? html`<p class=${cx('bu-note', 'bu-user-chrome-off')} role="status">${b.userChromeSetup}</p>` : null}
+  </div>`;
 }
 
 function BrowserMcpServer({ server }) {

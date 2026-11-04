@@ -2,12 +2,12 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 
-let helperVersion = "0.2.0"
+let helperVersion = "0.4.1"
 
 @MainActor
 final class Controller: NSObject, NSApplicationDelegate {
     private var overlay: Overlay!
-    private var mini: Mini!
+    private var minis: MiniCenter!
     private let apps = AppControl()
     private let capture = Capture()
     private let input = Input()
@@ -23,11 +23,11 @@ final class Controller: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         overlay = Overlay()
-        mini = Mini()
-        mini.onStop = { [weak self] in self?.cancel() }
-        mini.onOpen = { [weak self] in
+        minis = MiniCenter()
+        minis.onStop = { [weak self] in self?.cancel() }
+        minis.onOpen = { [weak self] card in
             guard let self else { return }
-            if case .window? = self.mini.source { self.apps.reveal() } else { self.mini.request("show") }
+            if case .window? = card.source { self.apps.reveal() } else { card.request("show") }
         }
         let server = SocketServer(path: Controller.socketPath) { [weak self] request in
             guard let self else { return ["ok": false, "error": "helper shutting down"] }
@@ -68,7 +68,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     private func cancel() {
         cancelledAt = Date()
         overlay.deactivate()
-        mini.stopped()
+        minis.stopped()
     }
 
     private var isCancelled: Bool {
@@ -87,15 +87,19 @@ final class Controller: NSObject, NSApplicationDelegate {
             case "status": return status()
             case "request_permissions": requestPermissions(); return status()
             case "configure": configure(req); return ["ok": true]
+            case "stop": cancel(); return ["ok": true, "cancelled": true]
             case "reset": cancelledAt = nil; return ["ok": true]
-            case "hide": overlay.deactivate(); mini.hide(); return ["ok": true]
+            case "hide": overlay.deactivate(); minis.hideAll(); return ["ok": true]
             case "mini_frame":
-                if let data = req["data"] as? String { mini.setImage(base64: data) }
-                return ["ok": true, "cancelled": isCancelled, "requests": mini.drainRequests()]
+                let owner = miniOwner(req)
+                if let data = req["data"] as? String { minis.image(owner: owner, base64: data) }
+                return ["ok": true, "cancelled": isCancelled, "requests": minis.drainRequests(owner: owner)]
             case "mini_poll":
-                return ["ok": true, "cancelled": isCancelled, "requests": mini.drainRequests(), "visible": mini.visible]
-            case "mini_done": mini.finished(); return ["ok": true]
-            case "mini_hide": mini.hide(); return ["ok": true]
+                let owner = miniOwner(req)
+                return ["ok": true, "cancelled": isCancelled, "requests": minis.drainRequests(owner: owner),
+                        "visible": minis.count > 0]
+            case "mini_done": minis.finished(owner: miniOwner(req)); return ["ok": true]
+            case "mini_hide": minis.hide(owner: miniOwner(req)); return ["ok": true]
             case "guard_probe":
                 // Read-only: what the guard would refuse right now.
                 var out: [String: Any] = ["ok": true, "keyboard": Guard.blockedKeyboardTarget() ?? NSNull()]
@@ -208,15 +212,17 @@ final class Controller: NSObject, NSApplicationDelegate {
 
         switch cmd {
         case "mini_show":
+            let owner = miniOwner(req)
             let aspect = CGSize(width: req["width"] as? Double ?? 16, height: req["height"] as? Double ?? 10)
-            mini.show(title: req["title"] as? String ?? "Browser", iconImage: Mini.icon(for: req["icon"] as? String),
-                      source: .frames, aspect: aspect)
-            if let activity { mini.setActivity(activity) }
-            return ["ok": true, "requests": mini.drainRequests()]
+            minis.show(owner: owner, title: req["title"] as? String ?? "Browser",
+                       iconImage: Mini.icon(for: req["icon"] as? String), source: .frames, aspect: aspect)
+            if let activity { minis.activity(owner: owner, text: activity) }
+            return ["ok": true, "requests": minis.drainRequests(owner: owner)]
         case "mini_step":
-            if let activity { mini.setActivity(activity) }
-            if let x, let y { await mini.moveCursor(to: CGPoint(x: x, y: y), click: req["click"] as? Bool == true) }
-            return ["ok": true, "requests": mini.drainRequests()]
+            let owner = miniOwner(req)
+            if let activity { minis.activity(owner: owner, text: activity) }
+            if let x, let y { await minis.moveCursor(owner: owner, to: CGPoint(x: x, y: y), click: req["click"] as? Bool == true) }
+            return ["ok": true, "requests": minis.drainRequests(owner: owner)]
         case "app_list":
             return ["ok": true, "apps": AppControl.runningApps()]
         case "app_state":
@@ -230,6 +236,7 @@ final class Controller: NSObject, NSApplicationDelegate {
 
         try ensureTrusted()
         guard let target = apps.target else { throw AppError.noState }
+        let owner = miniOwner(target)
         showMini(activity: activity)
         // Glide the mini window's cursor to the element first, like the real one.
         let aims = ["app_click", "app_type", "app_set_value", "app_scroll", "app_action"].contains(cmd)
@@ -239,7 +246,7 @@ final class Controller: NSObject, NSApplicationDelegate {
             let p = try apps.aim(index: index, x: x, y: y)
             let image = target.toImage(p)
             result["aim"] = ["x": Int(image.x.rounded()), "y": Int(image.y.rounded())]
-            if let n = apps.normalized(p) { await mini.moveCursor(to: n, click: cmd == "app_click" || cmd == "app_action") }
+            if let n = apps.normalized(p) { await minis.moveCursor(owner: owner, to: n, click: cmd == "app_click" || cmd == "app_action") }
         }
         switch cmd {
         case "app_click":
@@ -278,12 +285,19 @@ final class Controller: NSObject, NSApplicationDelegate {
         return result
     }
 
+    /// One card per app window, one for the shared browser.
+    private func miniOwner(_ req: [String: Any]) -> String {
+        (req["owner"] as? String) ?? "browser"
+    }
+
+    private func miniOwner(_ target: AppControl.Target) -> String { "window:\(target.windowID)" }
+
     private func showMini(activity: String?) {
         guard let t = apps.target else { return }
         let title = t.title.isEmpty || t.title == t.name ? t.name : "\(t.name) · \(t.title)"
-        mini.show(title: title, iconImage: t.app.icon,
-                  source: .window(t.windowID, t.frame))
-        if let activity { mini.setActivity(activity) }
+        let owner = miniOwner(t)
+        minis.show(owner: owner, title: title, iconImage: t.app.icon, source: .window(t.windowID, t.frame))
+        if let activity { minis.activity(owner: owner, text: activity) }
     }
 
     private func status() -> [String: Any] {
@@ -295,6 +309,10 @@ final class Controller: NSObject, NSApplicationDelegate {
             "screenRecording": CGPreflightScreenCaptureAccess(),
             "cursor": cursorInfo(),
             "active": overlay.active,
+            "miniWindows": minis.count,
+            "miniVisibleWindows": minis.visibleCount,
+            "miniFocus": minis.focusBundleIDs,
+            "frontmost": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? NSNull(),
         ]
     }
 
@@ -312,15 +330,21 @@ final class Controller: NSObject, NSApplicationDelegate {
         if let v = req["maxWidth"] as? Int { maxWidth = max(640, min(4096, v)) }
         if let v = req["blockedApps"] as? [String] { Guard.extraBundleIDs = Set(v) }
         overlay.style = s
-        mini.accent = s.accent
+        minis.accent = s.accent
         if let m = req["mini"] as? [String: Any] {
-            if let v = m["done"] as? String { mini.strings.done = v }
-            if let v = m["stopped"] as? String { mini.strings.stopped = v }
-            if let v = m["stop"] as? String { mini.strings.stop = v }
-            if let v = m["open"] as? String { mini.strings.open = v }
-            if let v = m["doneAfter"] as? Double { mini.doneAfter = v }
-            if let v = m["hideAfter"] as? Double { mini.hideAfter = v }
-            if let v = m["debugShareable"] as? Bool { mini.setShareable(v) }
+            var strings = minis.strings
+            if let v = m["done"] as? String { strings.done = v }
+            if let v = m["stopped"] as? String { strings.stopped = v }
+            if let v = m["stop"] as? String { strings.stop = v }
+            if let v = m["open"] as? String { strings.open = v }
+            if let v = m["collapse"] as? String { strings.collapse = v }
+            minis.setStrings(strings)
+            if let v = m["doneAfter"] as? Double { minis.doneAfter = v }
+            if let v = m["hideAfter"] as? Double { minis.hideAfter = v }
+            if let v = m["debugShareable"] as? Bool { minis.setShareable(v) }
+        }
+        if let focus = req["focus"] as? [String: Any] {
+            minis.setFocusApps(focus["apps"] as? [String] ?? [])
         }
     }
 
@@ -331,6 +355,11 @@ final class Controller: NSObject, NSApplicationDelegate {
                                                 jpegQuality: quality, cursor: input.cursorPosition,
                                                 includeOverlay: req["includeOverlay"] as? Bool == true)
         shot["cursor"] = cursorInfo()
+        if req["includeOverlay"] as? Bool != true, let mapped = capture.mapping {
+            minis.show(owner: "computer", title: "Computer", iconImage: NSImage(systemSymbolName: "display", accessibilityDescription: nil),
+                       source: .display(mapped.displayID, mapped.bounds), aspect: mapped.imageSize)
+            if let activity = req["activity"] as? String { minis.activity(owner: "computer", text: activity) }
+        }
         return shot
     }
 

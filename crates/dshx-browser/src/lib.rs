@@ -1,7 +1,9 @@
 //! The `browser` tool of dsh-codex: a real Chrome in the background with its
 //! own profile, driven over the DevTools protocol through a pipe (no
-//! debugging port). Port of the plugin's `lib/browser.js` and
-//! `lib/browser-tool.js`; see `docs/rust/SPEC.md` §5.5.
+//! debugging port), or the user's own running Chrome over the DevTools
+//! WebSocket it publishes once remote debugging is allowed (`user.rs`).
+//! Port of the plugin's `lib/browser.js` and `lib/browser-tool.js`; see
+//! `docs/rust/SPEC.md` §5.5.
 //!
 //! The host gets the tool from [`browser_tool`]. On macOS `dshx-macos`
 //! passes its [`MiniSink`] so the floating mini window shows the browser's
@@ -13,6 +15,7 @@ mod js;
 mod mini;
 mod scripts;
 mod tool;
+mod user;
 
 #[cfg(test)]
 mod golden_tests;
@@ -24,6 +27,7 @@ pub use browser::{Browser, BrowserOptions};
 pub use diagnostics::{BrowserCheck, BrowserDiagnostic, diagnose};
 pub use mini::{MiniReply, MiniShow, MiniSink, MiniStep, NoMini};
 pub use tool::{ACTIONS, BrowserTool, DESCRIPTION, TOOL_NAME, describe, input_schema};
+pub use user::{UserChrome, UserChromeStatus, user_chrome_status, user_chrome_status_in};
 
 use dshx_core::Tool;
 use dshx_core::config::BrowserConfig;
@@ -144,12 +148,19 @@ pub fn system_locale() -> String {
 
 /// The `browser` tool, or `None` when it is disabled or no Chrome is found.
 /// Uses the system language for Chrome and the mini window; build
-/// [`BrowserOptions::from_config`] + [`BrowserTool::new`] yourself to override it.
+/// [`BrowserOptions::from_config`] + [`BrowserTool::with_user`] yourself to
+/// override it. The user's own Chrome is attached on demand.
 pub fn browser_tool(config: &BrowserConfig, mini: Arc<dyn MiniSink>) -> Option<Arc<dyn Tool>> {
     if !config.enabled {
         return None;
     }
     let opts = BrowserOptions::from_config(config, &system_locale());
     opts.chrome.as_ref()?;
-    Some(Arc::new(BrowserTool::new(Browser::new(opts, mini))))
+    Some(Arc::new(browser_tool_with(opts, mini)))
+}
+
+/// Background browser plus the user's own Chrome behind one tool.
+pub fn browser_tool_with(opts: BrowserOptions, mini: Arc<dyn MiniSink>) -> BrowserTool {
+    let user = Browser::new(opts.for_user_chrome(), mini.clone());
+    BrowserTool::with_user(Browser::new(opts, mini), user)
 }

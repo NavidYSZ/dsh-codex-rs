@@ -1,7 +1,11 @@
 //! Background browser for the `browser` tool (port of `lib/browser.js`): its
 //! own Chrome profile driven over the DevTools protocol through a pipe (no
-//! debugging port), headless unless the user asks to see it. Screencast
-//! frames and the agent cursor go to the mini window when there is one.
+//! debugging port), headless unless the user asks to see it. With
+//! [`BrowserOptions::user_chrome`] the same handle attaches to the user's own
+//! running Chrome instead (see `user.rs`): their tabs and sign-ins, no second
+//! window, nothing is killed on close. Screencast frames and the agent cursor
+//! go to the mini window when there is one.
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
@@ -37,6 +41,12 @@ pub struct BrowserOptions {
     /// macOS: `--use-mock-keychain`, so Chrome never asks for the login
     /// keychain (tests, dev runs, sandboxed agents).
     pub mock_keychain: bool,
+    /// Attach to the user's own running Chrome (its DevTools endpoint from
+    /// `DevToolsActivePort`) instead of starting a background Chrome.
+    pub user_chrome: bool,
+    /// Profile directories to look for the user's browser in; empty = the
+    /// standard locations (tests point this at a Chrome of their own).
+    pub user_profiles: Vec<PathBuf>,
 }
 
 impl BrowserOptions {
@@ -53,6 +63,16 @@ impl BrowserOptions {
             mock_keychain: config.mock_keychain
                 || std::env::var("DSHX_BROWSER_MOCK_KEYCHAIN")
                     .is_ok_and(|v| !v.is_empty() && v != "0"),
+            user_chrome: false,
+            user_profiles: Vec::new(),
+        }
+    }
+
+    /// The same settings for the user's own browser.
+    pub fn for_user_chrome(&self) -> Self {
+        BrowserOptions {
+            user_chrome: true,
+            ..self.clone()
         }
     }
 }
@@ -75,6 +95,12 @@ struct PageState {
     casting: bool,
     pid: Option<i32>,
     last_use: Option<Instant>,
+    /// Last known viewport in CSS pixels (the user's window has its own size).
+    viewport: Option<(f64, f64)>,
+    /// Attached mode: the browser's name and `.app` bundle.
+    user: Option<(&'static str, Option<String>)>,
+    /// Tabs this tool opened; the user's own tabs are never navigated away.
+    owned: HashSet<String>,
 }
 
 #[derive(Default)]
@@ -99,7 +125,8 @@ impl Shared {
 }
 
 struct Proc {
-    child: Child,
+    /// Our own Chrome; `None` when attached to the user's browser.
+    child: Option<Child>,
     pid: i32,
     cdp: Arc<Cdp>,
 }
@@ -107,9 +134,13 @@ struct Proc {
 impl Drop for Proc {
     // Last line of defence (cancelled close, dropped browser): close the pipe
     // so Chrome quits by itself, and kill the whole group if it does not.
+    // An attached browser only loses the socket.
     fn drop(&mut self) {
         self.cdp.shutdown();
-        let running = matches!(self.child.try_wait(), Ok(None));
+        let Some(child) = self.child.as_mut() else {
+            return;
+        };
+        let running = matches!(child.try_wait(), Ok(None));
         let pid = self.pid;
         if running || cdp::group_alive(pid) {
             std::thread::spawn(move || {
@@ -166,9 +197,21 @@ impl Browser {
         }
     }
 
-    /// Whether a Chrome binary was found.
+    /// Whether a Chrome binary was found (attached mode needs none).
     pub fn available(&self) -> bool {
-        self.inner.opts.chrome.is_some()
+        self.inner.opts.user_chrome || self.inner.opts.chrome.is_some()
+    }
+
+    /// Attached to the user's own browser right now.
+    pub fn attached(&self) -> bool {
+        self.inner.shared.st().user.is_some()
+    }
+
+    /// Stops the screencast until the next action (another browser of the
+    /// same tool takes over the mini window).
+    pub async fn pause_cast(&self) {
+        let mut ctl = self.lock().await;
+        ctl.stop_cast().await;
     }
 
     pub fn options(&self) -> &BrowserOptions {
@@ -400,10 +443,6 @@ impl<'a> Ctl<'a> {
         }
     }
 
-    pub fn opts(&self) -> &BrowserOptions {
-        &self.inner.opts
-    }
-
     fn st(&self) -> MutexGuard<'_, PageState> {
         self.inner.shared.st()
     }
@@ -458,9 +497,19 @@ impl<'a> Ctl<'a> {
 
     fn alive(&mut self) -> bool {
         match self.ops.proc.as_mut() {
-            Some(p) => !p.cdp.is_closed() && matches!(p.child.try_wait(), Ok(None)),
+            Some(p) => {
+                !p.cdp.is_closed()
+                    && p.child
+                        .as_mut()
+                        .is_none_or(|c| matches!(c.try_wait(), Ok(None)))
+            }
             None => false,
         }
+    }
+
+    /// Attached to the user's own browser (rather than running our own).
+    pub fn attached(&self) -> bool {
+        self.inner.opts.user_chrome
     }
 
     pub async fn ensure(&mut self) -> Result<()> {
@@ -468,6 +517,9 @@ impl<'a> Ctl<'a> {
         self.arm_idle();
         if self.alive() {
             if self.st().page.is_some() {
+                if self.inner.mini.enabled() && !self.st().casting {
+                    let _ = self.start_cast().await;
+                }
                 return Ok(());
             }
             // The tab went away (closed by the page or the user): take another.
@@ -479,14 +531,118 @@ impl<'a> Ctl<'a> {
         self.launch(visible, Vec::new()).await
     }
 
-    /// Attaches to the first tab, or a new blank one when there is none.
+    /// Attaches to the first tab (in the user's browser: the tab they are
+    /// looking at), or a new blank one when there is none.
     pub async fn reattach(&mut self) -> Result<()> {
-        let first = self.tabs().await?.into_iter().next().map(|t| t.target_id);
-        let target_id = match first {
+        let tabs = self.tabs().await?;
+        let mut chosen = None;
+        if self.attached() {
+            chosen = self.visible_tab(&tabs).await;
+        }
+        let target_id = match chosen.or_else(|| tabs.into_iter().next().map(|t| t.target_id)) {
             Some(id) => id,
             None => self.create_target("about:blank", false).await?,
         };
         self.attach(&target_id).await
+    }
+
+    /// The tab the user sees: the first page whose document is visible.
+    async fn visible_tab(&self, tabs: &[Tab]) -> Option<String> {
+        for tab in tabs.iter().take(40) {
+            let Ok(res) = self
+                .browser_send(
+                    "Target.attachToTarget",
+                    json!({ "targetId": tab.target_id, "flatten": true }),
+                )
+                .await
+            else {
+                continue;
+            };
+            let Some(session) = res["sessionId"].as_str().map(str::to_owned) else {
+                continue;
+            };
+            let state = self
+                .cdp()
+                .ok()?
+                .send(
+                    "Runtime.evaluate",
+                    json!({ "expression": "document.visibilityState", "returnByValue": true }),
+                    Some(&session),
+                    Duration::from_secs(3),
+                )
+                .await
+                .ok()
+                .and_then(|r| r["result"]["value"].as_str().map(str::to_owned));
+            let _ = self
+                .browser_send("Target.detachFromTarget", json!({ "sessionId": session }))
+                .await;
+            if state.as_deref() == Some("visible") {
+                return Some(tab.target_id.clone());
+            }
+        }
+        None
+    }
+
+    /// The current tab is one the user opened (attached mode): "open" takes
+    /// a new tab instead of navigating it away.
+    pub fn on_users_tab(&self) -> bool {
+        let st = self.st();
+        st.user.is_some()
+            && st
+                .page
+                .as_ref()
+                .is_some_and(|p| !st.owned.contains(&p.target_id))
+    }
+
+    /// Attaches to the user's running browser over its DevTools WebSocket.
+    async fn attach_user(&mut self, urls: Vec<String>) -> Result<()> {
+        self.discard().await;
+        let found = crate::user::resolve_in(&self.inner.opts.user_profiles).await?;
+        let ws = cdp::connect_ws(&found.ws_url, Duration::from_secs(60))
+            .await
+            .map_err(|e| anyhow!("could not connect to {}: {e}", found.name))?;
+        let generation = {
+            let mut st = self.st();
+            st.generation += 1;
+            st.page = None;
+            st.popups.clear();
+            st.dialogs.clear();
+            st.loading = None;
+            st.casting = false;
+            st.pid = None;
+            st.viewport = None;
+            st.owned.clear();
+            st.user = Some((found.name, found.app.clone()));
+            st.generation
+        };
+        let events = Arc::new(Events {
+            generation,
+            shared: self.inner.shared.clone(),
+            mini: self.inner.mini.clone(),
+            browser: Arc::downgrade(self.inner),
+        });
+        let closer = events.clone();
+        let cdp = Cdp::start_ws(
+            ws,
+            move |cdp, ev| events.on_event(cdp, ev),
+            move || closer.on_close(),
+        );
+        self.ops.proc = Some(Proc {
+            child: None,
+            pid: 0,
+            cdp,
+        });
+        self.ops.visible = true;
+        tracing::debug!(
+            browser = found.name,
+            port = found.port,
+            "attached to the user's browser"
+        );
+        let result = self.boot(urls).await;
+        if result.is_err() {
+            self.discard().await;
+        }
+        result
     }
 
     /// Whether the current tab still exists.
@@ -495,6 +651,9 @@ impl<'a> Ctl<'a> {
     }
 
     async fn launch(&mut self, visible: bool, urls: Vec<String>) -> Result<()> {
+        if self.attached() {
+            return self.attach_user(urls).await;
+        }
         let Some(chrome) = self.inner.opts.chrome.clone() else {
             bail!("No Chrome, Chromium, Brave or Edge found for the background browser");
         };
@@ -514,6 +673,9 @@ impl<'a> Ctl<'a> {
             st.loading = None;
             st.casting = false;
             st.pid = Some(pid);
+            st.viewport = None;
+            st.owned.clear();
+            st.user = None;
             st.generation
         };
         let events = Arc::new(Events {
@@ -540,7 +702,11 @@ impl<'a> Ctl<'a> {
             }
         };
         // From here on `Proc` owns the process and cleans up after failures.
-        self.ops.proc = Some(Proc { child, pid, cdp });
+        self.ops.proc = Some(Proc {
+            child: Some(child),
+            pid,
+            cdp,
+        });
         self.ops.visible = visible;
         tracing::debug!(pid, visible, "browser started");
         let result = self.boot(urls).await;
@@ -562,9 +728,12 @@ impl<'a> Ctl<'a> {
         .map_err(|e| anyhow!("the browser did not start ({e})"))?;
         self.browser_send("Target.setDiscoverTargets", json!({ "discover": true }))
             .await?;
-        let _ = self
-            .browser_send("Browser.setDownloadBehavior", json!({ "behavior": "deny" }))
-            .await;
+        if !self.attached() {
+            // The user's browser keeps its own download settings.
+            let _ = self
+                .browser_send("Browser.setDownloadBehavior", json!({ "behavior": "deny" }))
+                .await;
+        }
         self.reattach().await?;
         for (i, url) in urls.iter().enumerate() {
             if i == 0 {
@@ -583,23 +752,29 @@ impl<'a> Ctl<'a> {
             json!({ "url": url })
         };
         let res = self.browser_send("Target.createTarget", params).await?;
-        res["targetId"]
+        let id = res["targetId"]
             .as_str()
             .map(str::to_owned)
-            .ok_or_else(|| anyhow!("Target.createTarget returned no target"))
+            .ok_or_else(|| anyhow!("Target.createTarget returned no target"))?;
+        self.st().owned.insert(id.clone());
+        Ok(id)
     }
 
-    /// Kills a Chrome that is gone wrong (crashed, half started) without asking.
+    /// Kills a Chrome that is gone wrong (crashed, half started) without
+    /// asking; an attached browser is only let go.
     async fn discard(&mut self) {
         let Some(mut p) = self.ops.proc.take() else {
             return;
         };
         self.forget_page();
         p.cdp.shutdown();
-        if matches!(p.child.try_wait(), Ok(None)) {
+        let Some(child) = p.child.as_mut() else {
+            return;
+        };
+        if matches!(child.try_wait(), Ok(None)) {
             cdp::kill_group(p.pid);
         }
-        let _ = tokio::time::timeout(Duration::from_secs(2), p.child.wait()).await;
+        let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
         if cdp::group_alive(p.pid) {
             cdp::kill_group(p.pid);
         }
@@ -612,26 +787,49 @@ impl<'a> Ctl<'a> {
         st.casting = false;
         st.loading = None;
         st.pid = None;
+        st.user = None;
+        st.owned.clear();
     }
 
     /// Quits Chrome: `Browser.close`, then SIGKILL to the group after 2 s.
+    /// The user's own browser is only detached from; it keeps running.
     pub async fn close(&mut self) {
         self.inner.shared.stop_timers();
+        if self.attached() {
+            self.stop_cast().await;
+            let session = self.st().page.as_ref().map(|p| p.session_id.clone());
+            if let (Some(p), Some(session)) = (self.ops.proc.as_ref(), session) {
+                let _ = p
+                    .cdp
+                    .send(
+                        "Target.detachFromTarget",
+                        json!({ "sessionId": session }),
+                        None,
+                        Duration::from_secs(3),
+                    )
+                    .await;
+            }
+        }
         let Some(mut p) = self.ops.proc.take() else {
             return;
         };
         self.forget_page();
+        let Some(child) = p.child.as_mut() else {
+            p.cdp.shutdown();
+            tracing::debug!("detached from the user's browser");
+            return;
+        };
         let _ = p
             .cdp
             .send("Browser.close", json!({}), None, Duration::from_secs(3))
             .await;
         p.cdp.shutdown();
-        if tokio::time::timeout(Duration::from_secs(2), p.child.wait())
+        if tokio::time::timeout(Duration::from_secs(2), child.wait())
             .await
             .is_err()
         {
             cdp::kill_group(p.pid);
-            let _ = p.child.wait().await;
+            let _ = child.wait().await;
         }
         if cdp::group_alive(p.pid) {
             cdp::kill_group(p.pid);
@@ -649,7 +847,7 @@ impl<'a> Ctl<'a> {
         if let Some(h) = slot.take() {
             h.abort();
         }
-        if self.ops.visible {
+        if self.ops.visible && !self.attached() {
             return; // the user is looking at it; never pull it away
         }
         let weak = Arc::downgrade(self.inner);
@@ -658,7 +856,20 @@ impl<'a> Ctl<'a> {
     }
 
     /// Shows the browser window to the user (or hides it again), keeping tabs.
+    /// The user's own browser is always visible: "show" brings the tab to
+    /// the front, "hide" changes nothing.
     pub async fn set_visible(&mut self, on: bool) -> Result<()> {
+        if self.attached() {
+            if on
+                && self.alive()
+                && let Some(id) = self.current_target()
+            {
+                let _ = self
+                    .browser_send("Target.activateTarget", json!({ "targetId": id }))
+                    .await;
+            }
+            return Ok(());
+        }
         if self.alive() && self.ops.visible == on {
             return Ok(());
         }
@@ -746,6 +957,25 @@ impl<'a> Ctl<'a> {
 
     // ---- mini window -------------------------------------------------------
 
+    /// Ends the screencast (the other browser of the tool gets the mini window).
+    async fn stop_cast(&mut self) {
+        let casting = {
+            let mut st = self.st();
+            std::mem::replace(&mut st.casting, false) && st.page.is_some()
+        };
+        if casting {
+            let _ = self.send("Page.stopScreencast", json!({})).await;
+        }
+    }
+
+    /// Viewport in CSS pixels: the last measured page size, else the options.
+    pub fn viewport(&self) -> (f64, f64) {
+        let opts = &self.inner.opts;
+        self.st()
+            .viewport
+            .unwrap_or((f64::from(opts.width), f64::from(opts.height)))
+    }
+
     async fn start_cast(&mut self) -> Result<()> {
         {
             let mut st = self.st();
@@ -781,17 +1011,17 @@ impl<'a> Ctl<'a> {
             format!("Browser · {host}")
         };
         let opts = &self.inner.opts;
-        let icon = opts
-            .chrome
-            .as_deref()
-            .and_then(app_bundle)
+        let user_app = self.st().user.as_ref().and_then(|(_, app)| app.clone());
+        let icon = user_app
+            .or_else(|| opts.chrome.as_deref().and_then(app_bundle))
             .unwrap_or_else(|| "globe".to_owned());
+        let (width, height) = self.viewport();
         let show = sink
             .show(MiniShow {
                 title,
                 icon,
-                width: opts.width,
-                height: opts.height,
+                width: width.round().max(1.0) as u32,
+                height: height.round().max(1.0) as u32,
                 activity: activity.to_owned(),
             })
             .await;
@@ -801,8 +1031,8 @@ impl<'a> Ctl<'a> {
         }
         if let Some(p) = point {
             let step = MiniStep {
-                x: p.x / f64::from(opts.width),
-                y: p.y / f64::from(opts.height),
+                x: p.x / width,
+                y: p.y / height,
                 click,
             };
             if let Some(message) = sink.step(step).await.stopped {
@@ -833,9 +1063,12 @@ impl<'a> Ctl<'a> {
                 if Instant::now() > until {
                     return;
                 }
-                match weak.upgrade() {
-                    Some(inner) if inner.shared.st().pid.is_some() => {}
-                    _ => return,
+                let running = weak.upgrade().is_some_and(|inner| {
+                    let st = inner.shared.st();
+                    st.pid.is_some() || st.user.is_some()
+                });
+                if !running {
+                    return;
                 }
                 let reply = sink.poll().await;
                 handle_requests(&weak, &reply);
@@ -950,12 +1183,19 @@ impl<'a> Ctl<'a> {
         Ok(infos
             .into_iter()
             .filter(|t| t["type"] == "page")
-            .filter_map(|t| serde_json::from_value(t).ok())
+            .filter_map(|t| serde_json::from_value::<Tab>(t).ok())
+            // The user's browser also lists DevTools and extension pages.
+            .filter(|t| {
+                !(t.url.starts_with("devtools://") || t.url.starts_with("chrome-extension://"))
+            })
             .collect())
     }
 
     pub async fn state(&self, quality: f32) -> Result<PageView> {
         let snap: Snap = serde_json::from_value(self.evaluate(scripts::SNAPSHOT).await?)?;
+        if snap.width > 0.0 && snap.height > 0.0 {
+            self.st().viewport = Some((snap.width, snap.height));
+        }
         let metrics = self.send("Page.getLayoutMetrics", json!({})).await.ok();
         let dpr = if self.ops.visible {
             self.evaluate("devicePixelRatio")
@@ -994,12 +1234,18 @@ impl<'a> Ctl<'a> {
 
     /// The outline the model reads; consumes the dialog notes.
     pub fn describe(&self, view: &PageView) -> String {
-        let dialogs = std::mem::take(&mut self.st().dialogs);
+        let (dialogs, user) = {
+            let mut st = self.st();
+            (
+                std::mem::take(&mut st.dialogs),
+                st.user.as_ref().map(|u| u.0),
+            )
+        };
         describe_state(
             &view.snap,
             &view.tabs,
             self.current_target().as_deref(),
-            self.ops.visible,
+            &mode_text(self.ops.visible, user),
             &dialogs,
         )
     }
@@ -1041,7 +1287,7 @@ async fn idle_watch(weak: Weak<Inner>, idle: Duration) {
         tokio::time::sleep(wait).await;
         let Some(inner) = weak.upgrade() else { return };
         let mut ctl = Ctl::lock(&inner).await;
-        if ctl.ops.visible || ctl.ops.proc.is_none() {
+        if (ctl.ops.visible && !ctl.attached()) || ctl.ops.proc.is_none() {
             return;
         }
         let since = ctl.st().last_use.map_or(idle, |t| t.elapsed());
@@ -1341,25 +1587,29 @@ pub(crate) fn key_events(combo: &str) -> Result<[Value; 2]> {
     Ok([Value::Object(down), Value::Object(up)])
 }
 
+/// First words of the state: which browser this is.
+pub(crate) fn mode_text(visible: bool, user: Option<&str>) -> String {
+    match user {
+        Some(name) => format!("The user's own {name} (their tabs and sign-ins)"),
+        None if visible => "Background browser (visible window)".to_owned(),
+        None => "Background browser (headless, the user sees it in the mini window)".to_owned(),
+    }
+}
+
 /// browser.js `describe(state)`.
 pub(crate) fn describe_state(
     snap: &Snap,
     tabs: &[Tab],
     current: Option<&str>,
-    visible: bool,
+    mode: &str,
     dialogs: &[String],
 ) -> String {
     let index = tabs
         .iter()
         .position(|t| Some(t.target_id.as_str()) == current)
         .map_or(0, |i| i + 1);
-    let mode = if visible {
-        "visible window"
-    } else {
-        "headless, the user sees it in the mini window"
-    };
     let mut lines = vec![
-        format!("Background browser ({mode}) · tab {index}/{}", tabs.len()),
+        format!("{mode} · tab {index}/{}", tabs.len()),
         format!(
             "Title: {}",
             if snap.title.is_empty() {

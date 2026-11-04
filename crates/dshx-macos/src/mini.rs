@@ -196,6 +196,7 @@ fn to_browser(reply: Result<MiniReply, CuaError>) -> dshx_browser::MiniReply {
         Ok(reply) => dshx_browser::MiniReply {
             stopped: reply.stopped().map(str::to_owned),
             requests: reply.requests,
+            displayed: true,
         },
         Err(_) => dshx_browser::MiniReply::default(),
     }
