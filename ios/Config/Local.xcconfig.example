@@ -1,0 +1,4 @@
+// Copy to Config/Local.xcconfig (git-ignored) and adjust. `xcodegen generate` is not needed for xcconfig changes.
+
+// Your Apple Developer team id: unlocks builds for a real iPhone or iPad.
+// DEVELOPMENT_TEAM = ABCDE12345

@@ -140,6 +140,15 @@ class HttpApi {
   /** `{always?, disabledTools?}` (the runtime side comes with package C). */
   mcpSettings(name, patch) { return this.req('PUT', `/api/mcp/servers/${enc(name)}/settings`, patch); }
 
+  // Aether app: the listener, pairing and the paired devices.
+  mobile() { return this.req('GET', '/api/mobile'); }
+  /** `{enabled?, port?, name?}` → the `/api/mobile` document; starts or stops the listener. */
+  updateMobile(patch) { return this.req('PUT', '/api/mobile', patch); }
+  /** `{name?, transports?}` → `{client, token, payload, link, qrSvg}`; the token appears once. */
+  pairMobile(body) { return this.req('POST', '/api/mobile/pair', body ?? {}); }
+  renameMobileClient(id, name) { return this.req('PATCH', `/api/mobile/clients/${enc(id)}`, { name }); }
+  revokeMobileClient(id) { return this.req('DELETE', `/api/mobile/clients/${enc(id)}`); }
+
   // Models page: providers, keys (write only) and provider model lists.
   providers() { return this.req('GET', '/api/providers'); }
   saveProvider(id, body) { return this.req('PUT', `/api/providers/${enc(id)}`, body); }
@@ -730,6 +739,58 @@ class FixtureApi {
   async fetchProviderModels() {
     await this.wait(600);
     return { models: ['glm-5.3', 'glm-5.3-flash', 'kimi-k3', 'deepseek-v4.1-flash'].map((id) => ({ id, contextWindow: 1000000 })) };
+  }
+
+  // Aether app: an in-memory listener and client list, so the page works offline.
+  async mobile() {
+    await this.ready;
+    this.mobileState ??= {
+      enabled: false, port: 7443, clients: [],
+      server: { id: 'srv_fixture', name: 'Fixture Mac', hostname: 'fixture', platform: this.infoData.platform, version: this.infoData.version },
+    };
+    return clone(this.mobileState);
+  }
+
+  async updateMobile(patch) {
+    const state = Object.assign(await this.mobile(), patch);
+    if (state.enabled) {
+      state.addresses = [{ ip: '192.168.178.20', interface: 'en0', kind: 'lan' }, { ip: '100.79.232.37', interface: 'utun4', kind: 'tailscale' }];
+      state.certSha256 = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08';
+    } else {
+      delete state.addresses;
+      delete state.certSha256;
+    }
+    this.mobileState = state;
+    return clone(state);
+  }
+
+  async pairMobile(body) {
+    const state = await this.mobile();
+    const client = {
+      id: `cli_${Math.random().toString(36).slice(2, 10)}`, name: body?.name || 'iPhone', platform: 'ios',
+      createdAt: Date.now(), lastSeenAt: null, pairedVia: 'ui', current: false,
+    };
+    this.mobileState = { ...state, clients: [...state.clients, client] };
+    const link = 'aether://pair#eyJ2IjoxfQ';
+    const qrSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><rect width="29" height="29" fill="#fff"/>'
+      + '<path fill="#000" d="M4 4h7v1h-7zM4 5h1v5h-1zM10 5h1v5h-1zM6 6h3v3h-3zM4 10h7v1h-7zM18 4h7v1h-7zM18 5h1v5h-1zM24 5h1v5h-1zM20 6h3v3h-3zM18 10h7v1h-7z'
+      + 'M4 18h7v1h-7zM4 19h1v5h-1zM10 19h1v5h-1zM6 20h3v3h-3zM4 24h7v1h-7zM13 4h1v2h-1zM13 8h2v1h-2zM12 12h3v1h-3zM16 13h2v2h-2zM13 16h1v3h-1zM20 14h3v3h-3zM18 19h2v2h-2zM22 20h3v1h-3zM19 22h5v2h-5z"/></svg>';
+    return { client: clone(client), token: 'act_fixture', payload: { v: 1, server: state.server, client: { id: client.id, name: client.name }, transports: [] }, link, qrSvg };
+  }
+
+  async renameMobileClient(id, name) {
+    const state = await this.mobile();
+    const client = state.clients.find((c) => c.id === id);
+    if (!client) throw new ApiError(404, 'not found');
+    client.name = name;
+    this.mobileState = state;
+    return clone(client);
+  }
+
+  async revokeMobileClient(id) {
+    const state = await this.mobile();
+    this.mobileState = { ...state, clients: state.clients.filter((c) => c.id !== id) };
+    return null;
   }
 
   async files(_id, dir) {

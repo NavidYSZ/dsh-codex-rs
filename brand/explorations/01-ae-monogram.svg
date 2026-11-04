@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke="#4466F2" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Direction 1: an Æ monogram. The A's right leg is the E's stem; the A's crossbar is the E's middle bar. -->
+  <path d="M3.5 27 14 5V27"/>
+  <path d="M8.75 16H25"/>
+  <path d="M14 5H27M14 27H27"/>
+</svg>

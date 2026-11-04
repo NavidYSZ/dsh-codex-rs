@@ -65,6 +65,37 @@ abschließenden Checkpoint. Der Schutz bei vollem Kontext bleibt verfügbar.
 Stop verhindert weitere automatische Goal-Runden, auch während einer
 Zusammenfassung.
 
+## Aether auf dem iPhone
+
+Die iOS-App in `ios/` verbindet sich mit jedem Rechner, auf dem `dsh-codex
+web` läuft: mit diesem Mac, mit einem VPS, der nur SSH nach außen öffnet, oder
+mit einem Server, der beim Accounts-Hub angemeldet ist. Sie zeigt dieselben
+Chats, Tool-Zeilen, Freigaben und die Live-Ansicht wie die Web-Oberfläche.
+
+Koppeln ist ein Scan:
+
+1. **Web-UI → Einstellungen → Aether App:** Listener einschalten (TLS auf
+   Port 7443, die App pinnt das Zertifikat) und „Gerät koppeln“. Die Seite
+   zeigt einen QR-Code und einen `aether://pair#…`-Link.
+2. **Terminal:** `dsh-codex pair` druckt QR-Code oder Link; `dsh-codex pair
+   --list` und `dsh-codex pair --revoke <id>` verwalten die Geräte.
+3. **VPS hinter SSH:** `dsh-codex pair --ssh <host> -F <ssh_config>` legt
+   einen ed25519-Schlüssel für das Telefon an, trägt eine eingeschränkte
+   `authorized_keys`-Zeile ein (nur Port-Weiterleitung auf den Loopback-Port
+   des Servers) und druckt den QR-Code. Die App tunnelt dann über Port 22.
+
+Ist auf dem Mac die Firewall aktiv, `dsh-codex` (oder die Aether-App) einmal
+unter Systemeinstellungen → Netzwerk → Firewall erlauben; bis dahin antwortet
+nur die Loopback-Adresse und das iPhone erreicht den Listener nicht.
+
+Client-Tokens liegen gehasht in `$DSHX_HOME/mobile/clients.json`; ein Widerruf
+trennt die Verbindungen des Geräts. Der Listener ist standardmäßig aus und
+liefert weder Vorschauen noch den OAuth-Callback aus. Protokoll:
+[docs/aether/SPEC.md](docs/aether/SPEC.md); Bauen der App:
+[ios/README.md](ios/README.md). Der Accounts-Hub (`crates/dshx-hub`,
+`aether-hub`: Registrierung, Sitzungen, Tiers, Relay) ist umgesetzt, aber
+nicht online.
+
 ## Unterschied zum alten Repository
 
 [NavidYSZ/dsh-codex](https://github.com/NavidYSZ/dsh-codex) enthält das ältere

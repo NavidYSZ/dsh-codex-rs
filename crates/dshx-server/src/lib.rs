@@ -25,10 +25,12 @@ use tokio::sync::broadcast;
 mod composer;
 mod extensions;
 mod folders;
+pub mod mobile;
 mod providers;
 
 pub use composer::{Composer, SuggestQuery};
 pub use extensions::{Extensions, OAuthCallback};
+pub use mobile::MobileHost;
 pub use providers::Providers;
 
 /// Live messages pushed to UI clients over the WebSocket.
@@ -228,6 +230,12 @@ pub trait Backend: Send + Sync + 'static {
     fn composer(&self) -> Option<Arc<dyn Composer>> {
         None
     }
+    /// The Aether app: client tokens, the TLS listener and pairing
+    /// (`/api/mobile`); `None` = those routes answer 404 and only the start
+    /// token is accepted.
+    fn mobile(&self) -> Option<Arc<dyn MobileHost>> {
+        None
+    }
 
     // Automation (goals, schedules, Agent Teams); unsupported by default.
 
@@ -318,6 +326,8 @@ struct AppState {
     backend: Arc<dyn Backend>,
     token: Arc<str>,
     previews: Arc<preview::Grants>,
+    /// Client tokens and the Aether listener, shared by both listeners.
+    mobile: Arc<mobile::Mobile>,
 }
 
 struct ApiError(anyhow::Error);
@@ -341,9 +351,17 @@ impl IntoResponse for ApiError {
 
 type ApiResult<T> = Result<T, ApiError>;
 
-/// Builds the router. `token` guards every `/api` route.
+/// Builds the router. `token` guards every `/api` route (client tokens of
+/// the Aether app count too).
 pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
+    build(backend, token).0
+}
+
+/// The loopback router and its state; the state also carries the router of
+/// the Aether listener, which is the same one behind a marker layer.
+fn build(backend: Arc<dyn Backend>, token: String) -> (Router, AppState) {
     let state = AppState {
+        mobile: Arc::new(mobile::Mobile::new(backend.mobile())),
         backend,
         token: token.into(),
         previews: Arc::default(),
@@ -387,20 +405,31 @@ pub fn router(backend: Arc<dyn Backend>, token: String) -> Router {
         .merge(folders::routes())
         .merge(providers::routes())
         .merge(composer::routes())
+        .merge(mobile::routes())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_token,
         ));
-    Router::new()
-        .nest("/api", api)
+    // Previews and the OAuth callback exist only on the loopback listener.
+    let loopback_only = Router::new()
         .route("/preview/{grant}/", get(preview_index))
         .route("/preview/{grant}/{*path}", get(preview_file))
         .route("/api/oauth/callback", get(extensions::oauth_callback))
+        .route_layer(axum::middleware::from_fn(mobile::loopback_only));
+    let app = Router::new()
+        .nest("/api", api)
+        .merge(loopback_only)
         .fallback(get(static_file))
-        .with_state(state)
+        .with_state(state.clone());
+    state.mobile.set_router(
+        app.clone()
+            .layer(axum::middleware::map_request(mobile::mark_mobile)),
+    );
+    (app, state)
 }
 
-/// Binds 127.0.0.1:`port` (0 = any free port) and serves until the future is dropped.
+/// Binds 127.0.0.1:`port` (0 = any free port) and serves until the future is
+/// dropped. The Aether listener starts too when `[codex.mobile]` says so.
 pub async fn serve(
     backend: Arc<dyn Backend>,
     token: String,
@@ -408,7 +437,14 @@ pub async fn serve(
 ) -> anyhow::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
     let addr = listener.local_addr()?;
-    let app = router(backend, token);
+    let (app, state) = build(backend, token);
+    state.mobile.set_loopback_port(addr.port());
+    if state.mobile.wants_start() {
+        let port = state.backend.mobile().map_or(0, |h| h.settings().port);
+        if let Err(e) = state.mobile.start(port) {
+            eprintln!("aether: the listener did not start: {e:#}");
+        }
+    }
     let handle = tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
             tracing::error!("web server stopped: {e}");
@@ -417,14 +453,18 @@ pub async fn serve(
     Ok((addr, handle))
 }
 
+/// The start token or a client token of the Aether app opens `/api`. The
+/// Host check is a DNS-rebinding guard for the loopback listener; requests
+/// on the Aether listener are bearer-protected and skip it.
 async fn require_token(
     State(state): State<AppState>,
     uri: Uri,
     headers: HeaderMap,
-    request: axum::extract::Request,
+    mut request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    let host_ok = host_is_loopback(&headers);
+    let on_mobile = request.extensions().get::<mobile::MobileConn>().is_some();
+    let host_ok = on_mobile || host_is_loopback(&headers);
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -435,12 +475,21 @@ async fn require_token(
         .split('&')
         .find_map(|kv| kv.strip_prefix("token="));
     let presented = bearer.or(query).unwrap_or("");
-    if !host_ok || !constant_time_eq(presented.as_bytes(), state.token.as_bytes()) {
-        return (
+    let unauthorized = || {
+        (
             StatusCode::UNAUTHORIZED,
             Json(json!({ "error": "unauthorized" })),
         )
-            .into_response();
+            .into_response()
+    };
+    if !host_ok {
+        return unauthorized();
+    }
+    if !constant_time_eq(presented.as_bytes(), state.token.as_bytes()) {
+        let Some(id) = state.mobile.authenticate(presented) else {
+            return unauthorized();
+        };
+        request.extensions_mut().insert(mobile::ClientAuth { id });
     }
     next.run(request).await
 }
@@ -457,7 +506,7 @@ fn host_is_loopback(headers: &HeaderMap) -> bool {
         .unwrap_or(false)
 }
 
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
@@ -525,7 +574,8 @@ fn csp_for(html: &[u8]) -> String {
 
 async fn info(State(s): State<AppState>) -> ApiResult<Json<Value>> {
     let info = s.backend.info().await?;
-    Ok(Json(extensions::with_summary(&s, info).await))
+    let info = extensions::with_summary(&s, info).await;
+    Ok(Json(mobile::with_info(&s, info)))
 }
 
 async fn update_settings(
@@ -868,19 +918,30 @@ struct StreamQuery {
 async fn stream(
     State(s): State<AppState>,
     Query(q): Query<StreamQuery>,
+    client: Option<axum::extract::Extension<mobile::ClientAuth>>,
     ws: WebSocketUpgrade,
 ) -> Response {
     let after = q.after.and_then(|a| u64::try_from(a).ok());
-    ws.on_upgrade(move |socket| pump(socket, s.backend, q.session, after))
+    // A socket opened with a client token closes when that client is revoked.
+    let revoked: Revoked = match client {
+        Some(axum::extract::Extension(c)) => Box::pin(s.mobile.revoked(c.id)),
+        None => Box::pin(std::future::pending()),
+    };
+    ws.on_upgrade(move |socket| pump(socket, s.backend, q.session, after, revoked))
 }
 
+/// Resolves when the client token behind a WebSocket is revoked.
+type Revoked = std::pin::Pin<Box<dyn Future<Output = ()> + Send>>;
+
 /// Sends the backlog after `after`, then live messages; with no session, only
-/// status/approval messages of all sessions (for the sidebar).
+/// status/approval messages of all sessions (for the sidebar). `revoked`
+/// ends the socket (a client token that was revoked).
 async fn pump(
     mut socket: WebSocket,
     backend: Arc<dyn Backend>,
     session: Option<String>,
     after: Option<u64>,
+    mut revoked: Revoked,
 ) {
     // Subscribe before reading the backlog so nothing falls between the two.
     let mut live = backend.stream();
@@ -978,6 +1039,13 @@ async fn pump(
                 Some(Ok(WsMessage::Close(_))) | None | Some(Err(_)) => return,
                 Some(Ok(_)) => {}
             },
+            _ = &mut revoked => {
+                let _ = socket.send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+                    code: axum::extract::ws::close_code::POLICY,
+                    reason: "revoked".into(),
+                }))).await;
+                return;
+            }
         }
     }
 }

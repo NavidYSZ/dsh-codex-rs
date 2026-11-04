@@ -1,8 +1,8 @@
 // Settings: one pane per section behind a navigation like the Codex app's
 // (a rail beside the pane on wide pages, a scrolling tab row on narrow ones),
 // each at `#/settings/<section>`: general, appearance, model providers,
-// defaults for new chats, context compaction, usage of all chats, archived
-// chats and about.
+// defaults for new chats, context compaction, the Aether app, usage of all
+// chats, archived chats and about.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, age } from '../i18n.js';
@@ -11,7 +11,7 @@ import {
   store, setTheme, updateSettings, closeSettings, toggleSidebar, setArchived, deleteSession, setFollowup, setNotify, openSettings,
 } from '../state.js';
 import {
-  IconChevronLeft, IconSidebar, IconArchive, IconGear, IconSun, IconCube, IconCompose, IconChart, IconInfo, IconContext, IconGlobe,
+  IconChevronLeft, IconSidebar, IconArchive, IconGear, IconSun, IconCube, IconCompose, IconChart, IconInfo, IconContext, IconGlobe, IconPhone,
 } from '../icons.js';
 import { workspaceName } from './composer.js';
 import { ModeSetting } from './modes.js';
@@ -20,6 +20,7 @@ import { UsageCard, shortTokens } from './usage.js';
 import { ModelsSection, ModelSelect, modelHint } from './models.js';
 import { confirmFullAccess, FullAccessSetting } from './confirm.js';
 import { BrowserSection } from './browser-settings.js';
+import { MobilePane } from './mobile.js';
 
 export function Segmented({ value, options, onChange, label }) {
   return html`<div class="segmented" role="radiogroup" aria-label=${label}>
@@ -150,6 +151,7 @@ const SECTIONS = [
   ['defaults', IconCompose, Defaults],
   ['context', IconContext, Context],
   ['browser', IconGlobe, BrowserSection],
+  ['mobile', IconPhone, MobilePane],
   ['usage', IconChart, () => html`<${UsageCard} titled=${false} />`],
   ['archived', IconArchive, Archived],
   ['about', IconInfo, About],

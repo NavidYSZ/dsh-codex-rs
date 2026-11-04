@@ -555,10 +555,11 @@ const EN = {
 
   settingsNav: {
     general: 'General', appearance: 'Appearance', models: 'Models', defaults: 'New chats', context: 'Context',
-    browser: 'Browser Use', usage: 'Usage', archived: 'Archived chats', about: 'About',
+    browser: 'Browser Use', mobile: 'Aether app', usage: 'Usage', archived: 'Archived chats', about: 'About',
   },
   settingsLeads: {
     appearance: 'How chats show the agent’s work and what it costs.',
+    mobile: 'Pair your iPhone with this server: switch on the listener and scan the code.',
     models: 'Enter your API keys to use models from the following providers.',
     defaults: 'Mode, model and access for the chats you start from now on; open chats keep theirs.',
     context: 'When the agent condenses older history into a summary. Only the model sees the summary; the chat stays complete. Applies to open chats right away.',
@@ -638,6 +639,32 @@ const EN = {
   placeholderMinimal: 'Message or task · / for commands · @ for files',
   placeholderHeroMinimal: 'Describe what you want to build · / for commands · @ for files',
   marketEmpty: 'This marketplace offers no plugins yet.', noPluginsPick: 'No plugins installed yet. Install one from a marketplace below.',
+  // Aether app
+  mobileDefaultClient: 'iPhone',
+  mobileReachable: 'Reachable for the Aether app',
+  mobileReachableHint: 'An encrypted listener on every network interface of this computer; the app pins its certificate.',
+  mobilePort: 'Port', mobilePortHint: '0 picks a free port at every start; the code then needs this page.',
+  mobileAddresses: 'Addresses', mobileAddressesHint: 'What the phone connects to, LAN first.',
+  mobileOffHint: 'Switch the listener on to see the addresses.',
+  mobileNoAddresses: 'No network address found.',
+  mobileKinds: { lan: 'LAN', tailscale: 'Tailscale', public: 'Public', other: 'Other' },
+  mobileFingerprint: 'Certificate fingerprint', mobileFingerprintHint: 'SHA-256 of the self-signed certificate, pinned by the app.',
+  mobileConnect: 'Connect an iPhone',
+  mobileClientName: 'Device name', mobileClientNameHint: 'How the phone appears in the list below.',
+  mobileMakeQr: 'Show QR code', mobileRegenerate: 'Generate again', mobileQrAlt: 'QR code for the Aether app',
+  mobileScanHint: 'Scan it with the iPhone camera or the Aether app, on the same Wi-Fi or over Tailscale.',
+  mobileSecretNote: 'The code holds a secret: it opens this server until you revoke the device.',
+  mobileListenerOffNote: 'The listener is off: a code made now carries no address.',
+  mobileCopyLink: 'Copy link', mobileLinkCopied: 'Link copied', mobileCopyFailed: 'Copying did not work; use the QR code.',
+  mobileDevices: 'Connected devices', mobileNoDevices: 'No device paired yet.',
+  mobileLastSeen: (ago) => `last seen ${ago}`, mobileNeverSeen: 'not connected yet', mobileThisDevice: 'this device',
+  mobilePairedVia: { ui: 'paired in the browser', cli: 'paired in the terminal', ssh: 'paired over SSH' },
+  mobileRevoke: 'Revoke', mobileRevokeTitle: (n) => `Revoke ${n}?`,
+  mobileRevokeText: 'The device loses access at once; pair it again to reconnect it.',
+  mobileRenameLabel: 'New name',
+  mobileSshTitle: 'Pair over SSH',
+  mobileSshHint: 'This server has no listener for the phone; the app reaches it through an SSH tunnel. On your Mac, run:',
+  mobileUnavailable: 'This server has no Aether pairing.',
 };
 
 const DE = {
@@ -1163,10 +1190,11 @@ const DE = {
 
   settingsNav: {
     general: 'Allgemein', appearance: 'Darstellung', models: 'Modelle', defaults: 'Neue Chats', context: 'Kontext',
-    browser: 'Browser Use', usage: 'Verbrauch', archived: 'Archivierte Chats', about: 'Über',
+    browser: 'Browser Use', mobile: 'Aether-App', usage: 'Verbrauch', archived: 'Archivierte Chats', about: 'Über',
   },
   settingsLeads: {
     appearance: 'Wie Chats die Arbeit des Agenten und ihre Kosten zeigen.',
+    mobile: 'Verbinde dein iPhone mit diesem Server: Schalte den Zugang ein und scanne den Code.',
     models: 'Hinterlege deine API-Schlüssel, um die Modelle dieser Anbieter zu nutzen.',
     defaults: 'Modus, Modell und Zugriff für die Chats, die du ab jetzt startest; offene Chats behalten ihre Einstellungen.',
     context: 'Wann der Agent ältere Teile des Verlaufs zu einer Zusammenfassung verdichtet. Nur das Modell sieht die Zusammenfassung, der Chat bleibt vollständig. Gilt sofort auch für offene Chats.',
@@ -1260,6 +1288,32 @@ const DE = {
   placeholderMinimal: 'Nachricht oder Aufgabe · / für Befehle · @ für Dateien',
   placeholderHeroMinimal: 'Beschreibe, was entstehen soll · / für Befehle · @ für Dateien',
   marketEmpty: 'Dieser Marktplatz bietet noch keine Plugins an.', noPluginsPick: 'Noch keine Plugins installiert. Installiere eines aus einem Marktplatz unten.',
+  // Aether app
+  mobileDefaultClient: 'iPhone',
+  mobileReachable: 'Für die Aether-App erreichbar',
+  mobileReachableHint: 'Ein verschlüsselter Zugang über alle Netzwerkschnittstellen dieses Computers; die App prüft das Zertifikat.',
+  mobilePort: 'Port', mobilePortHint: '0 wählt bei jedem Start einen freien Port; der Code braucht dann diese Seite.',
+  mobileAddresses: 'Adressen', mobileAddressesHint: 'Womit sich das iPhone verbindet, LAN zuerst.',
+  mobileOffHint: 'Schalte den Zugang ein, um die Adressen zu sehen.',
+  mobileNoAddresses: 'Keine Netzwerkadresse gefunden.',
+  mobileKinds: { lan: 'LAN', tailscale: 'Tailscale', public: 'Öffentlich', other: 'Sonstige' },
+  mobileFingerprint: 'Zertifikat-Fingerabdruck', mobileFingerprintHint: 'SHA-256 des selbstsignierten Zertifikats, das die App festhält.',
+  mobileConnect: 'iPhone verbinden',
+  mobileClientName: 'Gerätename', mobileClientNameHint: 'So erscheint das iPhone in der Liste unten.',
+  mobileMakeQr: 'QR-Code anzeigen', mobileRegenerate: 'Neu erzeugen', mobileQrAlt: 'QR-Code für die Aether-App',
+  mobileScanHint: 'Scanne ihn mit der iPhone-Kamera oder der Aether-App, im selben WLAN oder über Tailscale.',
+  mobileSecretNote: 'Der Code enthält ein Geheimnis: Er öffnet diesen Server, bis du das Gerät widerrufst.',
+  mobileListenerOffNote: 'Der Zugang ist aus: Ein jetzt erzeugter Code enthält keine Adresse.',
+  mobileCopyLink: 'Link kopieren', mobileLinkCopied: 'Link kopiert', mobileCopyFailed: 'Kopieren hat nicht geklappt; nimm den QR-Code.',
+  mobileDevices: 'Verbundene Geräte', mobileNoDevices: 'Noch kein Gerät verbunden.',
+  mobileLastSeen: (ago) => `zuletzt gesehen ${ago}`, mobileNeverSeen: 'noch nicht verbunden', mobileThisDevice: 'dieses Gerät',
+  mobilePairedVia: { ui: 'im Browser verbunden', cli: 'im Terminal verbunden', ssh: 'per SSH verbunden' },
+  mobileRevoke: 'Widerrufen', mobileRevokeTitle: (n) => `${n} widerrufen?`,
+  mobileRevokeText: 'Das Gerät verliert sofort den Zugriff; verbinde es neu, um es wieder zu nutzen.',
+  mobileRenameLabel: 'Neuer Name',
+  mobileSshTitle: 'Über SSH verbinden',
+  mobileSshHint: 'Dieser Server hat keinen Zugang für das iPhone; die App erreicht ihn über einen SSH-Tunnel. Führe auf deinem Mac aus:',
+  mobileUnavailable: 'Dieser Server kennt keine Aether-Kopplung.',
 };
 
 export const t = de ? DE : EN;

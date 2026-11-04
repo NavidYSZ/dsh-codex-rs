@@ -10,6 +10,9 @@
 //! `[providers.<id>]` tables add model providers besides the built-in
 //! DeepSeek route (dsh `llm-pi-ai` providers).
 //! `[folders]` widens what the web UI's folder browser may list.
+//! `[codex.mobile]` switches on the TLS listener for the Aether app;
+//! `[codex.hub] url` names the accounts hub this server is enrolled with
+//! (its key lives in `credentials.toml`, `[hub] server_key`).
 //! `[skills]` decides which skills the model sees on its own; `/name` in a
 //! prompt loads any enabled skill.
 use std::collections::BTreeMap;
@@ -477,6 +480,39 @@ pub struct CodexConfig {
     pub time_context: TimeContextConfig,
     pub team: TeamConfig,
     pub compaction: CompactionSettings,
+    pub mobile: MobileConfig,
+    pub hub: HubConfig,
+}
+
+/// `[codex.hub]`: the Aether accounts hub this server keeps a relay
+/// connection to, once `dsh-codex hub enroll` stored its key.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct HubConfig {
+    /// `https://hub.example`; empty = no relay.
+    pub url: String,
+}
+
+/// `[codex.mobile]`: the second listener for the Aether app (TLS on every
+/// interface, same router and tokens as the loopback one).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct MobileConfig {
+    pub enabled: bool,
+    /// TLS port on `0.0.0.0` and `[::]`; 0 = any free port.
+    pub port: u16,
+    /// How the server introduces itself to the app (empty: the computer name).
+    pub name: String,
+}
+
+impl Default for MobileConfig {
+    fn default() -> Self {
+        MobileConfig {
+            enabled: false,
+            port: 7443,
+            name: String::new(),
+        }
+    }
 }
 
 /// When a chat condenses older history between turns (dsh-codex; dsh's

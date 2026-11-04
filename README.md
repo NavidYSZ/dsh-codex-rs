@@ -40,6 +40,39 @@ only one installed copy of this standalone app; the original DeepSeek Harness
 is a separate application. New installations start with one local instance;
 add your own remote servers through the instance editor.
 
+## Aether for iPhone
+
+The iOS app in `ios/` connects to every machine that runs `dsh-codex web`:
+this Mac, a VPS that only exposes SSH, or a server enrolled with the accounts
+hub. It shows the same chats, tool rows, approvals and live view as the web
+UI, in German first.
+
+Pairing is one scan:
+
+1. Web UI → Settings → Aether App: switch the listener on (TLS on port 7443
+   by default; the app pins the certificate) and pair a device. The page shows
+   a QR code and an `aether://pair#…` link.
+2. From a terminal: `dsh-codex pair` prints the QR code or the link;
+   `dsh-codex pair --list` and `dsh-codex pair --revoke <id>` manage devices.
+3. For a VPS behind SSH: `dsh-codex pair --ssh <host> -F <ssh_config>` creates
+   an ed25519 key for the phone, installs a restricted `authorized_keys` line
+   (port forwarding to the server's loopback port only) and prints the QR
+   code. The app then tunnels over port 22.
+
+On a Mac with the application firewall on, allow `dsh-codex` (or the Aether
+app) under System Settings → Network → Firewall once; until then only the
+loopback address answers and the phone cannot reach the listener.
+
+Client tokens are stored hashed in `$DSHX_HOME/mobile/clients.json`; revoking
+one closes its connections. The listener is off by default and never serves
+previews or the OAuth callback. The protocol is in
+[docs/aether/SPEC.md](docs/aether/SPEC.md); building the app is described in
+[ios/README.md](ios/README.md).
+
+The accounts hub (`crates/dshx-hub`, binary `aether-hub`: sign-up, sessions,
+tiers and a relay to enrolled servers) is implemented but not deployed.
+`dsh-codex hub enroll --url … --code …` connects a server to a hub.
+
 ## Modes
 
 | Mode | Behavior |
@@ -241,6 +274,19 @@ exposes them, the session goal and the Team under `/api/schedules`,
 `/api/sessions/:id/goal` and `/api/sessions/:id/team`
 ([protocol](docs/rust/SPEC.md#6-ui--server-protocol)).
 
+The Aether app's listener and the accounts hub are off until configured
+(the web UI's Settings → Aether App and `dsh-codex hub enroll` write these):
+
+```toml
+[codex.mobile]
+enabled = false                        # TLS listener for the Aether app on every interface
+port = 7443                            # 0 = any free port
+name = ""                              # how the server introduces itself; default: the computer name
+
+[codex.hub]
+url = ""                               # accounts hub; the server key lives in credentials.toml [hub]
+```
+
 MCP servers and skills work like in DSH:
 
 ```toml
@@ -319,10 +365,14 @@ Sessions live in `~/.dsh-codex/sessions`, attachments in
 | `crates/dshx-browser` | Background Chrome over a DevTools pipe (`browser` tool) |
 | `crates/dshx-macos` | Swift-helper client, `computer` and `app` tools, mini window |
 | `crates/dshx-server` | Local HTTP/WebSocket server for the UI |
+| `crates/dshx-hub` | Accounts hub (`aether-hub`): accounts, tiers, server enrolment, relay |
 | `crates/dsh-codex` | The binary |
 | `crates/dshx-testkit` | Scripted DeepSeek mock for tests |
 | `ui/` | Web UI (Preact + htm, no build step) |
+| `ios/` | Aether iOS app (SwiftUI, XcodeGen) |
+| `brand/` | Brand assets: mark, wordmark, colour tokens, app icons |
 | `docs/rust/SPEC.md` | The contract between the crates |
+| `docs/aether/SPEC.md` | The contract for the iOS app, pairing and the hub |
 
 ## Develop
 

@@ -97,4 +97,22 @@
   .st-pane-head { margin: 16px 0 20px; }
 }
 
+/* Aether app: address chips, the pairing card with the QR, the device rows. */
+.mb-port { width: 88px; text-align: right; font-family: var(--mono); }
+.mb-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.mb-chip { height: 22px; font-family: var(--mono); font-weight: 450; color: var(--ink-2); }
+.mb-chip b { margin-right: 6px; font-family: inherit; font-weight: 600; color: var(--ink-3); }
+.mb-pair { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 20px; align-items: start; padding: 14px 0 6px; }
+.mb-qr { display: block; width: 232px; height: 232px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 .5px var(--line-2); }
+.mb-note { margin: 0 0 8px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.mb-warn { color: var(--warn); }
+.mb-empty { margin: 8px 0; font-size: 13px; color: var(--ink-3); }
+.mb-cmd { margin: 6px 0 8px; padding: 10px 12px; border-radius: 8px; background: var(--bg-module); font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-all; }
+.mb-device .field-text { flex: 1; }
+.mb-device .input { width: 220px; }
+@container settings (max-width: 560px) {
+  .mb-pair { grid-template-columns: 1fr; justify-items: center; }
+  .mb-chips { justify-content: flex-start; }
+}
+
 @media (prefers-reduced-motion: reduce) { .st-pane { animation: none; } }

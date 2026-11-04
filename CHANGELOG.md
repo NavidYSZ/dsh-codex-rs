@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Add the Aether iPhone app (`ios/`): pair this Mac or a VPS by QR code or
+  link, browse the chats of each device, send prompts, answer approvals and
+  watch the live view. A device is reached directly over pinned TLS, through
+  an SSH tunnel with a restricted per-phone key, or through the accounts hub.
+- Add Settings → Aether App to the web UI and `[codex.mobile]`: an optional
+  TLS listener for the phone, pairing with a server-rendered QR code, and the
+  paired devices with rename and revoke. Client tokens are stored hashed in
+  `$DSHX_HOME/mobile/clients.json`; `/api/info` reports `server`, `mobile`
+  and `hub`.
+- Add `dsh-codex pair` (QR code, link or JSON; `--list`, `--revoke`) and
+  `dsh-codex pair --ssh <host>` for servers that only expose SSH.
+- Add the accounts hub crate `dshx-hub` with the `aether-hub` server
+  (sign-up, sessions, tiers, server enrolment, relay to enrolled servers) and
+  `dsh-codex hub enroll`. Implemented, not deployed.
+- Brand: the Aether mark, wordmark and colour tokens live in `brand/`; the
+  web UI's start page and boot screen show the new mark.
+
 ## 0.3.0-alpha.3 — 2026-10-31
 
 - Fix overly frequent PTC/Goal compaction introduced in alpha.2: a work round

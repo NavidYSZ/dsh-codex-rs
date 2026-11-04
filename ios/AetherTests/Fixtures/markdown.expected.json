@@ -1,0 +1,120 @@
+{
+ "title": "Session log storage explained",
+ "model": "deepseek-flash",
+ "effort": "high",
+ "sandbox": "workspace-write",
+ "contextWindow": 1000000,
+ "todos": null,
+ "todosTurn": null,
+ "pendingApproval": null,
+ "turns": [
+  {
+   "turn": 1,
+   "status": "completed",
+   "start": 1792487640020,
+   "end": 1792487648635,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": "t:15:1",
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": true
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:8"
+    },
+    {
+     "kind": "group",
+     "key": "g:0",
+     "closed": true,
+     "items": [
+      "r:15:0"
+     ],
+     "counts": []
+    },
+    {
+     "kind": "item",
+     "key": "t:15:1"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:8",
+     "text": "Short question first: what does fsync guarantee?",
+     "images": 0,
+     "time": 1792487640285
+    },
+    {
+     "kind": "reasoning",
+     "key": "r:15:0",
+     "text": "Weighing what to say about fsync: durability of file data and metadata on return, but not of the directory entry.",
+     "ms": 6215
+    },
+    {
+     "kind": "text",
+     "key": "t:15:1",
+     "text": "`fsync(fd)` returns only after the file's data **and** metadata have reached stable storage. It does not cover the directory entry, so after creating a file you also `fsync` the parent directory."
+    }
+   ]
+  },
+  {
+   "turn": 2,
+   "status": "completed",
+   "start": 1792487693645,
+   "end": 1792487717450,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": "t:25:1",
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": true
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:23"
+    },
+    {
+     "kind": "group",
+     "key": "g:0",
+     "closed": true,
+     "items": [
+      "r:25:0"
+     ],
+     "counts": []
+    },
+    {
+     "kind": "item",
+     "key": "t:25:1"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:23",
+     "text": "Now explain how the session log is stored on disk, with a small reader in Rust.",
+     "images": 0,
+     "time": 1792487693905
+    },
+    {
+     "kind": "reasoning",
+     "key": "r:25:0",
+     "text": "They want a full explanation of the v4 log. Cover layout, framing, recovery, and give a compact Rust reader. Keep it practical; mention the lock and torn tails.",
+     "ms": 8800
+    },
+    {
+     "kind": "text",
+     "key": "t:25:1",
+     "text": "## How the session log is stored\n\nEach session lives in its own folder under the workspace key:\n\n```text\n~/.dsh/sessions/--Users-alex-code-tally--/session-6ce9…/\n├── session.lock\n└── session.v4.jsonl.zstd\n```\n\nThe file is **append-only**. Every append writes one independent zstd frame, and every frame holds one or more JSON lines. The first line is the header, every later line is one event.\n\n### Event envelope\n\n| Field | Type | Meaning |\n|---|---|---|\n| `type` | string | event name, e.g. `assistant/message` |\n| `seq` | integer | monotonic, starts at 0 |\n| `time` | integer | Unix epoch in milliseconds |\n| `data` | object | the payload |\n| `surfaceOp` | string or object | only on surface events |\n\n### Reading it back\n\n1. Decode frame after frame until the input ends.\n2. Split each frame on `\\n` and parse every line.\n3. Drop a damaged last frame (a *torn tail*) instead of failing.\n4. Refuse unknown event types unless they are marked `ignorable`.\n\nA small reader in Rust:\n\n```rust\nuse std::{fs::File, io::{BufRead, BufReader}};\n\nfn read_events(path: &str) -> anyhow::Result<Vec<serde_json::Value>> {\n    let decoder = zstd::stream::read::Decoder::new(File::open(path)?)?;\n    let mut events = Vec::new();\n    for line in BufReader::new(decoder).lines() {\n        let line = line?;\n        if line.trim().is_empty() { continue; }\n        events.push(serde_json::from_str(&line)?);\n    }\n    Ok(events)\n}\n```\n\nAnd the same idea from the shell:\n\n```bash\nzstdcat session.v4.jsonl.zstd | jq -c 'select(.type == \"tool/call\") | .data.name'\n```\n\n> **Note:** the lock file is advisory. Two writers on the same session would interleave frames, so the harness refuses to open a session another process holds.\n\n### Why one frame per append\n\n- A crash can only damage the frame that was being written.\n- Readers never need an index; the log is replayed from the start.\n- Compression stays good because events in one batch share keys.\n\nFor the TypeScript side, the equivalent check is short:\n\n```ts\nexport function isSurface(type: string): boolean {\n  return ['system/message', 'user/message', 'assistant/message', 'tool/result'].includes(type)\n}\n```\n\nThat is all a client needs to rebuild the conversation: replay the events, keep the surface ones in order, and fold the rest into state."
+    }
+   ]
+  }
+ ]
+}

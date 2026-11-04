@@ -1,0 +1,368 @@
+{
+ "title": "",
+ "model": "deepseek-flash",
+ "effort": null,
+ "sandbox": "workspace-write",
+ "contextWindow": 1000000,
+ "todos": null,
+ "todosTurn": null,
+ "pendingApproval": null,
+ "turns": [
+  {
+   "turn": 1,
+   "status": "error",
+   "start": 1792750020015,
+   "end": 1792750021480,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:5"
+    },
+    {
+     "kind": "item",
+     "key": "x:8"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:5",
+     "text": "Run the test suite once more.",
+     "images": 0,
+     "time": 1792750020270
+    },
+    {
+     "kind": "notice",
+     "key": "x:8",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "AUTH",
+      "status": 401,
+      "message": "Authentication Fails, Your api key: ****f00d is invalid"
+     }
+    }
+   ]
+  },
+  {
+   "turn": 2,
+   "status": "error",
+   "start": 1792750041480,
+   "end": 1792750042945,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:11"
+    },
+    {
+     "kind": "item",
+     "key": "x:14"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:11",
+     "text": "Profile the lexer on the big sample.",
+     "images": 0,
+     "time": 1792750041735
+    },
+    {
+     "kind": "notice",
+     "key": "x:14",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "RATE_LIMIT",
+      "status": 429,
+      "message": "Rate limit reached for requests"
+     }
+    }
+   ]
+  },
+  {
+   "turn": 3,
+   "status": "error",
+   "start": 1792750062945,
+   "end": 1792750064410,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:17"
+    },
+    {
+     "kind": "item",
+     "key": "x:20"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:17",
+     "text": "Read every log in the archive and compare them.",
+     "images": 0,
+     "time": 1792750063200
+    },
+    {
+     "kind": "notice",
+     "key": "x:20",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "CONTEXT_WINDOW_EXCEEDED",
+      "status": 400,
+      "message": "This model's maximum context length is 1000000 tokens. However, you requested 1048213 tokens."
+     }
+    }
+   ]
+  },
+  {
+   "turn": 4,
+   "status": "error",
+   "start": 1792750084410,
+   "end": 1792750085875,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:23"
+    },
+    {
+     "kind": "item",
+     "key": "x:26"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:23",
+     "text": "Fetch the latest release notes.",
+     "images": 0,
+     "time": 1792750084665
+    },
+    {
+     "kind": "notice",
+     "key": "x:26",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "TRANSPORT",
+      "message": "error sending request for url (https://api.deepseek.com/anthropic/v1/messages): connection refused"
+     }
+    }
+   ]
+  },
+  {
+   "turn": 5,
+   "status": "error",
+   "start": 1792750105875,
+   "end": 1792750107340,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:29"
+    },
+    {
+     "kind": "item",
+     "key": "x:32"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:29",
+     "text": "Try again with the smaller sample.",
+     "images": 0,
+     "time": 1792750106130
+    },
+    {
+     "kind": "notice",
+     "key": "x:32",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "TIMEOUT",
+      "message": "The model request timed out after 600 s"
+     }
+    }
+   ]
+  },
+  {
+   "turn": 6,
+   "status": "error",
+   "start": 1792750127340,
+   "end": 1792750128805,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:35"
+    },
+    {
+     "kind": "item",
+     "key": "x:38"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:35",
+     "text": "Describe these screenshots.",
+     "images": 0,
+     "time": 1792750127595
+    },
+    {
+     "kind": "notice",
+     "key": "x:38",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "IMAGE_OFFLOAD_REQUIRED",
+      "message": "Offload 2 more images before the request fits the route"
+     }
+    }
+   ]
+  },
+  {
+   "turn": 7,
+   "status": "error",
+   "start": 1792750148805,
+   "end": 1792750150270,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:41"
+    },
+    {
+     "kind": "item",
+     "key": "x:44"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:41",
+     "text": "Write the exploit for this CVE.",
+     "images": 0,
+     "time": 1792750149060
+    },
+    {
+     "kind": "notice",
+     "key": "x:44",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "REFUSAL",
+      "message": "The model declined to continue."
+     }
+    }
+   ]
+  },
+  {
+   "turn": 8,
+   "status": "error",
+   "start": 1792750170270,
+   "end": 1792750171735,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:47"
+    },
+    {
+     "kind": "item",
+     "key": "x:50"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:47",
+     "text": "Rename the parse module to lexer.",
+     "images": 0,
+     "time": 1792750170525
+    },
+    {
+     "kind": "notice",
+     "key": "x:50",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "code": "QUOTA",
+      "status": 402,
+      "message": "Insufficient Balance"
+     }
+    }
+   ]
+  }
+ ]
+}

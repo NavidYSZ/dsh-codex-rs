@@ -1,0 +1,4 @@
+#include "Base.xcconfig"
+
+// Local.xcconfig (git-ignored) still wins over the defaults above.
+#include? "Local.xcconfig"

@@ -1,0 +1,14 @@
+// Shared build settings for every target (included by Debug.xcconfig and Release.xcconfig).
+//
+// Per-developer overrides (the signing team for a real iPhone) go into Config/Local.xcconfig,
+// which is git-ignored — copy Config/Local.xcconfig.example (see ios/README.md).
+
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// Signing. With no team the app builds and runs on the simulator ("Sign to Run Locally").
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+
+// Optional, git-ignored local overrides.
+#include? "Local.xcconfig"

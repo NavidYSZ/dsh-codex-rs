@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use dshx_agent::{Agent, AgentObserver, AgentStatus, Preset, StreamDelta};
-use dshx_core::config::CompactionSettings;
+use dshx_core::config::{CompactionSettings, MobileConfig};
 use dshx_core::{
     ApprovalDecision, Approver, AttachmentStore, ContentBlock, ImageAttachmentRef, Message,
     MessageSource, NewImage, Role, SandboxMode, SessionEvent, SessionLog, now_ms,
@@ -41,6 +41,14 @@ pub async fn run(
     let (addr, server) = dshx_server::serve(backend.clone(), token.clone(), port).await?;
     let url = format!("http://127.0.0.1:{}/?token={token}", addr.port());
     eprintln!("dsh-codex web: {url}");
+    // The accounts hub's relay, when this server is enrolled.
+    *backend.hub.lock().unwrap() = crate::hub::Relay::start(
+        &runtime.home,
+        &runtime.config(),
+        &runtime.credentials,
+        addr.port(),
+        &token,
+    );
     if let Some(path) = &ready_file {
         write_ready_file(path, &url, &token, addr.port())
             .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
@@ -56,6 +64,7 @@ pub async fn run(
     if let Some(path) = &ready_file {
         let _ = std::fs::remove_file(path);
     }
+    backend.hub.lock().unwrap().take();
     backend.close_all().await;
     runtime.shutdown().await;
     Ok(0)
@@ -124,6 +133,8 @@ pub struct WebBackend {
     /// This backend, for the composer routes.
     me: std::sync::OnceLock<std::sync::Weak<WebBackend>>,
     browser_checks: Arc<tokio::sync::Semaphore>,
+    /// The accounts hub's relay while it runs (`/api/info.hub`).
+    hub: Mutex<Option<crate::hub::Relay>>,
 }
 
 impl WebBackend {
@@ -146,6 +157,7 @@ impl WebBackend {
             usage,
             me: std::sync::OnceLock::new(),
             browser_checks: Arc::new(tokio::sync::Semaphore::new(1)),
+            hub: Mutex::new(None),
         }
     }
 
@@ -261,6 +273,7 @@ impl WebBackend {
             "tools": { "browser": browser, "app": app, "computer": computer },
             "automation": self.runtime.automation.features(),
             "ui": self.chats.ui(),
+            "hub": crate::hub::info(&config, &self.runtime.credentials, self.hub.lock().unwrap().as_ref()),
         })
     }
 
@@ -784,6 +797,10 @@ impl Backend for WebBackend {
         )))
     }
 
+    fn mobile(&self) -> Option<Arc<dyn dshx_server::MobileHost>> {
+        Some(Arc::new(RuntimeMobile(self.runtime.clone())))
+    }
+
     async fn goal(&self, id: &str) -> anyhow::Result<Value> {
         crate::automation::goal(&self.runtime, id)
     }
@@ -934,6 +951,28 @@ impl Backend for WebBackend {
             roots.extend(parents.map(Path::to_path_buf));
         }
         Ok(roots)
+    }
+}
+
+/// The home folder and `[codex.mobile]` for the Aether listener.
+struct RuntimeMobile(Arc<Runtime>);
+
+impl dshx_server::MobileHost for RuntimeMobile {
+    fn home(&self) -> PathBuf {
+        self.0.home.clone()
+    }
+
+    fn settings(&self) -> MobileConfig {
+        self.0.config().codex.mobile
+    }
+
+    fn update_settings(&self, settings: MobileConfig) -> anyhow::Result<()> {
+        self.0.update_config(|c| c.codex.mobile = settings)?;
+        Ok(())
+    }
+
+    fn version(&self) -> String {
+        env!("CARGO_PKG_VERSION").to_owned()
     }
 }
 

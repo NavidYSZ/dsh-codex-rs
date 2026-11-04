@@ -1,0 +1,57 @@
+{
+ "title": "Refactor date parsing",
+ "model": "deepseek-flash",
+ "effort": "high",
+ "sandbox": "workspace-write",
+ "contextWindow": 1000000,
+ "todos": null,
+ "todosTurn": null,
+ "pendingApproval": null,
+ "turns": [
+  {
+   "turn": 1,
+   "status": "error",
+   "start": 1792487640020,
+   "end": 1792487640940,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:8"
+    },
+    {
+     "kind": "item",
+     "key": "x:20"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:8",
+     "text": "Refactor the date parsing in src/parse.rs",
+     "images": 0,
+     "time": 1792487640285
+    },
+    {
+     "kind": "notice",
+     "key": "x:20",
+     "code": "error",
+     "tone": "error",
+     "failure": {
+      "message": "Authentication Fails, Your api key: ****mock is invalid",
+      "code": "AUTH",
+      "status": 401
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,184 @@
+# Aether iOS — XcodeGen project definition.  Generate with:  cd ios && xcodegen generate
+# (Aether.xcodeproj is generated and git-ignored; project.yml is the source of truth.)
+#
+# Targets
+#   Aether        SwiftUI app (iOS 17+, Swift 6 strict concurrency): the phone's face of dsh-codex
+#   AetherTests   unit tests (hosted in the app): pairing links, the reducer against the web UI's fixtures,
+#                 DirectTransport with a stubbed URLProtocol, the SSH tunnel against this Mac's sshd
+name: Aether
+
+options:
+  bundleIdPrefix: de.yousufzai
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: de
+  xcodeVersion: "26.0"
+  minimumXcodeGenVersion: 2.43.0
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  usesTabs: false
+  indentWidth: 4
+  tabWidth: 4
+
+configs:
+  Debug: debug
+  Release: release
+
+# Build settings shared by every target live in Config/*.xcconfig (version, signing team override).
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CLANG_ENABLE_MODULES: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    # The strings are reached through Core/L10n/L.swift (generated with Tools/gen-strings.py); no generated symbols needed.
+    STRING_CATALOG_GENERATE_SYMBOLS: NO
+    # Simulator builds are signed ad hoc ("Sign to Run Locally") — no team required.
+    CODE_SIGN_IDENTITY[sdk=iphonesimulator*]: "-"
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      SWIFT_OPTIMIZATION_LEVEL: -Onone
+      ENABLE_TESTABILITY: YES
+      ONLY_ACTIVE_ARCH: YES
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: -O
+      SWIFT_COMPILATION_MODE: wholemodule
+      VALIDATE_PRODUCT: YES
+
+# The only packages: SwiftNIO for the SSH tunnel's sockets, NIOSSH for the SSH protocol, swift-crypto for ed25519.
+packages:
+  swift-nio:
+    url: https://github.com/apple/swift-nio
+    from: 2.81.0
+  swift-nio-ssh:
+    url: https://github.com/apple/swift-nio-ssh
+    exactVersion: 0.15.0
+  swift-crypto:
+    url: https://github.com/apple/swift-crypto
+    from: 3.0.0
+
+targets:
+  # ------------------------------------------------------------------------------------------------------ app
+  Aether:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Aether
+      # The web UI's fixtures replayed by "Demo ansehen" (and by the reducer tests): read straight from ui/fixtures.
+      - path: ../ui/fixtures/coding.json
+        buildPhase: resources
+        group: Aether/Resources/Fixtures
+      - path: ../ui/fixtures/approval.json
+        buildPhase: resources
+        group: Aether/Resources/Fixtures
+      - path: ../ui/fixtures/_shared.json
+        buildPhase: resources
+        group: Aether/Resources/Fixtures
+    info:
+      path: Aether/Info.plist
+      properties:
+        CFBundleDisplayName: Aether
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # aether://pair#<base64url(payload)> opens the pairing sheet (SPEC §2.1).
+        CFBundleURLTypes:
+          - CFBundleURLName: de.yousufzai.aether
+            CFBundleURLSchemes:
+              - aether
+        # The QR scanner on "Gerät hinzufügen".
+        NSCameraUsageDescription: Aether liest den QR-Code, mit dem du ein Gerät verbindest.
+        NSPhotoLibraryUsageDescription: Aether hängt ausgewählte Fotos an deine Nachricht an.
+        # ATS: plain HTTP only to loopback (the simulator's dev server and the local end of an SSH tunnel).
+        # The app itself refuses plain http to any other host (SPEC §2).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.yousufzai.aether
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        # NIO's sockets are plain BSD sockets; nothing in the app needs the network extension entitlements.
+        OTHER_LDFLAGS: $(inherited)
+    dependencies:
+      - package: swift-nio
+        product: NIOCore
+      - package: swift-nio
+        product: NIOPosix
+      - package: swift-nio
+        product: NIOConcurrencyHelpers
+      - package: swift-nio-ssh
+        product: NIOSSH
+      - package: swift-crypto
+        product: Crypto
+
+  # ----------------------------------------------------------------------------------------------------- tests
+  AetherTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      # Tests plus Fixtures/*.expected.json: what the web UI's reduce.js makes of the fixtures (Tools/gen-expected.mjs).
+      # The fixtures themselves are read from the host app's bundle (the tests run inside Aether.app).
+      - path: AetherTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.yousufzai.aether.tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Hosted in the app so tests run with its resource bundle and the Keychain.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Aether.app/Aether
+        BUNDLE_LOADER: $(TEST_HOST)
+    dependencies:
+      - target: Aether
+
+# ---------------------------------------------------------------------------------------------------- schemes
+schemes:
+  Aether:
+    build:
+      targets:
+        Aether: all
+        AetherTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - name: AetherTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

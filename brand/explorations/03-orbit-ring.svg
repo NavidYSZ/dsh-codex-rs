@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Direction 3: an orbit. A ring with a satellite point outside it at the upper right. -->
+  <circle cx="15" cy="17.5" r="9.6" fill="none" stroke="#4466F2" stroke-width="3.4"/>
+  <circle cx="25.4" cy="6.6" r="3" fill="#4466F2"/>
+</svg>

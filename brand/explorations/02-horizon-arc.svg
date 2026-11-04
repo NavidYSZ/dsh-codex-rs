@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Direction 2: the upper air. A horizon (arc of a circle centred below the canvas), a point in the sky above it, and an optional glow between them. -->
+  <defs>
+    <radialGradient id="glow" cx="16" cy="18.4" r="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4466F2" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#4466F2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="16" cy="17" rx="12" ry="7" fill="url(#glow)"/>
+  <path d="M5.35 23.74A13 13 0 0 1 26.65 23.74" fill="none" stroke="#4466F2" stroke-width="3.4" stroke-linecap="round"/>
+  <circle cx="16" cy="9.6" r="2.8" fill="#4466F2"/>
+</svg>

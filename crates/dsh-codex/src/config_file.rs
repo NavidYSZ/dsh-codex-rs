@@ -42,6 +42,42 @@ pub fn render(text: &str, before: &Config, after: &Config) -> anyhow::Result<Str
     }
 }
 
+/// Writes the change from `before` to `after` into `<home>/config.toml`
+/// ([`render`]), atomically and owner-only.
+pub fn write(home: &std::path::Path, before: &Config, after: &Config) -> anyhow::Result<()> {
+    std::fs::create_dir_all(home)?;
+    let path = home.join("config.toml");
+    let old = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e.into()),
+    };
+    let text = render(&old, before, after)?;
+    // Provider headers can hold secrets too. Create the atomic write
+    // owner-only instead of widening an existing 0600 config to 0644.
+    let tmp = home.join(format!(".config.{}.tmp", dshx_core::new_id()));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let written = options
+        .open(&tmp)
+        .and_then(|mut file| {
+            use std::io::Write;
+            file.write_all(text.as_bytes())?;
+            file.sync_all()
+        })
+        .and_then(|_| std::fs::rename(&tmp, &path));
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(error.into());
+    }
+    Ok(())
+}
+
 fn diff(
     path: &mut Vec<String>,
     before: Option<&Value>,

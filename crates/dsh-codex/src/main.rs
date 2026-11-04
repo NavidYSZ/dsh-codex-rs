@@ -4,8 +4,10 @@ mod chats;
 mod config_file;
 mod fork;
 mod headless;
+mod hub;
 mod jsonrpc;
 mod live;
+mod pair;
 mod presets;
 mod runtime;
 mod sdk;
@@ -77,6 +79,15 @@ enum Command {
     },
     /// Serve the dsh SDK JSON-RPC protocol on stdio.
     Sdk,
+    /// Pair the Aether app: a client token and QR code for this server, or
+    /// for a server behind SSH (--ssh).
+    Pair(Box<pair::Args>),
+    /// The Aether accounts hub: enrol this server so the app reaches it
+    /// through the hub's relay.
+    Hub {
+        #[command(subcommand)]
+        command: hub::Command,
+    },
     /// Store a DeepSeek API key (read from stdin).
     Login,
     /// Remove the stored API key.
@@ -170,6 +181,8 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
             ready_file,
         }) => web::run(start(Some(WEB_MCP_WAIT)).await?, port, !no_open, ready_file).await,
         Some(Command::Sdk) => sdk::run(start(None).await?).await,
+        Some(Command::Pair(args)) => pair::run(*args),
+        Some(Command::Hub { command }) => hub::run(command).await,
         None => {
             let task = match cli.task.as_deref() {
                 Some(t) if t != "-" => t.to_owned(),

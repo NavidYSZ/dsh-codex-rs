@@ -25,6 +25,7 @@ dshx-plugins = { path = "crates/dshx-plugins" }
 dshx-goal = { path = "crates/dshx-goal" }
 dshx-schedule = { path = "crates/dshx-schedule" }
 dshx-team = { path = "crates/dshx-team" }
+dshx-hub = { path = "crates/dshx-hub" }
 
 anyhow = "1"
 async-trait = "0.1"

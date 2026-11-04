@@ -1,0 +1,95 @@
+{
+ "title": "",
+ "model": "deepseek-flash",
+ "effort": null,
+ "sandbox": "workspace-write",
+ "contextWindow": 1000000,
+ "todos": null,
+ "todosTurn": null,
+ "pendingApproval": null,
+ "turns": [
+  {
+   "turn": 1,
+   "status": "completed",
+   "start": 1792750020015,
+   "end": 1792750026480,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": "t:7:0",
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:5"
+    },
+    {
+     "kind": "item",
+     "key": "t:7:0"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:5",
+     "text": "Summarize what changed in the parser this week.",
+     "images": 0,
+     "time": 1792750020270
+    },
+    {
+     "kind": "text",
+     "key": "t:7:0",
+     "text": "Three changes: ISO week dates, a fix for leap seconds, and faster lexing of long numbers."
+    }
+   ]
+  },
+  {
+   "turn": 2,
+   "status": "running",
+   "start": 1792750046480,
+   "end": null,
+   "retry": null,
+   "todos": null,
+   "work": {
+    "answerKey": null,
+    "toolCalls": 0,
+    "messages": 0,
+    "steered": false,
+    "hidden": false
+   },
+   "segments": [
+    {
+     "kind": "item",
+     "key": "u:12"
+    },
+    {
+     "kind": "item",
+     "key": "k:13"
+    }
+   ],
+   "items": [
+    {
+     "kind": "user",
+     "key": "u:12",
+     "text": "Now rewrite the changelog entry.",
+     "images": 0,
+     "time": 1792750046735
+    },
+    {
+     "kind": "divider",
+     "key": "k:13",
+     "code": "compacted",
+     "running": true,
+     "summary": null,
+     "items": null,
+     "tokens": null,
+     "error": null
+    }
+   ]
+  }
+ ]
+}

@@ -279,38 +279,7 @@ impl Runtime {
         let mut config = self.config.write().unwrap();
         let before = config.clone();
         f(&mut config);
-        std::fs::create_dir_all(&self.home)?;
-        let path = self.home.join("config.toml");
-        let old = match std::fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(e.into()),
-        };
-        let text = crate::config_file::render(&old, &before, &config)?;
-        // Provider headers can hold secrets too. Create the atomic write
-        // owner-only instead of widening an existing 0600 config to 0644.
-        let tmp = self
-            .home
-            .join(format!(".config.{}.tmp", dshx_core::new_id()));
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let written = options
-            .open(&tmp)
-            .and_then(|mut file| {
-                use std::io::Write;
-                file.write_all(text.as_bytes())?;
-                file.sync_all()
-            })
-            .and_then(|_| std::fs::rename(&tmp, &path));
-        if let Err(error) = written {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(error.into());
-        }
+        crate::config_file::write(&self.home, &before, &config)?;
         self.skills.set_policy(Some(config.skills.clone()));
         self.settings_version.fetch_add(1, Ordering::SeqCst);
         Ok(config.clone())
