@@ -96,6 +96,30 @@ liefert weder Vorschauen noch den OAuth-Callback aus. Protokoll:
 `aether-hub`: Registrierung, Sitzungen, Tiers, Relay) ist umgesetzt, aber
 nicht online.
 
+## Ordner zwischen Geräten übertragen
+
+Die Mac-App kopiert, verschiebt oder synchronisiert einen Projektordner von
+einer Instanz auf eine andere (dieser Mac, ein VPS hinter SSH, …): Ablage →
+„Ordner übertragen …“ oder in der Web-UI das Projektmenü → „Auf anderes Gerät
+übertragen …“. Quellordner, Zielinstanz, übergeordneten Zielordner und Art
+wählen:
+
+- **Kopieren** legt den Ordner am Ziel neu an; ein nicht leeres Ziel wird
+  abgelehnt.
+- **Verschieben** kopiert, prüft jede Datei am Ziel (Größe und Änderungszeit)
+  und löscht erst dann den Quellordner.
+- **Synchronisieren** überträgt neue und geänderte Dateien; auf Wunsch werden
+  Dateien gelöscht, die es nur am Ziel gibt.
+
+`node_modules`, `target`, `.venv`, `__pycache__`, `DerivedData` und ähnliche
+Build-Ordner sind vorab ausgeschlossen; `.git` und versteckte Dateien werden
+mitgenommen. „Vorschau“ zeigt vorher Anzahl und Größe. Die Instanzen sprechen
+nie direkt miteinander: Die App streamt den Ordner als tar+zstd über eine
+0600-Datei in ihrem Cache und trägt ihn am Ziel als Projekt ein. Jeder Server
+nimmt nur Pfade im Benutzerordner und in seinen Projektordnern an, schreibt
+nie durch einen Symlink und lehnt Archiveinträge mit `..` oder absoluten
+Pfaden ab. API: [docs/aether/TRANSFER.md](docs/aether/TRANSFER.md).
+
 ## Unterschied zum alten Repository
 
 [NavidYSZ/dsh-codex](https://github.com/NavidYSZ/dsh-codex) enthält das ältere

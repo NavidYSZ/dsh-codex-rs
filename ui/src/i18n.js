@@ -665,6 +665,9 @@ const EN = {
   mobileSshTitle: 'Pair over SSH',
   mobileSshHint: 'This server has no listener for the phone; the app reaches it through an SSH tunnel. On your Mac, run:',
   mobileUnavailable: 'This server has no Aether pairing.',
+  // Folder transfer
+  transferFolder: 'Transfer to another device…',
+  transferBusy: 'Another dialog is open in the app; close it first.',
 };
 
 const DE = {
@@ -1314,6 +1317,9 @@ const DE = {
   mobileSshTitle: 'Über SSH verbinden',
   mobileSshHint: 'Dieser Server hat keinen Zugang für das iPhone; die App erreicht ihn über einen SSH-Tunnel. Führe auf deinem Mac aus:',
   mobileUnavailable: 'Dieser Server kennt keine Aether-Kopplung.',
+  // Folder transfer
+  transferFolder: 'Auf anderes Gerät übertragen …',
+  transferBusy: 'In der App ist schon ein Dialog offen; schließe ihn zuerst.',
 };
 
 export const t = de ? DE : EN;

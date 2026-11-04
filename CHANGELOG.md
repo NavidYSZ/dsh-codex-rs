@@ -18,6 +18,12 @@
   `dsh-codex hub enroll`. Implemented, not deployed.
 - Brand: the Aether mark, wordmark and colour tokens live in `brand/`; the
   web UI's start page and boot screen show the new mark.
+- Add folder transfer between devices: the macOS app copies, moves (verified
+  before the source is deleted) or syncs a project folder from one instance
+  to another (File → “Ordner übertragen …”, project menu → “Transfer to
+  another device…”). Servers gain `/api/transfer/{roots,manifest,export,
+  import,delete,remove}` with streamed tar+zstd and strict path checks
+  (docs/aether/TRANSFER.md).
 
 ## 0.3.0-alpha.3 — 2026-10-31
 

@@ -801,6 +801,11 @@ impl Backend for WebBackend {
         Some(Arc::new(RuntimeMobile(self.runtime.clone())))
     }
 
+    fn transfer(&self) -> Option<Arc<dyn dshx_server::TransferHost>> {
+        let me = self.me.get()?.clone();
+        Some(Arc::new(WebTransfer(me)))
+    }
+
     async fn goal(&self, id: &str) -> anyhow::Result<Value> {
         crate::automation::goal(&self.runtime, id)
     }
@@ -951,6 +956,49 @@ impl Backend for WebBackend {
             roots.extend(parents.map(Path::to_path_buf));
         }
         Ok(roots)
+    }
+}
+
+/// Home and the project folders for the folder transfer (`/api/transfer`).
+struct WebTransfer(std::sync::Weak<WebBackend>);
+
+impl WebTransfer {
+    fn backend(&self) -> anyhow::Result<Arc<WebBackend>> {
+        self.0
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("the web backend stopped"))
+    }
+}
+
+#[async_trait]
+impl dshx_server::TransferHost for WebTransfer {
+    fn home(&self) -> Option<PathBuf> {
+        std::env::var_os("HOME")
+            .filter(|h| !h.is_empty())
+            .map(PathBuf::from)
+    }
+
+    async fn workspaces(&self) -> anyhow::Result<Vec<PathBuf>> {
+        let rows = self.backend()?.workspaces().await?;
+        Ok(rows
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|w| w["path"].as_str())
+            .map(PathBuf::from)
+            .collect())
+    }
+
+    async fn remove_workspace(&self, path: &Path) -> anyhow::Result<()> {
+        let backend = self.backend()?;
+        let path = path.to_string_lossy();
+        let mut list = backend.saved_workspaces();
+        let before = list.len();
+        list.retain(|w| w["path"].as_str() != Some(path.as_ref()));
+        if list.len() != before {
+            backend.save_workspaces(&list)?;
+        }
+        Ok(())
     }
 }
 

@@ -73,6 +73,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
     private var shown: Shown = .nothing
     private var lastMouseDown: NSEvent?
     private var mouseMonitor: Any?
+    private var transferSheet: TransferSheet?
     private var zoom: CGFloat = CGFloat(max(0.5, min(2.0, UserDefaults.standard.double(forKey: "pageZoom").nonZero ?? 1)))
 
     var onInstancesChanged: (() -> Void)?
@@ -463,7 +464,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
                 }
                 return row
             },
-            "capabilities": ["revealInFinder": local, "openInEditor": local, "pickFolder": local],
+            "capabilities": [
+                "revealInFinder": local, "openInEditor": local, "pickFolder": local,
+                "transferFolder": manager.instances.count > 1,
+            ],
             "titlebar": [
                 "height": titlebarHeight,
                 "trafficLightsWidth": trafficLightsWidth,
@@ -578,6 +582,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
             UserDefaults.standard.set(url.deletingLastPathComponent().path, forKey: lastFolderKey)
             reply(url.path)
         }
+    }
+
+    /// `dshxDesktop.transferFolder` and Ablage → „Ordner übertragen …“: the
+    /// transfer sheet with `path` of instance `id` as the source; false when
+    /// another sheet is open.
+    @discardableResult
+    func transferFolder(path: String?, from id: String) -> Bool {
+        guard let window else { return false }
+        showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        let sheet = transferSheet ?? TransferSheet(manager: manager)
+        if transferSheet == nil {
+            sheet.onSwitch = { [weak self] target in self?.show(target) }
+            transferSheet = sheet
+        }
+        return sheet.present(on: window, sourceID: manager.instance(id) == nil ? manager.currentID : id, path: path)
     }
 
     // MARK: - Page actions (menus)
