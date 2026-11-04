@@ -5,9 +5,11 @@
 //!   model-invocable, so neither the `<available_skills>` catalog nor the
 //!   `skill` tool is offered; `/name` (or `$name`) still loads a skill's full
 //!   instructions into that turn.
-//! - **MCP servers**: a chat offers the tools of the servers it activated
-//!   (`@server`, `@plugin`, the active-server chips) plus `always` servers,
-//!   minus `disabled_tools`. Activation is recorded in the session log only:
+//! - **MCP servers**: a chat offers the tools of the servers it switched on
+//!   (`@server`, `@plugin`, the composer's connector picker) plus the servers
+//!   new chats preselect (`always`), minus `disabled_tools`. The chat's own
+//!   choice wins: a preselected server it switched off adds neither tools
+//!   nor prompt guidance. Choices are recorded in the session log only:
 //!   the tools join through the agent's `tool-addition` developer message
 //!   (deferred on DeepSeek's addition-only route, so the cached prefix stays
 //!   valid), followed by a `user/message` with source `{kind:
@@ -19,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::{Arc, Weak};
 
 use dshx_agent::{ExtraSection, PreStep, PreStepHook, ToolUpdate};
-use dshx_core::config::Config;
+use dshx_core::config::{Config, McpAvailability};
 use dshx_core::{
     ContentBlock, Message, MessageSource, Role, SessionEvent, Tool, ToolContext, ToolError,
     ToolOutput, ToolRegistry, ToolSchema, kinds,
@@ -337,14 +339,53 @@ fn server_message(
     )
 }
 
-/// The note after the user switched `server` off.
-pub fn deactivation_message(server: &str) -> Message {
-    note(
+/// The note after the user switched `server` off; `seen` = the chat made a
+/// request before (else the model never saw the server).
+pub fn deactivation_message(server: &str, seen: bool) -> Message {
+    let text = if seen {
         format!(
-            "<system-reminder>\nThe user turned off the MCP server \"{server}\" for this chat. Do not call its tools (mcp__{server}__*) any more; they fail until the user turns the server on again.\n</system-reminder>"
-        ),
+            "The user turned off the MCP server \"{server}\" for this chat. Do not call its tools (mcp__{server}__*) any more; they fail until the user turns the server on again."
+        )
+    } else {
+        format!(
+            "The MCP server \"{server}\" is turned off for this chat. Its tools (mcp__{server}__*) are not available unless the user turns it on."
+        )
+    };
+    note(
+        format!("<system-reminder>\n{text}\n</system-reminder>"),
         json!({"kind": DEACTIVATION, "server": server}),
     )
+}
+
+/// Whether a product prompt section carries MCP guidance.
+pub(crate) fn is_mcp_section(section: &ExtraSection) -> bool {
+    section.name.starts_with("mcp:") || section.name == "mcp-resource-servers"
+}
+
+/// One row of a chat's connector picker (`GET /api/sessions/:id/mcp`):
+/// whether the chat offers the server, whether new chats preselect it, its
+/// connection status and how many of its tools a chat gets.
+pub(crate) fn picker_row(
+    name: &str,
+    status: Option<&dshx_mcp::ServerInfo>,
+    availability: &McpAvailability,
+    selected: bool,
+) -> Value {
+    let tools = status.map_or(0, |s| {
+        s.tools
+            .iter()
+            .filter(|t| !availability.disabled_tools.contains(&t.raw_name))
+            .count()
+    });
+    json!({
+        "name": name,
+        "selected": selected,
+        "preselected": availability.always,
+        "status": status.map_or("stopped", |s| s.status),
+        "error": status.and_then(|s| s.error.clone()),
+        "retrying": status.is_some_and(|s| s.retrying),
+        "tools": tools,
+    })
 }
 
 /// A tool that stays declared (DeepSeek's addition-only route cannot take
@@ -427,6 +468,79 @@ impl Runtime {
             .filter(|s| config.mcp_servers.get(s).is_none_or(|c| c.enabled))
             .filter(|s| selection.offered(s))
             .collect()
+    }
+
+    /// `GET /api/sessions/:id/mcp` of a Standard or PTC chat: `active` (the
+    /// servers it offers, sorted) and `servers`, one [`picker_row`] per
+    /// enabled server.
+    pub(crate) fn mcp_picker(&self, session: &str, events: &[SessionEvent]) -> Value {
+        let config = self.config();
+        let history = self.mcp_choices(session, events);
+        let selection = McpSelection {
+            config: &config,
+            choices: &history.choices,
+            declared: &history.declared,
+            tool_update: None,
+        };
+        let statuses = self.mcp.status();
+        let mut names = self.mcp_server_names();
+        names.extend(statuses.iter().map(|s| s.name.clone()));
+        let (mut active, mut servers) = (Vec::new(), Vec::new());
+        for name in names {
+            if config.mcp_servers.get(&name).is_some_and(|c| !c.enabled) {
+                continue;
+            }
+            let selected = selection.offered(&name);
+            if selected {
+                active.push(name.clone());
+            }
+            let status = statuses.iter().find(|s| s.name == name);
+            let availability = config.mcp_availability(&name);
+            servers.push(picker_row(&name, status, &availability, selected));
+        }
+        json!({ "active": active, "servers": servers })
+    }
+
+    /// System-prompt guidance of the preselected (`always`) servers that
+    /// `offered` accepts; servers a chat switched on bring theirs with the
+    /// activation note instead.
+    pub(crate) fn mcp_prompt_sections(
+        &self,
+        config: &Config,
+        offered: impl Fn(&str) -> bool,
+    ) -> Vec<ExtraSection> {
+        self.mcp
+            .prompt_sections_where(|server| {
+                config.mcp_availability(server).always && offered(server)
+            })
+            .into_iter()
+            .map(|section| ExtraSection {
+                name: section.name,
+                order: section.order,
+                text: section.text,
+                literal: true,
+            })
+            .collect()
+    }
+
+    /// Replaces the MCP guidance in `sections` with one chat's: a
+    /// preselected server the chat switched off contributes none.
+    pub(crate) fn chat_prompt_sections(
+        &self,
+        session: &str,
+        events: &[SessionEvent],
+        sections: &mut Vec<ExtraSection>,
+    ) {
+        let config = self.config();
+        let history = self.mcp_choices(session, events);
+        let selection = McpSelection {
+            config: &config,
+            choices: &history.choices,
+            declared: &history.declared,
+            tool_update: None,
+        };
+        sections.retain(|section| !is_mcp_section(section));
+        sections.extend(self.mcp_prompt_sections(&config, |s| selection.offered(s)));
     }
 
     /// Switches `server` on or off for a session from its next step on.
@@ -573,37 +687,25 @@ impl PreStepHook for McpHook {
         // without changing names. Neither may leave stale bindings for this step.
         step.update_tools(|registry| Runtime::swap_mcp_tools(registry, tools));
 
-        // Always-on guidance belongs to the system prompt. Refresh it here too:
-        // a connection can finish or restart during the current turn. Keep other
-        // products' sections and do not record an explicit per-chat activation.
-        let sections: Vec<ExtraSection> = rt
-            .mcp
-            .prompt_sections_where(|server| {
-                config.mcp_availability(server).always && after.offered(server)
-            })
-            .into_iter()
-            .map(|section| ExtraSection {
-                name: section.name,
-                order: section.order,
-                text: section.text,
-                literal: true,
-            })
-            .collect();
-        let is_mcp = |section: &ExtraSection| {
-            section.name.starts_with("mcp:") || section.name == "mcp-resource-servers"
-        };
+        // Guidance of preselected servers belongs to the system prompt; one the
+        // chat switched off has none. Refresh it here too: a connection can
+        // finish or restart during the current turn. Keep other products'
+        // sections and do not record an explicit per-chat activation.
+        let sections = rt.mcp_prompt_sections(&config, |server| after.offered(server));
         if step
             .prompt_sections()
             .into_iter()
-            .filter(is_mcp)
+            .filter(is_mcp_section)
             .collect::<Vec<_>>()
             != sections
         {
             step.update_prompt_sections(|current| {
-                current.retain(|section| !is_mcp(section));
+                current.retain(|section| !is_mcp_section(section));
                 current.extend(sections);
             });
         }
+        // Before the chat's first request the model saw no server at all.
+        let seen = !logged.declared.is_empty();
         let available = rt.mcp.server_tools();
         for server in &names {
             let (was, now) = (before.offered(server), after.offered(server));
@@ -623,12 +725,13 @@ impl PreStepHook for McpHook {
                 let changed = logged.guidance.get(server)
                     != Some(&guidance_stamp(&tool_names, resources, &instructions));
                 if !was {
-                    entering.push(activation_message(
-                        server,
-                        &tool_names,
-                        resources,
-                        &instructions,
-                    ));
+                    // A preselected server's instructions are in the system prompt.
+                    let note = if availability.always {
+                        ""
+                    } else {
+                        &instructions
+                    };
+                    entering.push(activation_message(server, &tool_names, resources, note));
                 } else if !availability.always && (changed || compacted.contains(server)) {
                     entering.push(server_message(
                         server,
@@ -639,7 +742,7 @@ impl PreStepHook for McpHook {
                     ));
                 }
             } else if was && !now {
-                entering.push(deactivation_message(server));
+                entering.push(deactivation_message(server, seen));
             }
         }
         Ok(())
@@ -738,5 +841,81 @@ mod tests {
             guidance_stamp(&["echo".into()], false, "same\n"),
             guidance_stamp(&["echo".into()], false, "same"),
         );
+    }
+
+    #[test]
+    fn a_chat_choice_wins_over_preselection() {
+        let mut config = Config::default();
+        for (name, always) in [("pre", true), ("plain", false)] {
+            let server = dshx_core::config::McpServerConfig {
+                always,
+                ..Default::default()
+            };
+            config.mcp_servers.insert(name.into(), server);
+        }
+        let declared = HashSet::new();
+        let fresh = BTreeMap::new();
+        let selection = McpSelection {
+            config: &config,
+            choices: &fresh,
+            declared: &declared,
+            tool_update: None,
+        };
+        assert!(selection.offered("pre") && !selection.offered("plain"));
+        // A preselected server the chat switched off stays off, also after a
+        // restart: the deactivation note is the record.
+        let off = deactivation_message("pre", false);
+        let events = vec![ev(
+            0,
+            kinds::USER_MESSAGE,
+            serde_json::to_value(&off).unwrap(),
+        )];
+        let history = McpHistory::from_events(&events, |_| None);
+        let mut choices = history.choices;
+        choices.insert("plain".into(), Choice::On);
+        let selection = McpSelection {
+            choices: &choices,
+            ..selection
+        };
+        assert!(!selection.offered("pre") && selection.offered("plain"));
+        // The model never saw the server: the note does not say "any more".
+        let ContentBlock::Text { text } = &off.content[0] else {
+            panic!("text note")
+        };
+        assert!(text.contains("is turned off for this chat"), "{text}");
+        assert!(!text.contains("any more"), "{text}");
+    }
+
+    #[test]
+    fn picker_rows_count_offered_tools() {
+        let tool = |raw: &str| dshx_mcp::ToolInfo {
+            name: format!("mcp__s__{raw}"),
+            raw_name: raw.into(),
+            description: String::new(),
+        };
+        let status = dshx_mcp::ServerInfo {
+            name: "s".into(),
+            status: "connected",
+            error: None,
+            retrying: false,
+            transport: "stdio",
+            url: None,
+            challenge: None,
+            tools: vec![tool("a"), tool("b"), tool("c")],
+        };
+        let availability = McpAvailability {
+            always: true,
+            disabled_tools: vec!["b".into()],
+        };
+        assert_eq!(
+            picker_row("s", Some(&status), &availability, false),
+            json!({"name": "s", "selected": false, "preselected": true, "status": "connected",
+                "error": null, "retrying": false, "tools": 2})
+        );
+        let stopped = picker_row("x", None, &McpAvailability::default(), true);
+        assert_eq!(stopped["status"], "stopped");
+        assert_eq!(stopped["tools"], 0);
+        assert_eq!(stopped["selected"], true);
+        assert_eq!(stopped["preselected"], false);
     }
 }

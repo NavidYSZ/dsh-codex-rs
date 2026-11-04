@@ -1,16 +1,20 @@
 // Around the composer: the composer commands (/compact, /view, /status, …),
 // a short result line, prompts queued behind the running turn (dsh
-// `queue.*`, ⌘↩ steers them all) and the MCP servers this chat activated
-// ("Active: [Linear ✕]").
+// `queue.*`, ⌘↩ steers them all), the MCP servers this chat offers
+// ("Active: [Linear ✕]") and the composer's connector picker that chooses
+// them per chat (on the start page: for the chat the first prompt creates).
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { createStore, useStore } from '../store.js';
 import { store, api, fail, openPlugins, restoreFocus, setDraft } from '../state.js';
-import { IconPencil, IconX, IconArrowUp } from '../icons.js';
+import { IconPencil, IconX, IconArrowUp, IconPlug } from '../icons.js';
 import { openGoalForm } from './goal.js';
 import { setUiPref } from './worklog.js';
 import { VIEW_MODES } from '../worklog.js';
+import { Menu } from './common.js';
+import { StatusDot } from './plugin-kit.js';
+import { useChatMode, useStagedMode } from './modes.js';
 
 // ---- result line -------------------------------------------------------------
 
@@ -211,16 +215,60 @@ function QueuedPrompts() {
   </section>`;
 }
 
-// ---- active MCP servers --------------------------------------------------------
+// ---- MCP servers of the chat ---------------------------------------------------
 
-/** The MCP servers the open chat offers (GET /api/sessions/:id/mcp). */
-export const chatMcp = createStore({ id: null, active: [] });
+/**
+ * The MCP servers the open chat offers (GET /api/sessions/:id/mcp): `active`
+ * names, `servers` the picker rows `{name, selected, preselected, status,
+ * retrying, error, tools}` (null until loaded), `minimal` = no MCP at all.
+ */
+export const chatMcp = createStore({ id: null, active: [], servers: null, minimal: false });
+
+/** Picker rows from the server list (`GET /api/mcp/servers`), for the start page and older servers. */
+function rowsOf(list, selected) {
+  return (Array.isArray(list) ? list : []).filter((s) => s.enabled !== false).map((s) => {
+    const off = new Set(s.disabledTools ?? []);
+    return {
+      name: s.name, preselected: s.always === true, selected: selected(s), status: s.status ?? 'stopped',
+      retrying: !!s.retrying, error: s.error ?? null, tools: (s.tools ?? []).filter((x) => !off.has(x.rawName)).length,
+    };
+  });
+}
 
 async function loadMcp(id) {
   try {
     const r = await api.sessionMcp(id);
-    if (store.get().activeId === id) chatMcp.set({ id, active: r?.active ?? [] });
-  } catch { if (store.get().activeId === id) chatMcp.set({ id, active: [] }); }
+    const active = r?.active ?? [];
+    let servers = Array.isArray(r?.servers) ? r.servers : null;
+    if (!servers && !r?.minimal) servers = rowsOf(await api.mcpServers().catch(() => []), (s) => active.includes(s.name));
+    if (store.get().activeId === id) chatMcp.set({ id, active, servers: servers ?? [], minimal: !!r?.minimal });
+  } catch { if (store.get().activeId === id) chatMcp.set({ id, active: [], servers: [] }); }
+}
+
+/**
+ * The start page's choice for the chat its first prompt creates: the server
+ * rows (null until loaded) and `picks`, the switches that differ from the
+ * preselection (`always`). Applied right after the chat is created.
+ */
+export const stagedMcp = createStore({ servers: null, picks: {} });
+
+async function loadStaged() {
+  try {
+    const list = await api.mcpServers();
+    stagedMcp.set({ servers: rowsOf(list, (s) => s.always === true) });
+  } catch { stagedMcp.set((m) => ({ servers: m.servers ?? [] })); }
+}
+
+const stagedRows = (m) => (m.servers ?? []).map((s) => (s.name in m.picks ? { ...s, selected: m.picks[s.name] } : s));
+
+/** Applies the start page's switches to the chat its first prompt just created. */
+export async function applyStagedMcp(id) {
+  const { picks, servers } = stagedMcp.get();
+  stagedMcp.set({ picks: {} });
+  for (const [name, on] of Object.entries(picks)) {
+    if (on === (servers ?? []).find((s) => s.name === name)?.preselected) continue;
+    try { await api.setSessionMcp(id, name, on); } catch { notify(t.cnApplyFailed(name), 'error'); }
+  }
 }
 
 let tracked = { id: null, seq: -1 };
@@ -228,7 +276,7 @@ store.subscribe(() => {
   const s = store.get();
   if (s.activeId !== tracked.id) {
     tracked = { id: s.activeId, seq: -1 };
-    chatMcp.set({ id: s.activeId, active: [] });
+    chatMcp.set({ id: s.activeId, active: [], servers: null, minimal: false });
     if (s.activeId) loadMcp(s.activeId);
     return;
   }
@@ -246,13 +294,26 @@ store.subscribe(() => {
   if (changed) loadMcp(s.activeId);
 });
 
-async function deactivate(server) {
+/** Switches `name` on or off for the open chat, else for the chat the start page creates. */
+async function setServer(name, on) {
   const id = store.get().activeId;
-  if (!id) return;
-  chatMcp.set((m) => ({ active: m.active.filter((x) => x !== server) }));
+  if (!id) {
+    stagedMcp.set((m) => {
+      const picks = { ...m.picks };
+      if ((m.servers ?? []).find((s) => s.name === name)?.preselected === on) delete picks[name];
+      else picks[name] = on;
+      return { picks };
+    });
+    return;
+  }
+  chatMcp.set((m) => ({
+    active: on ? [...new Set([...m.active, name])].sort() : m.active.filter((x) => x !== name),
+    servers: m.servers?.map((s) => (s.name === name ? { ...s, selected: on } : s)) ?? null,
+  }));
   try {
-    const r = await api.setSessionMcp(id, server, false);
-    chatMcp.set({ active: r?.active ?? [] });
+    const r = await api.setSessionMcp(id, name, on);
+    if (store.get().activeId !== id) return;
+    chatMcp.set({ active: r?.active ?? [], ...(Array.isArray(r?.servers) ? { servers: r.servers } : {}) });
   } catch (e) {
     fail(e);
     loadMcp(id);
@@ -265,21 +326,116 @@ export function openDetails(kind, name) {
   openPlugins({ skill: 'skills', server: 'mcp' }[kind] ?? 'plugins');
 }
 
-function ActiveServers() {
-  const active = useStore(chatMcp, (m) => m.active);
+/** The connector rows and selected names of the open chat or of the start page. */
+function useConnectors() {
   const id = useStore(store, (s) => s.activeId);
-  if (!id || !active.length) return null;
+  const chat = useStore(chatMcp, (m) => m);
+  const staged = useStore(stagedMcp, (m) => m);
+  const chatMode = useChatMode();
+  const stagedMode = useStagedMode();
+  useEffect(() => { if (!id && stagedMcp.get().servers == null) loadStaged(); }, [id]);
+  return useMemo(() => {
+    if (id) {
+      const minimal = chat.minimal || chatMode === 'minimal';
+      return { id, minimal, rows: chat.servers, active: minimal ? [] : chat.active };
+    }
+    const minimal = stagedMode === 'minimal';
+    const rows = staged.servers == null ? null : stagedRows(staged);
+    return { id, minimal, rows, active: minimal || !rows ? [] : rows.filter((s) => s.selected).map((s) => s.name) };
+  }, [id, chat, staged, chatMode, stagedMode]);
+}
+
+/** The selected servers as chips above the composer, each with a ✕ that switches it off. */
+function ActiveServers() {
+  const { active } = useConnectors();
+  if (!active.length) return null;
   return html`<div class="as-row" role="group" aria-label=${t.ciActive}>
     <span class="as-label">${t.ciActive}</span>
     ${active.map((name) => html`<span class="as-chip" key=${name}>
       <button type="button" class="as-name" title=${t.ciServerDetails(name)} onClick=${() => openDetails('server', name)}>
         <span class="as-dot" aria-hidden="true" />${name}
       </button>
-      <button type="button" class="as-x" aria-label=${t.ciDeactivate(name)} title=${t.ciDeactivate(name)} onClick=${() => deactivate(name)}>
+      <button type="button" class="as-x" aria-label=${t.ciDeactivate(name)} title=${t.ciDeactivate(name)} onClick=${() => setServer(name, false)}>
         <${IconX} size=${11} />
       </button>
     </span>`)}
   </div>`;
+}
+
+/** Arrow keys, Home and End move between the picker's rows. */
+function rowKeys(e) {
+  const keys = { ArrowDown: 1, ArrowUp: -1, Home: -Infinity, End: Infinity };
+  if (!(e.key in keys)) return;
+  const rows = [...e.currentTarget.querySelectorAll('.cn-row')];
+  if (!rows.length) return;
+  e.preventDefault();
+  const at = rows.indexOf(document.activeElement);
+  const step = keys[e.key];
+  const next = Number.isFinite(step) ? (at + step + rows.length) % rows.length : step < 0 ? 0 : rows.length - 1;
+  rows[next]?.focus();
+}
+
+function ConnectorRow({ row }) {
+  const connected = row.status === 'connected';
+  return html`<button type="button" role="menuitemcheckbox" aria-checked=${!!row.selected} class="cn-row"
+    title=${row.error && !connected ? row.error : ''} onClick=${() => setServer(row.name, !row.selected)}>
+    <span class="cn-text">
+      <span class="cn-name"><span class="cn-label">${row.name}</span>
+        ${row.preselected ? html`<span class="cn-tag" title=${t.cnPreselectedHint}>${t.cnPreselected}</span>` : null}</span>
+      <span class="cn-meta"><${StatusDot} status=${row.status} retrying=${row.retrying} />
+        ${connected ? html`<span class="cn-sep" aria-hidden="true">·</span><span>${t.mcpToolsN(row.tools ?? 0)}</span>` : null}</span>
+    </span>
+    <span class=${cx('toggle', 'cn-switch', row.selected && 'is-on')} aria-hidden="true"><span class="toggle-knob" /></span>
+  </button>`;
+}
+
+/** "Connectors" in the composer's toolbar: which MCP servers this chat (or the next new one) uses. */
+export function ConnectorsButton() {
+  const { id, minimal, rows, active } = useConnectors();
+  const [open, setOpen] = useState(false);
+  const anchor = useRef(null);
+  const list = useRef(null);
+  const toggle = () => {
+    if (minimal) return;
+    if (!open) { if (id) loadMcp(id); else loadStaged(); }
+    setOpen((v) => !v);
+  };
+  // Once the rows are there: keep the popover above its button (it grew) and
+  // focus the first row, so the keyboard can start right away.
+  useEffect(() => {
+    const menu = list.current?.closest('.menu');
+    const a = anchor.current?.getBoundingClientRect();
+    if (!open || !menu || !a) return;
+    const box = menu.getBoundingClientRect();
+    let top = a.top - box.height - 6;
+    if (top < 8) top = Math.max(8, Math.min(innerHeight - box.height - 8, a.bottom + 6));
+    menu.style.top = `${top}px`;
+    const el = list.current.querySelector('.cn-row');
+    if (el && !list.current.contains(document.activeElement)) el.focus();
+  }, [open, rows]);
+  useEffect(() => { if (minimal) setOpen(false); }, [minimal]);
+  const count = active.length;
+  const label = minimal ? t.cnMinimal : count ? t.cnButtonCount(count) : t.cnButton;
+  return html`<span class="chip-wrap cn-wrap">
+    <button type="button" ref=${anchor} class=${cx('chip', 'cn-btn', count && 'has-count', minimal && 'is-disabled')} aria-haspopup="menu"
+      aria-expanded=${open} aria-label=${label} title=${label} aria-disabled=${minimal ? 'true' : null} onClick=${toggle}>
+      <${IconPlug} size=${15} /><span class="chip-label cn-btn-label">${t.cnButton}</span>
+      ${count && !minimal ? html`<span class="cn-count" aria-hidden="true">${count}</span>` : null}
+    </button>
+    <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} side="top" align="start" fixed class="cn-menu">
+      <div class="menu-head cn-head">${id ? t.cnTitleChat : t.cnTitleNew}</div>
+      <div class="cn-list" ref=${list} onKeyDown=${rowKeys}>
+        ${rows == null ? html`<div class="cn-empty">${t.loading}</div>`
+    : rows.length ? rows.map((row) => html`<${ConnectorRow} key=${row.name} row=${row} />`)
+      : html`<div class="cn-empty">${t.cnEmpty}</div>`}
+      </div>
+      <div class="menu-sep" />
+      <p class="cn-foot">${t.cnFoot}</p>
+      <button type="button" class="menu-item menu-action cn-manage" onClick=${() => { setOpen(false); openPlugins('mcp'); }}>
+        <span class="menu-icon"><${IconPlug} size=${14} /></span><span class="menu-label">${t.cnManage}</span>
+      </button>
+    </${Menu}>
+  </span>`;
 }
 
 function Notice() {

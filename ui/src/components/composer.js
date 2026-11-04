@@ -22,7 +22,7 @@ import { UsageBar } from './usage.js';
 import { confirmFullAccess } from './confirm.js';
 import { ComposerInput, insertAtCaret } from './composer-input.js';
 import { useAttachments, AttachmentRow } from './composer-attach.js';
-import { ComposerExtras } from './composer-extras.js';
+import { ComposerExtras, ConnectorsButton, applyStagedMcp } from './composer-extras.js';
 import { createComposerDrafts } from '../composer-drafts.js';
 
 const ACCESS = ['read-only', 'workspace-write', 'danger-full-access'];
@@ -152,6 +152,8 @@ export function Composer({ hero, tx }) {
     const steer = running && (followup === 'steer') !== other;
     const ok = await send(body, refs, { messageId: submitted.messageId, model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}), sandbox: sel.sandbox, ...(steer ? { steer } : {}) }, {
       sessionId: submitted.sessionId,
+      // The start page's connector choice applies before the first prompt.
+      onCreate: applyStagedMcp,
       onSession: (id, following) => {
         drafts.bindSession(submitted, id);
         if (following) drafts.move(submitted, id);
@@ -195,6 +197,7 @@ export function Composer({ hero, tx }) {
       </span>
       <input ref=${file} type="file" multiple hidden
         onChange=${(e) => { att.add(e.currentTarget.files); e.currentTarget.value = ''; }} />
+      <${ConnectorsButton} />
       <${ModelChip} sel=${sel} />
       ${hero ? null : html`<${AccessChip} sel=${sel} />`}
       <span class="spacer" />

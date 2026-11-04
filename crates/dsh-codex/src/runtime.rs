@@ -214,8 +214,10 @@ impl Runtime {
     }
 
     /// dsh's file-reference guidance (order 900) and the instructions of
-    /// `always` MCP servers (dsh order 3100). Servers a chat activates bring
-    /// their instructions with the activation note instead.
+    /// MCP servers new chats preselect (`always`, dsh order 3100). Servers a
+    /// chat switches on bring their instructions with the activation note
+    /// instead; [`Runtime::chat_prompt_sections`] drops preselected servers
+    /// a chat switched off.
     pub fn prompt_sections(&self) -> Vec<ExtraSection> {
         let config = self.config();
         let mut sections = vec![ExtraSection {
@@ -230,17 +232,7 @@ impl Runtime {
             text: browser::ROUTING.into(),
             literal: true,
         });
-        sections.extend(
-            self.mcp
-                .prompt_sections_where(|server| config.mcp_availability(server).always)
-                .into_iter()
-                .map(|s| ExtraSection {
-                    name: s.name,
-                    order: s.order,
-                    text: s.text,
-                    literal: true,
-                }),
-        );
+        sections.extend(self.mcp_prompt_sections(&config, |_| true));
         sections
     }
 
@@ -257,13 +249,10 @@ impl Runtime {
         }
         let config = agent.config();
         let update = config.route.as_ref().and_then(|r| r.tool_update);
-        agent.set_tools(self.session_tools(
-            &agent.session_id(),
-            &config.cwd,
-            &agent.events(),
-            update,
-        ));
-        let sections = self.prompt_sections();
+        let (session, events) = (agent.session_id(), agent.events());
+        agent.set_tools(self.session_tools(&session, &config.cwd, &events, update));
+        let mut sections = self.prompt_sections();
+        self.chat_prompt_sections(&session, &events, &mut sections);
         agent.update_config(|c| c.prompt.extra_sections = sections);
     }
 
@@ -482,6 +471,10 @@ impl Runtime {
         let recorded = dshx_session::agent_preset(&log.header(), &log.events());
         let preset = Preset::of_session(recorded.as_deref());
         config.apply_preset(preset);
+        if preset != Preset::Minimal {
+            let events = log.events();
+            self.chat_prompt_sections(log.id(), &events, &mut config.prompt.extra_sections);
+        }
         let tools = self.tools_for(preset, log.as_ref(), &config);
         let agent = Agent::new(
             config,

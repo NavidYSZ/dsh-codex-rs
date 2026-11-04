@@ -50,9 +50,20 @@ Anmeldungen bleiben erhalten. Änderungen an Pfad/Aktivierung erfordern einen
 Neustart der betroffenen Instanz; die Oberfläche zeigt das ausdrücklich an.
 
 HuntProxy muss in **Aether → Plugins → MCP-Server** eingerichtet sein, auch
-wenn es bereits mit einem anderen Agenten verbunden ist. „Immer laden“
-aktivieren oder im Chat `@huntproxy` nennen. PTC verwendet die MCP-Werkzeuge
-direkt. [Einrichtung und Fehlerdiagnose](docs/browser-use.md).
+wenn es bereits mit einem anderen Agenten verbunden ist. Im Eingabefeld unter
+**Konnektoren** für den Chat einschalten, im Chat `@huntproxy` nennen oder auf
+der Karte „In neuen Chats vorausgewählt“ aktivieren. PTC verwendet die
+MCP-Werkzeuge direkt. [Einrichtung und Fehlerdiagnose](docs/browser-use.md).
+
+MCP-Server kommen nur in einen Chat, wenn der Chat sie auswählt.
+**Konnektoren** im Eingabefeld zeigt jeden aktivierten Server mit Status und
+Anzahl der Tools; der Schalter nimmt ihn in diesen Chat auf oder heraus (auf
+der Startseite: für den Chat, den die erste Nachricht anlegt). `@Name` in
+einer Nachricht schaltet einen Server ebenfalls ein. Server mit `always =
+true` („In neuen Chats vorausgewählt“, Markierung *Standard*) starten in jedem
+neuen Chat; jeder Chat kann sie trotzdem ausschalten und bekommt dann weder
+ihre Tools noch ihre Anweisungen. Der Minimal-Modus hat keine MCP-Server.
+Subagenten und PTC-Programme sehen nur die Server ihres Chats.
 
 Eine Runde umfasst die vollständige Antwort des Agenten samt allen
 Tool-Aufrufen und PTC-Programmen. **„Nach jeder Antwort“** komprimiert erst

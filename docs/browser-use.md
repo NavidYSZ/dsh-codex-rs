@@ -43,8 +43,9 @@ viewport, not the text-read offset.
 Install HuntProxy using its own documented installation, then add a Local STDIO
 server in **Plugins → MCP servers**. Use the absolute HuntProxy executable and
 arguments `mcp`, or `--data-dir /absolute/path/to/your/huntproxy-data mcp` to
-reuse an existing installation. Configure **Always load** or activate it per
-chat with `@huntproxy`. A connection in Codex/another agent is not inherited.
+reuse an existing installation. Turn on **Preselected in new chats**, or pick it
+per chat under **Connectors** in the composer or with `@huntproxy`. A
+connection in Codex/another agent is not inherited.
 
 Equivalent Aether configuration (replace the executable/data paths):
 

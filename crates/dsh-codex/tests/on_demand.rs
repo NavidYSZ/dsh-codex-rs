@@ -891,3 +891,87 @@ async fn tool_disabling_and_chat_deactivation_apply_during_standard_and_ptc_turn
         assert!(!content.contains("mcp__t__echo"), "{content}");
     }
 }
+
+/// The connector picker: a preselected (`always`) server joins new chats,
+/// but a chat that switched it off (here before its first prompt, like the
+/// start page does) gets neither its tools nor its guidance, also later.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chat_switches_off_a_preselected_server() {
+    let home = tempfile::tempdir().unwrap();
+    let ws = tempfile::tempdir().unwrap();
+    let others = tempfile::tempdir().unwrap();
+    live_config(home.path(), ws.path(), true, true, "PRESELECTED_GUIDANCE");
+    let mock = MockDeepSeek::start().await;
+    mock.set_responder(|request| {
+        if scenarios::is_title_request(request) {
+            Reply::text("Preselection test")
+        } else {
+            Reply::text("ok")
+        }
+    });
+    let web = Web::start(home.path(), others.path(), &mock);
+    connected(&web, "old").await;
+    let mcp_tools = |r: &RecordedRequest| -> Vec<String> {
+        tool_names(r)
+            .into_iter()
+            .filter(|n| n.starts_with("mcp__t__"))
+            .collect()
+    };
+
+    let chat = live_session(&web, ws.path(), "standard").await;
+    let picker = web.get(&format!("/sessions/{chat}/mcp")).await;
+    assert_eq!(picker["active"], json!(["t"]), "{picker}");
+    let row = &picker["servers"][0];
+    assert_eq!(row["name"], "t");
+    assert_eq!(row["selected"], true);
+    assert_eq!(row["preselected"], true);
+    assert_eq!(row["status"], "connected");
+    assert!(row["tools"].as_u64().unwrap() > 0, "{row}");
+
+    let off = web
+        .call(
+            reqwest::Method::DELETE,
+            &format!("/sessions/{chat}/mcp/t"),
+            None,
+        )
+        .await;
+    assert_eq!(off["active"], json!([]));
+    assert_eq!(off["servers"][0]["selected"], false);
+    assert_eq!(off["servers"][0]["preselected"], true);
+    for text in ["first", "second"] {
+        let request = prompt(&web, &mock, &chat, text).await;
+        assert!(
+            mcp_tools(&request).is_empty(),
+            "{text}: {:?}",
+            tool_names(&request)
+        );
+        let all = all_text(&request);
+        assert!(!all.contains("PRESELECTED_GUIDANCE"), "{text}: {all}");
+        assert!(all.contains("is turned off for this chat"), "{text}: {all}");
+    }
+    // The log keeps the choice once nothing is pending any more.
+    let picker = web.get(&format!("/sessions/{chat}/mcp")).await;
+    assert_eq!(picker["servers"][0]["selected"], false, "{picker}");
+
+    // Another new chat starts with the preselection.
+    let other = live_session(&web, ws.path(), "standard").await;
+    let request = prompt(&web, &mock, &other, "hello").await;
+    assert!(mcp_tools(&request).contains(&"mcp__t__echo".to_owned()));
+    assert!(request.system().unwrap().contains("PRESELECTED_GUIDANCE"));
+
+    // On again: the tools return and the guidance arrives once.
+    web.call(
+        reqwest::Method::POST,
+        &format!("/sessions/{chat}/mcp/t"),
+        None,
+    )
+    .await;
+    let request = prompt(&web, &mock, &chat, "third").await;
+    assert!(mcp_tools(&request).contains(&"mcp__t__echo".to_owned()));
+    let all = all_text(&request);
+    assert!(
+        all.contains("The user turned on the MCP server \"t\""),
+        "{all}"
+    );
+    assert_eq!(all.matches("PRESELECTED_GUIDANCE").count(), 1, "{all}");
+}

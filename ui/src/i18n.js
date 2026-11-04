@@ -665,6 +665,17 @@ const EN = {
   mobileSshTitle: 'Pair over SSH',
   mobileSshHint: 'This server has no listener for the phone; the app reaches it through an SSH tunnel. On your Mac, run:',
   mobileUnavailable: 'This server has no Aether pairing.',
+  // MCP picker
+  cnButton: 'Connectors', cnButtonCount: (n) => `Connectors: ${n} selected`,
+  cnTitleChat: 'Connectors in this chat', cnTitleNew: 'Connectors for the new chat',
+  cnPreselected: 'Default', cnPreselectedHint: 'Preselected in new chats',
+  cnEmpty: 'No MCP server is enabled. Add one under Plugins → MCP.',
+  cnFoot: 'Default servers start in every new chat. Switching one here applies to this chat only.',
+  cnManage: 'Manage connectors', cnMinimal: 'Minimal mode has no connectors',
+  cnApplyFailed: (n) => `${n} could not be switched for the new chat.`,
+  mcpPreselect: 'Preselected in new chats', mcpPreselectFor: (n) => `Preselect ${n} in new chats`,
+  mcpPreselectHint: 'New chats start with its tools; each chat can switch it off under Connectors.',
+  mcpLeadPicker: 'Choose servers per chat under Connectors in the composer or with @name. Preselected servers start in every new chat.',
 };
 
 const DE = {
@@ -1314,6 +1325,17 @@ const DE = {
   mobileSshTitle: 'Über SSH verbinden',
   mobileSshHint: 'Dieser Server hat keinen Zugang für das iPhone; die App erreicht ihn über einen SSH-Tunnel. Führe auf deinem Mac aus:',
   mobileUnavailable: 'Dieser Server kennt keine Aether-Kopplung.',
+  // MCP picker
+  cnButton: 'Konnektoren', cnButtonCount: (n) => `Konnektoren: ${n} ausgewählt`,
+  cnTitleChat: 'Konnektoren in diesem Chat', cnTitleNew: 'Konnektoren für den neuen Chat',
+  cnPreselected: 'Standard', cnPreselectedHint: 'In neuen Chats vorausgewählt',
+  cnEmpty: 'Kein MCP-Server ist aktiviert. Füge einen unter Plugins → MCP hinzu.',
+  cnFoot: 'Standard-Server starten in jedem neuen Chat. Was du hier umschaltest, gilt nur für diesen Chat.',
+  cnManage: 'Konnektoren verwalten', cnMinimal: 'Der Minimal-Modus hat keine Konnektoren',
+  cnApplyFailed: (n) => `${n} ließ sich für den neuen Chat nicht umschalten.`,
+  mcpPreselect: 'In neuen Chats vorausgewählt', mcpPreselectFor: (n) => `${n} in neuen Chats vorauswählen`,
+  mcpPreselectHint: 'Neue Chats starten mit seinen Tools; jeder Chat kann ihn unter Konnektoren ausschalten.',
+  mcpLeadPicker: 'Server wählst du pro Chat unter Konnektoren im Eingabefeld oder mit @Name. Vorausgewählte Server starten in jedem neuen Chat.',
 };
 
 export const t = de ? DE : EN;

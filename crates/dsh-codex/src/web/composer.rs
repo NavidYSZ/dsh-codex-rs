@@ -1,5 +1,5 @@
 //! The composer routes of `dsh-codex web` ([`dshx_server::Composer`]):
-//! `/` and `@` suggestions, the MCP servers a chat activated, `/compact`,
+//! `/` and `@` suggestions, the chat's MCP servers (connector picker), `/compact`,
 //! the log export, queued prompts and file uploads.
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
@@ -103,14 +103,15 @@ impl dshx_server::Composer for WebComposer {
             .await
     }
 
+    /// `{active, servers}` for the composer's connector picker; Minimal
+    /// offers no MCP server (`minimal: true`).
     async fn session_mcp(&self, id: &str) -> anyhow::Result<Value> {
         let b = self.backend()?;
         let chat = self.chat(id).await?;
-        let active = match chat.preset {
-            Preset::Standard | Preset::Ptc => b.runtime.active_mcp(id, &chat.events),
-            Preset::Minimal => Vec::new(),
-        };
-        Ok(json!({ "active": active }))
+        Ok(match chat.preset {
+            Preset::Standard | Preset::Ptc => b.runtime.mcp_picker(id, &chat.events),
+            Preset::Minimal => json!({ "active": [], "servers": [], "minimal": true }),
+        })
     }
 
     async fn set_session_mcp(&self, id: &str, server: &str, on: bool) -> anyhow::Result<Value> {
