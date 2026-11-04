@@ -27,11 +27,13 @@ mod extensions;
 mod folders;
 pub mod mobile;
 mod providers;
+mod transfer;
 
 pub use composer::{Composer, SuggestQuery};
 pub use extensions::{Extensions, OAuthCallback};
 pub use mobile::MobileHost;
 pub use providers::Providers;
+pub use transfer::TransferHost;
 
 /// Live messages pushed to UI clients over the WebSocket.
 #[derive(Debug, Clone, Serialize)]
@@ -236,6 +238,11 @@ pub trait Backend: Send + Sync + 'static {
     fn mobile(&self) -> Option<Arc<dyn MobileHost>> {
         None
     }
+    /// Folder transfer between instances (`/api/transfer`,
+    /// docs/aether/TRANSFER.md); `None` = those routes answer 404.
+    fn transfer(&self) -> Option<Arc<dyn TransferHost>> {
+        None
+    }
 
     // Automation (goals, schedules, Agent Teams); unsupported by default.
 
@@ -372,6 +379,7 @@ fn build(backend: Arc<dyn Backend>, token: String) -> (Router, AppState) {
         .route("/browser/status", get(browser_status))
         .route("/browser/test", post(browser_test))
         .route("/workspaces", get(workspaces).post(add_workspace))
+        .merge(transfer::routes())
         .route("/sessions", get(list_sessions).post(create_session))
         .route(
             "/sessions/{id}",

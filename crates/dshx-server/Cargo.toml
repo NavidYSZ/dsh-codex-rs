@@ -31,6 +31,10 @@ hyper-util = { version = "0.1", features = ["tokio", "server", "server-auto", "s
 socket2 = "0.6"
 if-addrs = "0.15"
 qrcode = { version = "0.14", default-features = false }
+# Folder transfer between instances: tar+zstd streams.
+tar.workspace = true
+zstd.workspace = true
+filetime = "0.2"
 
 [dev-dependencies]
 reqwest.workspace = true

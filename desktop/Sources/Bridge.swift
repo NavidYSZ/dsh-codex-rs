@@ -70,7 +70,11 @@ enum BridgeScript {
           var a = appearance || {};
           return call('setAppearance', { background: String(a.background || ''), theme: String(a.theme || '') });
         },
-        prewarm: function (id) { return call('prewarm', { id: String(id) }); }
+        prewarm: function (id) { return call('prewarm', { id: String(id) }); },
+        transferFolder: function (options) {
+          var o = options || {};
+          return call('transferFolder', { path: o.path == null ? '' : String(o.path) });
+        }
       };
       Object.defineProperty(window, 'dshxDesktop', { value: Object.freeze(api), enumerable: true });
 
@@ -184,6 +188,9 @@ final class BridgeHandler: NSObject, WKScriptMessageHandlerWithReply {
         case "prewarm":
             controller.manager.prewarm(string("id"))
             replyHandler(nil, nil)
+        case "transferFolder":
+            let path = string("path")
+            replyHandler(controller.transferFolder(path: path.isEmpty ? nil : path, from: instanceID), nil)
         case "drag":
             controller.beginWindowDrag()
             replyHandler(nil, nil)

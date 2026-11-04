@@ -676,6 +676,9 @@ const EN = {
   mcpPreselect: 'Preselected in new chats', mcpPreselectFor: (n) => `Preselect ${n} in new chats`,
   mcpPreselectHint: 'New chats start with its tools; each chat can switch it off under Connectors.',
   mcpLeadPicker: 'Choose servers per chat under Connectors in the composer or with @name. Preselected servers start in every new chat.',
+  // Folder transfer
+  transferFolder: 'Transfer to another device…',
+  transferBusy: 'Another dialog is open in the app; close it first.',
 };
 
 const DE = {
@@ -1336,6 +1339,9 @@ const DE = {
   mcpPreselect: 'In neuen Chats vorausgewählt', mcpPreselectFor: (n) => `${n} in neuen Chats vorauswählen`,
   mcpPreselectHint: 'Neue Chats starten mit seinen Tools; jeder Chat kann ihn unter Konnektoren ausschalten.',
   mcpLeadPicker: 'Server wählst du pro Chat unter Konnektoren im Eingabefeld oder mit @Name. Vorausgewählte Server starten in jedem neuen Chat.',
+  // Folder transfer
+  transferFolder: 'Auf anderes Gerät übertragen …',
+  transferBusy: 'In der App ist schon ein Dialog offen; schließe ihn zuerst.',
 };
 
 export const t = de ? DE : EN;

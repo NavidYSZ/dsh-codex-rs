@@ -67,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc private func newChat(_ sender: Any?) { main.sendCommand("new-chat") }
     @objc private func openProject(_ sender: Any?) { main.sendCommand("open-project") }
     @objc private func openSettings(_ sender: Any?) { main.sendCommand("settings") }
+    @objc private func transferFolder(_ sender: Any?) { main.transferFolder(path: nil, from: manager.currentID) }
     /// Chat menu, find and the shortcut overview: the page runs the command
     /// named by the item (ui/src/components/shortcuts.js).
     @objc private func pageCommand(_ sender: NSMenuItem) {
@@ -214,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let file = NSMenu(title: "Ablage")
         file.addItem(item("Neuer Chat", #selector(newChat(_:)), "n"))
         file.addItem(item("Projekt öffnen …", #selector(openProject(_:)), "o"))
+        file.addItem(item("Ordner übertragen …", #selector(transferFolder(_:)), ""))
         file.addItem(.separator())
         file.addItem(item("Fenster schließen", #selector(NSWindow.performClose(_:)), "w"))
 

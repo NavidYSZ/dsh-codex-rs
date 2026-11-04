@@ -202,7 +202,7 @@ dem Hauptframe mit genau dem Origin der eigenen Instanz.
 | `platform` | `"macos"` | |
 | `current` | `string` | ID der Instanz, **zu der diese Seite gehört**. Solange die Seite sichtbar ist, ist das auch die aktive Instanz. |
 | `instances` | `Array<{id, name, kind, active, status, unread, connectedAt?}>` | Alle Instanzen in Menüreihenfolge (Kopie). `kind`: `"local"`, `"ssh"`, `"url"`. `active`: wird gerade im Fenster gezeigt oder ist das Ziel eines laufenden Wechsels. `status`: `"idle"` (nicht gestartet), `"starting"`, `"ready"`, `"error"`. `unread`: zuletzt per `setBadge` gemeldete Zahl dieser Instanz. `connectedAt`: Zeitpunkt (ms) der letzten erfolgreichen Verbindung. |
-| `capabilities` | `{revealInFinder, openInEditor, pickFolder: boolean}` | Nur bei lokalen Instanzen `true` (Pfade entfernter Server gibt es auf dem Mac nicht). |
+| `capabilities` | `{revealInFinder, openInEditor, pickFolder, transferFolder: boolean}` | `revealInFinder`, `openInEditor`, `pickFolder`: nur bei lokalen Instanzen `true` (Pfade entfernter Server gibt es auf dem Mac nicht). `transferFolder`: `true`, sobald es mindestens zwei Instanzen gibt (jede Art). |
 | `titlebar` | `{height, trafficLightsWidth, fullScreen}` | Fensterrahmen in CSS-Pixeln, siehe unten. |
 
 ### Methoden (alle geben ein `Promise` zurück)
@@ -220,6 +220,7 @@ dem Hauptframe mit genau dem Origin der eigenen Instanz.
 | `ready()` | `undefined` | Die Seite hat zum ersten Mal vollständig gerendert (Sidebar und Chat); erst dann blendet das Fenster zu ihr über. Einmal je Seitenladen. |
 | `setAppearance({background, theme})` | `undefined` | Hintergrundfarbe (`#rrggbb`) und `"light"`/`"dark"`. Wer das meldet, ruft auch `ready()` auf. |
 | `prewarm(id)` | `undefined` | Verbindet Instanz `id` im Hintergrund, falls sie noch nicht läuft (Hover im Wechsler). |
+| `transferFolder({path})` | `boolean` | Öffnet das Sheet „Ordner übertragen“ mit `path` dieser Instanz als Quelle (leer = selbst wählen). `false`, wenn im Fenster schon ein anderes Sheet offen ist. Ablauf und Server-API: [docs/aether/TRANSFER.md](../docs/aether/TRANSFER.md). |
 
 ### Ereignisse (auf `window`)
 
@@ -286,6 +287,7 @@ Chats, `prewarm` beim Überfahren, `ready` und `setAppearance`).
 | dsh-codex / Instanz | Instanzen bearbeiten … | ⌥⌘, |
 | Ablage | Neuer Chat (Befehl `new-chat`) | ⌘N |
 | Ablage | Projekt öffnen … (Befehl `open-project`) | ⌘O |
+| Ablage | Ordner übertragen … (Sheet: Kopieren, Verschieben, Synchronisieren zwischen Instanzen) | |
 | Ablage | Fenster schließen (App läuft weiter, Dock-Symbol öffnet wieder) | ⌘W |
 | Bearbeiten | Widerrufen, Ausschneiden, Kopieren, Einsetzen, Alles auswählen, Suchen | Standard |
 | Darstellung | Neu laden / Originalgröße / Vergrößern / Verkleinern / Vollbild | ⌘R / ⌘0 / ⌘+ / ⌘- / ⌃⌘F |
@@ -307,12 +309,13 @@ der Web-Inspektor von Safari ist für die Seiten freigeschaltet
 | `~/Library/Application Support/dsh-codex/instances.json` | Instanzen (0600) |
 | `~/Library/Application Support/dsh-codex/run/` | Ready- und PID-Dateien lokaler Server (0700) |
 | `~/Library/Caches/dsh-codex/ssh/` | ControlMaster-Sockets |
+| `~/Library/Caches/dsh-codex/transfer/` | Zwischendatei einer laufenden Ordnerübertragung (0600 in 0700, danach gelöscht) |
 | `~/Library/Logs/dsh-codex/desktop.log` | Ablauf der App (Status, Laden, Beenden) |
 | `~/Library/Logs/dsh-codex/local-<id>.log`, `ssh-<id>.log` | Server- bzw. ssh-Ausgabe, Tokens maskiert |
 | Schlüsselbund, Dienst `de.yousufzai.dsh-codex.instance` | Tokens von `url`-Instanzen |
 | Benutzereinstellungen der App (`background.<id>`, `theme.<id>`, `lastProjectParent`) | Seitenfarbe und Theme je Instanz, Startordner der Ordnerauswahl |
 
-`DSHX_DESKTOP_SUPPORT_DIR=<ordner>` legt Instanzen, `run/`, `logs/` und `ssh/`
+`DSHX_DESKTOP_SUPPORT_DIR=<ordner>` legt Instanzen, `run/`, `logs/`, `transfer/` und `ssh/`
 (Sockets; Pfad kurz halten, max. 104 Byte) in diesen Ordner, und der
 Computer-Use-Helfer wird nicht nach `~/Applications` kopiert. So läuft eine
 zweite Kopie (z. B. ein Testbuild) neben der installierten App, ohne deren

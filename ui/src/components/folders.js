@@ -10,7 +10,7 @@ import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { createStore, useStore } from '../store.js';
 import { store, api, pickWorkspace, newChat, toast, fail } from '../state.js';
-import { IconFolder, IconFolderPlus, IconChevronRight, IconChevronLeft, IconPencil, IconX } from '../icons.js';
+import { IconFolder, IconFolderPlus, IconChevronRight, IconChevronLeft, IconPencil, IconX, IconExternal } from '../icons.js';
 import { Menu, MenuItem, ActionItem } from './common.js';
 
 const LAST_KEY = 'dshx-folder-last';
@@ -153,6 +153,12 @@ export function ProjectMenu({ open, onClose, anchor, side = 'top', align = 'star
     const ws = path ? await addProject(path) : null;
     if (ws) onPick(ws.path);
   };
+  // The Mac app copies, moves or syncs the folder to another instance (docs/aether/TRANSFER.md).
+  const canTransfer = !!cwd && !!window.dshxDesktop?.capabilities?.transferFolder;
+  const transfer = async () => {
+    onClose();
+    if (await window.dshxDesktop.transferFolder({ path: cwd }) === false) toast(t.transferBusy);
+  };
   // On <body> and placed in the viewport: the start page's title sits in a
   // scrolling, masked column that would clip the menu.
   return html`<${Portal}><${Menu} open=${open} onClose=${onClose} anchor=${anchor} side=${side} align=${align} fixed class="menu-wide fp-menu">
@@ -163,6 +169,7 @@ export function ProjectMenu({ open, onClose, anchor, side = 'top', align = 'star
           onClick=${() => pick(w.path)}>${w.name || folderName(w.path)}</${MenuItem}>`)}</div>` : null}
       <div class="menu-sep" />
       <${ActionItem} icon=${html`<${IconFolderPlus} size=${14} />`} kbd="⌘O" onClick=${choose}>${t.chooseFolder}</${ActionItem}>
+      ${canTransfer ? html`<${ActionItem} icon=${html`<${IconExternal} size=${14} />`} onClick=${transfer}>${t.transferFolder}</${ActionItem}>` : null}
     </${MenuKeys}>
   </${Menu}></${Portal}>`;
 }

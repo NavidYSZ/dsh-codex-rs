@@ -73,6 +73,28 @@ The accounts hub (`crates/dshx-hub`, binary `aether-hub`: sign-up, sessions,
 tiers and a relay to enrolled servers) is implemented but not deployed.
 `dsh-codex hub enroll --url … --code …` connects a server to a hub.
 
+## Transfer folders between devices
+
+The macOS app copies, moves or syncs a project folder from one instance to
+another (this Mac, a VPS behind SSH, …): File → “Ordner übertragen …”, or in
+the web UI the project menu → “Transfer to another device…”. Pick the source
+folder, the target instance and its parent folder, and a mode:
+
+- **Copy** creates the folder on the target; a non-empty target is refused.
+- **Move** copies, checks every file on the target (size and modification
+  time) and only then deletes the source folder.
+- **Sync** sends new and changed files; optionally it deletes files that only
+  exist on the target.
+
+`node_modules`, `target`, `.venv`, `__pycache__`, `DerivedData` and similar
+build folders are excluded by default; `.git` and hidden files are included.
+“Preview” shows counts and sizes first. The instances never talk to each
+other: the app streams the folder as tar+zstd through a 0600 file in its cache
+and adds the folder to the target's projects. Every server only accepts paths
+inside the home folder and its project folders, never writes through a
+symlink and refuses archive entries with `..` or absolute paths. The API is
+in [docs/aether/TRANSFER.md](docs/aether/TRANSFER.md).
+
 ## Modes
 
 | Mode | Behavior |
