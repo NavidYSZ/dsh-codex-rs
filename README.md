@@ -110,9 +110,10 @@ page and temporary profile. Browser MCP connections have their own connection
 and tool-discovery check. These checks do not certify access to every website.
 
 Connect HuntProxy in Aether's **Plugins → MCP servers**, even if another agent
-already uses it: applications keep their own MCP configuration. Enable
-**Always load** or mention `@huntproxy` in the chat. PTC calls the connected
-tools directly. See [browser setup, HuntProxy and troubleshooting](docs/browser-use.md).
+already uses it: applications keep their own MCP configuration. Switch it on
+for a chat under **Connectors** in the composer, mention `@huntproxy`, or turn
+on **Preselected in new chats** on its card. PTC calls the connected tools
+directly. See [browser setup, HuntProxy and troubleshooting](docs/browser-use.md).
 
 Website errors should be diagnosed through the selected browser backend;
 desktop mouse/keyboard control for web work requires explicit user intent.
@@ -296,7 +297,18 @@ args = ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/notes"]
 
 [mcp_servers.docs]                     # Streamable HTTP server
 url = "https://example.com/mcp"
+always = true                          # preselected in new chats
 ```
+
+A server joins a chat only when the chat picks it. **Connectors** in the
+composer lists every enabled server with its status and tool count; its switch
+turns the server on or off for this chat (on the start page: for the chat the
+first prompt creates). `@name` in a prompt also turns a server on. Servers
+with `always = true` (**Preselected in new chats**, shown as *Default*) start
+in every new chat, and each chat can still switch them off: a switched-off
+server contributes neither tools nor instructions to that chat. Minimal mode
+has no MCP servers. Subagents and PTC programs only see the servers of their
+chat.
 
 Skills are read from `<project>/.dsh/skills`, `<project>/.agents/skills`,
 the skill folders of enabled plugins, `~/.dsh-codex/skills`, `~/.dsh/skills`

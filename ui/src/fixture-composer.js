@@ -108,16 +108,22 @@ export const fixtureComposer = {
     return { kind, query: q, sections, cacheMiss: pro };
   },
 
+  /** `{active, servers}`: the catalog's initially active servers count as preselected. */
   async sessionMcp(fx) {
     await fx.ready;
     const c = catalog(fx);
-    return { active: fx.mcpActive ?? (fx.mcpActive = [...(c.active ?? [])]) };
+    const active = fx.mcpActive ?? (fx.mcpActive = [...(c.active ?? [])]);
+    const servers = c.servers.map((s) => ({
+      name: s.name, selected: active.includes(s.name), preselected: (c.active ?? []).includes(s.name),
+      status: s.status, retrying: false, error: null, tools: s.tools ?? 0,
+    }));
+    return { active, servers };
   },
 
   async setSessionMcp(fx, _id, server, on) {
     const { active } = await this.sessionMcp(fx);
     fx.mcpActive = on ? [...new Set([...active, server])] : active.filter((s) => s !== server);
-    return { active: fx.mcpActive };
+    return this.sessionMcp(fx);
   },
 
   /** A prompt's `@server` and `@plugin` mentions switch them on, like the server. */

@@ -18,6 +18,13 @@
   `dsh-codex hub enroll`. Implemented, not deployed.
 - Brand: the Aether mark, wordmark and colour tokens live in `brand/`; the
   web UI's start page and boot screen show the new mark.
+- Add **Connectors** to the composer: pick the MCP servers of each chat
+  (also on the start page, applied before the first prompt), with status,
+  tool count and a *Default* tag for preselected servers. “Always load” is
+  now “Preselected in new chats” (config key `always` unchanged). A chat that
+  switches a preselected server off gets neither its tools nor its
+  instructions, also after a restart; `GET /api/sessions/:id/mcp` adds
+  `servers` for the picker.
 
 ## 0.3.0-alpha.3 — 2026-10-31
 

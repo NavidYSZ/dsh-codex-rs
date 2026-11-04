@@ -10,7 +10,7 @@ import { useStore } from '../store.js';
 import { store, api, openPlugins } from '../state.js';
 import { IconFile, IconFolder, IconPlug, IconShield, IconList, IconArrowDown, IconChevronRight } from '../icons.js';
 import { detectTrigger, highlight, known, learn, pills, rank, segments, typedCommand } from '../suggest.js';
-import { COMMANDS, openDetails, runCommand, steerQueued, useQueue } from './composer-extras.js';
+import { COMMANDS, openDetails, runCommand, stagedMcp, steerQueued, useQueue } from './composer-extras.js';
 import { VIEW_MODES } from '../worklog.js';
 import { useChatMode, useStagedMode } from './modes.js';
 
@@ -36,11 +36,15 @@ function sourceLabel(item) {
 }
 
 function Trail({ item, cursor }) {
+  // On the start page the connector picker may have switched a preselected server off.
+  const picks = useStore(stagedMcp, (m) => m.picks);
+  const chat = useStore(store, (s) => s.activeId);
   if (item.type === 'skill') return html`<span class="ci-trail">${sourceLabel(item)}</span>`;
   if (item.type === 'server' || item.type === 'plugin') {
     if (item.needsLogin) return html`<span class="ci-trail is-warn">${t.ciLogin}</span>`;
     const tone = item.status === 'connected' || item.type === 'plugin' ? 'on' : item.status === 'error' ? 'error' : 'off';
-    const label = item.active ? t.ciActiveTag : item.type === 'plugin' ? t.ciServers(item.servers?.length ?? 0)
+    const active = !chat && item.type === 'server' && item.name in picks ? picks[item.name] : item.active;
+    const label = active ? t.ciActiveTag : item.type === 'plugin' ? t.ciServers(item.servers?.length ?? 0)
       : item.status === 'error' ? t.ciError : item.status === 'connecting' ? t.ciConnecting : t.ciTools(item.tools ?? 0);
     return html`<span class="ci-trail"><span class=${cx('ci-dot', `is-${tone}`)} aria-hidden="true" />${label}</span>`;
   }

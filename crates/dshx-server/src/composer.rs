@@ -52,7 +52,8 @@ pub struct SuggestQuery {
 pub trait Composer: Send + Sync + 'static {
     /// `{kind, query, sections: [{id, items}], cacheMiss}`.
     async fn suggest(&self, query: SuggestQuery) -> anyhow::Result<Value>;
-    /// `{active: [server]}`: the MCP servers a chat offers.
+    /// `{active: [server], servers: [{name, selected, preselected, status,
+    /// tools, …}]}`: the MCP servers a chat offers and its connector picker.
     async fn session_mcp(&self, id: &str) -> anyhow::Result<Value> {
         let _ = id;
         Err(unsupported())

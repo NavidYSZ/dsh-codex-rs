@@ -341,8 +341,9 @@ pub struct McpServerConfig {
     #[serde(alias = "failOnStartupError")]
     pub fail_on_startup_error: bool,
     pub reconnect: McpReconnectConfig,
-    /// Offer the tools in every chat; otherwise only in chats that
-    /// activated the server (`@name` or the active-server chips).
+    /// Preselected in new chats: a chat offers the tools unless the chat
+    /// switched the server off (composer picker, chips). Otherwise only
+    /// chats that switched it on (`@name`, the picker) offer them.
     #[serde(skip_serializing_if = "is_false")]
     pub always: bool,
     /// Raw tool names of this server that are never offered.

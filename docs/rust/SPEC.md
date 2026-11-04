@@ -473,8 +473,8 @@ Without a composer backend every route below answers 404. Errors are `{error}` w
 | Method | Path | Body → Response |
 |---|---|---|
 | GET | `/api/composer/suggest?kind=slash\|mention&q=&cwd=&session=&model=&preset=` | → `{kind, query, sections:[{id, items}], cacheMiss, preset}` (below); `cwd` defaults to the session's folder, `model` (the composer's pick) decides `cacheMiss`, `preset` is the mode the start page will create (a session's own mode wins); Minimal offers no skills, apps or chat-only commands |
-| GET | `/api/sessions/:id/mcp` | → `{active:[server]}`: the MCP servers the chat offers (its log, `always` servers, changes not yet recorded); Minimal → `[]` |
-| POST \| DELETE | `/api/sessions/:id/mcp/:server` | → `{active}`; switches the server on or off for the chat from its next step on; unknown server → 404, Minimal → 400 |
+| GET | `/api/sessions/:id/mcp` | → `{active:[server], servers:[{name, selected, preselected, status, error, retrying, tools}]}`: `active` = the MCP servers the chat offers (its log, changes not yet recorded, else preselected `always` servers); `servers` = every enabled server for the composer's connector picker (`tools` = offered tool count, `status` as in `McpServer`, `stopped` when not running); Minimal → `{active:[], servers:[], minimal:true}` |
+| POST \| DELETE | `/api/sessions/:id/mcp/:server` | → the same as GET; switches the server on or off for the chat from its next step on (off also wins over `always`); unknown server → 404, Minimal → 400 |
 | POST | `/api/sessions/:id/compact` | → `{compacted:true, items, tokens}` or `{compacted:false}` (nothing to compact yet): dsh `/compact`, also below the pressure threshold, in a bracket with `turn: null`; while a turn runs or input is queued → 400; Minimal → 400 |
 | GET | `/api/sessions/:id/export` | → the session log as JSONL (`application/x-ndjson`, attachment `dsh-codex-<id>.jsonl`): the header line, then one event per line |
 | POST | `/api/sessions/:id/queue/:item` | `{action:"edit"\|"remove"\|"steer", text?}` → 204: dsh `updateQueue` on a prompt waiting in the inbox (`edit` replaces its text; `steer` moves a next-turn prompt into the running turn); gone → 400 "queued item is no longer pending" |
@@ -496,7 +496,8 @@ Without a composer backend every route below answers 404. Errors are `{error}` w
 - Config: `[skills] catalog = "manual"|"auto"` (default `manual`: no `<available_skills>` catalog and no `skill`
   tool unless an entry says `model = true`; `auto` = dsh), `[skills.entries."<name>"] enabled` (default `true`;
   `false` = neither listed nor loadable, not even by `/name`) and `model` (default `false`). `[mcp_servers.<name>]
-  always` (default `false`: tools offered in every chat) and `disabled_tools = [rawName]` (never offered).
+  always` (default `false`; `true` = preselected in new chats: offered unless the chat switched the server off) and
+  `disabled_tools = [rawName]` (never offered).
 - Prompts: `/name` and `$name` load a skill's `<skill_content>` into that turn (dsh `skill-invocation`). `@server`
   (case-insensitive) or `@plugin` (all of its servers) switches servers on for the chat: their tools join through the
   agent's `developer/message` `tool-addition` (declared with `defer_loading` on DeepSeek's addition-only route,

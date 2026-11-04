@@ -1,8 +1,10 @@
 // MCP servers tab of the Plugins page: cards with status, tools and the
-// "Active" / "Always load" switches, the server drawer (Tools, Settings,
-// Log, Sign-in; shared with the Apps tab) and the "Add server" dialog
-// (catalog, custom server with "Test connection", pasted JSON). Servers
-// reach a chat through @name unless "Always load" is on (ux-plan §1, §8).
+// "Active" / "Preselected in new chats" switches, the server drawer (Tools,
+// Settings, Log, Sign-in; shared with the Apps tab) and the "Add server"
+// dialog (catalog, custom server with "Test connection", pasted JSON).
+// Servers reach a chat through the composer's connector picker or @name;
+// preselected ones (config `always`) join every new chat until the chat
+// switches them off (ux-plan §1, §8).
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, quote } from '../i18n.js';
@@ -85,10 +87,10 @@ function ServerCard({ s, connectors, busy, run, settings, onOpen, onLogin }) {
           onChange=${(on) => run(s.name, () => api.mcpAction(s.name, on ? 'enable' : 'disable'))} />
         <span>${t.mcpActive}</span>
       </label>
-      <label class="mcp-switch" title=${settings.supported ? t.mcpAlwaysHint : t.mcpSettingsUnsupported}>
-        <${Toggle} on=${s.always === true} label=${t.mcpAlwaysFor(s.name)} disabled=${!settings.supported || settings.checking || settings.busy === s.name || !s.enabled}
+      <label class="mcp-switch" title=${settings.supported ? t.mcpPreselectHint : t.mcpSettingsUnsupported}>
+        <${Toggle} on=${s.always === true} label=${t.mcpPreselectFor(s.name)} disabled=${!settings.supported || settings.checking || settings.busy === s.name || !s.enabled}
           onChange=${(on) => settings.change(s, { always: on })} />
-        <span>${t.mcpAlways}</span>
+        <span>${t.mcpPreselect}</span>
       </label>
     </div>
   </div>`;
@@ -536,7 +538,7 @@ export function McpTab() {
   }
   return html`<div class="mcp-page">
     <div class="xe-toolbar">
-      <p class="plug-meta mcp-lead">${t.mcpLead}</p>
+      <p class="plug-meta mcp-lead">${t.mcpLeadPicker}</p>
       <button type="button" class="btn btn-small btn-primary" onClick=${() => setAdding(true)}><${IconPlus} size=${14} />${t.addServer}</button>
     </div>
     ${body}

@@ -423,7 +423,8 @@ export function refreshSessions() {
 
 // ---- actions -------------------------------------------------------------
 
-export async function send(text, images, opts, { onSession, sessionId } = {}) {
+/** `onCreate(id)` runs (awaited) right after a new chat was created, before its first prompt. */
+export async function send(text, images, opts, { onSession, onCreate, sessionId } = {}) {
   const s = store.get();
   const navigation = openToken;
   const body = { text, ...(images.length ? { images } : {}), ...opts, ...timeZone() };
@@ -436,6 +437,7 @@ export async function send(text, images, opts, { onSession, sessionId } = {}) {
     let id = sessionId ?? s.activeId;
     if (!id) {
       ({ id } = await api.createSession(s.cwd, s.composer.preset));
+      await onCreate?.(id);
       refreshSessions();
     }
     const following = navigation === openToken && store.get().activeId === s.activeId && store.get().view === s.view;
