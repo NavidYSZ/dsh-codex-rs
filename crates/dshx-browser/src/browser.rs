@@ -118,6 +118,11 @@ struct PageState {
     user: Option<(&'static str, Option<String>)>,
     /// Tabs this tool opened; the user's own tabs are never navigated away.
     owned: HashSet<String>,
+    /// Page targets in the order this connection first saw them. Chrome
+    /// lists targets most recently used first, so its order changes with
+    /// every focus change; tab numbers follow this order instead and stay
+    /// stable (new tabs go last).
+    seen: Vec<String>,
     /// Attached mode: the browser whose "Allow remote debugging?" prompt a
     /// call is waiting for right now (holding the ops lock).
     allow_wait: Option<&'static str>,
@@ -746,6 +751,7 @@ impl<'a> Ctl<'a> {
             st.pid = None;
             st.viewport = None;
             st.owned.clear();
+            st.seen.clear();
             st.user = Some((found.name, found.app.clone()));
             st.generation
         };
@@ -854,6 +860,7 @@ impl<'a> Ctl<'a> {
             st.pid = Some(pid);
             st.viewport = None;
             st.owned.clear();
+            st.seen.clear();
             st.user = None;
             st.generation
         };
@@ -968,6 +975,7 @@ impl<'a> Ctl<'a> {
         st.pid = None;
         st.user = None;
         st.owned.clear();
+        st.seen.clear();
     }
 
     /// Quits Chrome: `Browser.close`, then SIGKILL to the group after 2 s.
@@ -1385,7 +1393,7 @@ impl<'a> Ctl<'a> {
     pub async fn tabs(&self) -> Result<Vec<Tab>> {
         let res = self.browser_send("Target.getTargets", json!({})).await?;
         let infos = res["targetInfos"].as_array().cloned().unwrap_or_default();
-        Ok(infos
+        let mut tabs: Vec<Tab> = infos
             .into_iter()
             .filter(|t| t["type"] == "page")
             .filter_map(|t| serde_json::from_value::<Tab>(t).ok())
@@ -1393,7 +1401,18 @@ impl<'a> Ctl<'a> {
             .filter(|t| {
                 !(t.url.starts_with("devtools://") || t.url.starts_with("chrome-extension://"))
             })
-            .collect())
+            .collect();
+        // Stable numbers: first-seen order, not Chrome's most-recently-used order.
+        let mut st = self.st();
+        st.seen.retain(|id| tabs.iter().any(|t| &t.target_id == id));
+        for tab in &tabs {
+            if !st.seen.contains(&tab.target_id) {
+                st.seen.push(tab.target_id.clone());
+            }
+        }
+        let seen = &st.seen;
+        tabs.sort_by_key(|t| seen.iter().position(|id| id == &t.target_id));
+        Ok(tabs)
     }
 
     pub async fn state(&self, quality: f32) -> Result<PageView> {
