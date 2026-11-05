@@ -64,7 +64,8 @@ final class LocalConnection: Connection {
     private var stopping = false
     private var generation = 0
     private var failures = 0
-    private var startedAt = Date()
+    /// When the current server process was started (jobs older than that died with an earlier one).
+    private(set) var startedAt = Date()
     private var stopWaiters: [() -> Void] = []
 
     private var readyFile: URL { Paths.run.appendingPathComponent("local-\(slug).json") }

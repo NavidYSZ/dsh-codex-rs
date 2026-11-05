@@ -745,14 +745,18 @@ class FixtureApi {
   async mobile() {
     await this.ready;
     this.mobileState ??= {
-      enabled: false, port: 7443, clients: [],
+      enabled: false, port: 7443, configuredPort: 7443, clients: [],
       server: { id: 'srv_fixture', name: 'Fixture Mac', hostname: 'fixture', platform: this.infoData.platform, version: this.infoData.version },
+      sshPair: { user: 'alex', home: '/Users/alex/.dsh-codex', bin: '/Applications/Aether.app/Contents/MacOS/dsh-codex', port: 3190, unit: null },
     };
     return clone(this.mobileState);
   }
 
   async updateMobile(patch) {
     const state = Object.assign(await this.mobile(), patch);
+    if (patch.port != null) state.configuredPort = patch.port;
+    // Port 0 = any free one, like the real listener.
+    state.port = state.enabled && !state.configuredPort ? 54321 : state.configuredPort;
     if (state.enabled) {
       state.addresses = [{ ip: '192.168.178.20', interface: 'en0', kind: 'lan' }, { ip: '100.79.232.37', interface: 'utun4', kind: 'tailscale' }];
       state.certSha256 = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08';
@@ -775,7 +779,8 @@ class FixtureApi {
     const qrSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges"><rect width="29" height="29" fill="#fff"/>'
       + '<path fill="#000" d="M4 4h7v1h-7zM4 5h1v5h-1zM10 5h1v5h-1zM6 6h3v3h-3zM4 10h7v1h-7zM18 4h7v1h-7zM18 5h1v5h-1zM24 5h1v5h-1zM20 6h3v3h-3zM18 10h7v1h-7z'
       + 'M4 18h7v1h-7zM4 19h1v5h-1zM10 19h1v5h-1zM6 20h3v3h-3zM4 24h7v1h-7zM13 4h1v2h-1zM13 8h2v1h-2zM12 12h3v1h-3zM16 13h2v2h-2zM13 16h1v3h-1zM20 14h3v3h-3zM18 19h2v2h-2zM22 20h3v1h-3zM19 22h5v2h-5z"/></svg>';
-    return { client: clone(client), token: 'act_fixture', payload: { v: 1, server: state.server, client: { id: client.id, name: client.name }, transports: [] }, link, qrSvg };
+    const transports = state.certSha256 ? [{ kind: 'https', urls: state.addresses.map((a) => `https://${a.ip}:${state.port}`), certSha256: state.certSha256 }] : [];
+    return { client: clone(client), token: 'act_fixture', payload: { v: 1, server: state.server, client: { id: client.id, name: client.name }, transports }, link, qrSvg };
   }
 
   async renameMobileClient(id, name) {

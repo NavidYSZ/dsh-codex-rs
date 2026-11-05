@@ -74,7 +74,10 @@ der Startseite: für den Chat, den die erste Nachricht anlegt). `@Name` in
 einer Nachricht schaltet einen Server ebenfalls ein. Server mit `always =
 true` („In neuen Chats vorausgewählt“, Markierung *Standard*) starten in jedem
 neuen Chat; jeder Chat kann sie trotzdem ausschalten und bekommt dann weder
-ihre Tools noch ihre Anweisungen. Der Minimal-Modus hat keine MCP-Server.
+ihre Tools noch ihre Anweisungen. Ein Chat behält die Vorauswahl, mit der er
+angelegt wurde; eine spätere Änderung lässt bestehende Chats unberührt. Nur
+Chats von vor dieser Aufzeichnung, die nie selbst gewählt haben, folgen ihr
+weiter. Der Minimal-Modus hat keine MCP-Server.
 Subagenten und PTC-Programme sehen nur die Server ihres Chats.
 
 Eine Runde umfasst die vollständige Antwort des Agenten samt allen

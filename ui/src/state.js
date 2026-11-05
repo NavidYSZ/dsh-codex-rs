@@ -89,6 +89,9 @@ export const store = createStore({
   notify: readLocal('dshx-notify', '') === 'on',
 });
 
+/** Whether `/api/info`'s `platform` is a Mac: the server says `macos`, the fixture `darwin`. */
+export const isMacPlatform = (platform) => platform === 'macos' || platform === 'darwin';
+
 /** The Mac app's bridge (instances, notifications); null in a plain browser. */
 function readDesktop() {
   const d = window.dshxDesktop;
@@ -451,7 +454,10 @@ export function refreshSessions() {
 
 // ---- actions -------------------------------------------------------------
 
-/** `onCreate(id)` runs (awaited) right after a new chat was created, before its first prompt. */
+/**
+ * `onCreate(id, {preset})` runs (awaited) right after a new chat was created,
+ * before its first prompt; `preset` is the mode it was created in.
+ */
 export async function send(text, images, opts, { onSession, onCreate, sessionId } = {}) {
   const s = store.get();
   const navigation = openToken;
@@ -465,7 +471,7 @@ export async function send(text, images, opts, { onSession, onCreate, sessionId 
     let id = sessionId ?? s.activeId;
     if (!id) {
       ({ id } = await api.createSession(s.cwd, s.composer.preset));
-      await onCreate?.(id);
+      await onCreate?.(id, { preset: s.composer.preset ?? s.info?.settings?.defaultPreset ?? 'standard' });
       refreshSessions();
     }
     const following = navigation === openToken && store.get().activeId === s.activeId && store.get().view === s.view;

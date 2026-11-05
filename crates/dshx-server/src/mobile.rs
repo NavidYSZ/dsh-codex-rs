@@ -260,7 +260,62 @@ fn parts(s: &AppState) -> ApiResult<(&dyn MobileHost, &ClientStore)> {
     }
 }
 
+/// The user this process runs as: on Linux its effective uid in
+/// `/etc/passwd`, else `$USER`.
+fn process_user() -> Option<String> {
+    let from_passwd = || {
+        let status = std::fs::read_to_string("/proc/self/status").ok()?;
+        let uid = status
+            .lines()
+            .find_map(|l| l.strip_prefix("Uid:"))?
+            .split_whitespace()
+            .nth(1)?
+            .to_owned();
+        let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
+        passwd.lines().find_map(|line| {
+            let mut fields = line.split(':');
+            let name = fields.next()?;
+            (fields.nth(1)? == uid).then(|| name.to_owned())
+        })
+    };
+    from_passwd().or_else(|| std::env::var("USER").ok().filter(|u| !u.is_empty()))
+}
+
+/// The systemd unit this process runs in (`/proc/self/cgroup`), without
+/// `.service`.
+fn systemd_unit() -> Option<String> {
+    let cgroup = std::fs::read_to_string("/proc/self/cgroup").ok()?;
+    cgroup.lines().find_map(|line| {
+        let path = line.rsplit(':').next()?;
+        let unit = path.rsplit('/').find(|part| part.ends_with(".service"))?;
+        let name = unit.strip_suffix(".service")?;
+        (!name.is_empty()).then(|| name.to_owned())
+    })
+}
+
+/// What `dsh-codex pair --ssh` needs to know about this server when the
+/// phone reaches it through SSH (`--remote-user`, `--remote-home`,
+/// `--remote-bin`, `--remote-port`, `--unit`); unknown values are `null`.
+fn ssh_pair(s: &AppState, host: &dyn MobileHost) -> Value {
+    let bin = std::env::current_exe().ok().map(|p| {
+        let shown = p.display().to_string();
+        shown
+            .strip_suffix(" (deleted)")
+            .map_or(shown.clone(), str::to_owned)
+    });
+    let port = s.mobile.loopback_port.load(Ordering::Relaxed);
+    json!({
+        "user": process_user(),
+        "home": host.home(),
+        "bin": bin,
+        "port": (port != 0).then_some(port),
+        "unit": systemd_unit(),
+    })
+}
+
 /// The `GET /api/mobile` document; `current` is the requesting client.
+/// `port` is the listening port while the listener runs (else the saved
+/// one), `configuredPort` always the saved one (0 = any free port).
 fn view(s: &AppState, current: Option<&str>) -> ApiResult<Value> {
     let (host, store) = parts(s)?;
     let settings = host.settings();
@@ -273,8 +328,10 @@ fn view(s: &AppState, current: Option<&str>) -> ApiResult<Value> {
     let mut out = json!({
         "enabled": settings.enabled,
         "port": settings.port,
+        "configuredPort": settings.port,
         "server": server,
         "clients": clients,
+        "sshPair": ssh_pair(s, host),
     });
     if let Some((port, sha)) = s.mobile.listening() {
         out["port"] = json!(port);

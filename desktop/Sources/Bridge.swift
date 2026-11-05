@@ -46,6 +46,8 @@ enum BridgeScript {
       var api = {
         get version() { return state.version; },
         get platform() { return 'macos'; },
+        get cliPath() { return state.cliPath || ''; },
+        get ssh() { return state.ssh ? clone(state.ssh) : null; },
         get current() { return state.current; },
         get instances() { return clone(state.instances); },
         get capabilities() { return clone(state.capabilities); },

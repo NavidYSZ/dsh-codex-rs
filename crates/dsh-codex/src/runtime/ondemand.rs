@@ -7,7 +7,10 @@
 //!   instructions into that turn.
 //! - **MCP servers**: a chat offers the tools of the servers it switched on
 //!   (`@server`, `@plugin`, the composer's connector picker) plus the servers
-//!   new chats preselect (`always`), minus `disabled_tools`. The chat's own
+//!   it was created with preselected, minus `disabled_tools`. The header
+//!   records that preselection (`mcpPreselected`, the `always` servers at
+//!   creation), so changing `always` later only affects new chats; chats
+//!   from before the header key follow `always` as they did. The chat's own
 //!   choice wins: a preselected server it switched off adds neither tools
 //!   nor prompt guidance. Choices are recorded in the session log only:
 //!   the tools join through the agent's `tool-addition` developer message
@@ -23,8 +26,8 @@ use std::sync::{Arc, Weak};
 use dshx_agent::{ExtraSection, PreStep, PreStepHook, ToolUpdate};
 use dshx_core::config::{Config, McpAvailability};
 use dshx_core::{
-    ContentBlock, Message, MessageSource, Role, SessionEvent, Tool, ToolContext, ToolError,
-    ToolOutput, ToolRegistry, ToolSchema, kinds,
+    ContentBlock, Message, MessageSource, Role, SessionEvent, SessionHeader, Tool, ToolContext,
+    ToolError, ToolOutput, ToolRegistry, ToolSchema, kinds,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -40,8 +43,27 @@ pub const ACTIVATION: &str = "mcp-activation";
 pub const DEACTIVATION: &str = "mcp-deactivation";
 const GUIDANCE: &str = "mcp-guidance";
 
+/// Header key: the servers a chat was created with preselected.
+pub const PRESELECTED: &str = "mcpPreselected";
+
+/// The servers `header`'s chat was created with preselected; `None` for
+/// chats from before the key (they follow each server's current `always`).
+pub fn preselection(header: &SessionHeader) -> Option<BTreeSet<String>> {
+    let list = header.extra.get(PRESELECTED)?.as_array()?;
+    Some(
+        list.iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect(),
+    )
+}
+
+/// Records `servers` as the preselection of a chat being created.
+pub fn record_preselection(header: &mut SessionHeader, servers: &BTreeSet<String>) {
+    header.extra.insert(PRESELECTED.into(), json!(servers));
+}
+
 /// A chat's explicit choice for one server; servers without one follow
-/// their `always` setting.
+/// the chat's preselection (see [`McpSelection::preselects`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
     On,
@@ -59,6 +81,8 @@ pub struct McpHistory {
     pub notes: BTreeMap<String, u64>,
     /// Canonical guidance last delivered in a note, without storing its text twice.
     pub guidance: BTreeMap<String, String>,
+    /// The header's preselection ([`preselection`]); `None` for older chats.
+    pub preselected: Option<BTreeSet<String>>,
 }
 
 fn header_tools(event: &SessionEvent) -> Vec<String> {
@@ -412,15 +436,27 @@ pub struct McpSelection<'a> {
     pub choices: &'a BTreeMap<String, Choice>,
     pub declared: &'a HashSet<String>,
     pub tool_update: Option<ToolUpdate>,
+    /// The chat's recorded preselection; `None` = an older chat.
+    pub preselected: Option<&'a BTreeSet<String>>,
 }
 
 impl McpSelection<'_> {
-    /// Whether the chat offers `server`'s tools: its choice, else `always`.
+    /// Whether the chat started with `server` preselected: the servers its
+    /// header recorded, else (older chats) the server's current `always`.
+    pub fn preselects(&self, server: &str) -> bool {
+        match self.preselected {
+            Some(servers) => servers.contains(server),
+            None => self.config.mcp_availability(server).always,
+        }
+    }
+
+    /// Whether the chat offers `server`'s tools: its choice, else its
+    /// preselection.
     pub fn offered(&self, server: &str) -> bool {
         match self.choices.get(server) {
             Some(Choice::On) => true,
             Some(Choice::Off) => false,
-            None => self.config.mcp_availability(server).always,
+            None => self.preselects(server),
         }
     }
 }
@@ -433,16 +469,42 @@ impl Runtime {
         names
     }
 
-    /// The MCP history of a session log.
-    pub(crate) fn mcp_history(&self, events: &[SessionEvent]) -> McpHistory {
+    /// The servers a chat created now starts with: every configured, running
+    /// or plugin server with `always` (also one switched off globally, which
+    /// still keeps it out of every chat until it is switched on again).
+    pub(crate) fn preselected_servers(&self) -> BTreeSet<String> {
+        let config = self.config();
+        let mut names = self.mcp_server_names();
+        for plugin in config.plugins.values().filter(|p| p.enabled) {
+            names.extend(plugin.mcp_servers.keys().cloned());
+        }
+        names
+            .into_iter()
+            .filter(|s| config.mcp_availability(s).always)
+            .collect()
+    }
+
+    /// The MCP history of a session log and its header's preselection.
+    pub(crate) fn mcp_history(
+        &self,
+        header: &SessionHeader,
+        events: &[SessionEvent],
+    ) -> McpHistory {
         let names = self.mcp_server_names();
-        McpHistory::from_events(events, |tool| server_of(tool, &names))
+        let mut history = McpHistory::from_events(events, |tool| server_of(tool, &names));
+        history.preselected = preselection(header);
+        history
     }
 
     /// A session's choices: the log plus changes requested through the API
     /// that no step recorded yet.
-    pub(crate) fn mcp_choices(&self, session: &str, events: &[SessionEvent]) -> McpHistory {
-        let mut history = self.mcp_history(events);
+    pub(crate) fn mcp_choices(
+        &self,
+        session: &str,
+        header: &SessionHeader,
+        events: &[SessionEvent],
+    ) -> McpHistory {
+        let mut history = self.mcp_history(header, events);
         if let Some(pending) = self.mcp_pending.lock().unwrap().get(session) {
             for (server, on) in pending {
                 history
@@ -454,14 +516,20 @@ impl Runtime {
     }
 
     /// Servers a session offers, sorted (for the active-server chips).
-    pub(crate) fn active_mcp(&self, session: &str, events: &[SessionEvent]) -> Vec<String> {
+    pub(crate) fn active_mcp(
+        &self,
+        session: &str,
+        header: &SessionHeader,
+        events: &[SessionEvent],
+    ) -> Vec<String> {
         let config = self.config();
-        let history = self.mcp_choices(session, events);
+        let history = self.mcp_choices(session, header, events);
         let selection = McpSelection {
             config: &config,
             choices: &history.choices,
             declared: &history.declared,
             tool_update: None,
+            preselected: history.preselected.as_ref(),
         };
         self.mcp_server_names()
             .into_iter()
@@ -473,14 +541,20 @@ impl Runtime {
     /// `GET /api/sessions/:id/mcp` of a Standard or PTC chat: `active` (the
     /// servers it offers, sorted) and `servers`, one [`picker_row`] per
     /// enabled server.
-    pub(crate) fn mcp_picker(&self, session: &str, events: &[SessionEvent]) -> Value {
+    pub(crate) fn mcp_picker(
+        &self,
+        session: &str,
+        header: &SessionHeader,
+        events: &[SessionEvent],
+    ) -> Value {
         let config = self.config();
-        let history = self.mcp_choices(session, events);
+        let history = self.mcp_choices(session, header, events);
         let selection = McpSelection {
             config: &config,
             choices: &history.choices,
             declared: &history.declared,
             tool_update: None,
+            preselected: history.preselected.as_ref(),
         };
         let statuses = self.mcp.status();
         let mut names = self.mcp_server_names();
@@ -501,18 +575,15 @@ impl Runtime {
         json!({ "active": active, "servers": servers })
     }
 
-    /// System-prompt guidance of the preselected (`always`) servers that
-    /// `offered` accepts; servers a chat switched on bring theirs with the
-    /// activation note instead.
+    /// System-prompt guidance of the servers `preselected` accepts (the
+    /// preselected servers a chat still offers); servers a chat switched on
+    /// bring theirs with the activation note instead.
     pub(crate) fn mcp_prompt_sections(
         &self,
-        config: &Config,
-        offered: impl Fn(&str) -> bool,
+        preselected: impl Fn(&str) -> bool,
     ) -> Vec<ExtraSection> {
         self.mcp
-            .prompt_sections_where(|server| {
-                config.mcp_availability(server).always && offered(server)
-            })
+            .prompt_sections_where(preselected)
             .into_iter()
             .map(|section| ExtraSection {
                 name: section.name,
@@ -528,19 +599,22 @@ impl Runtime {
     pub(crate) fn chat_prompt_sections(
         &self,
         session: &str,
+        header: &SessionHeader,
         events: &[SessionEvent],
         sections: &mut Vec<ExtraSection>,
     ) {
         let config = self.config();
-        let history = self.mcp_choices(session, events);
+        let history = self.mcp_choices(session, header, events);
         let selection = McpSelection {
             config: &config,
             choices: &history.choices,
             declared: &history.declared,
             tool_update: None,
+            preselected: history.preselected.as_ref(),
         };
         sections.retain(|section| !is_mcp_section(section));
-        sections.extend(self.mcp_prompt_sections(&config, |s| selection.offered(s)));
+        sections
+            .extend(self.mcp_prompt_sections(|s| selection.preselects(s) && selection.offered(s)));
     }
 
     /// Switches `server` on or off for a session from its next step on.
@@ -637,6 +711,8 @@ impl Runtime {
 pub(crate) struct McpHook {
     pub runtime: Weak<Runtime>,
     pub session: String,
+    /// The header's preselection ([`preselection`]); fixed for the chat's life.
+    pub preselected: Option<BTreeSet<String>>,
 }
 
 #[async_trait::async_trait]
@@ -677,6 +753,7 @@ impl PreStepHook for McpHook {
             choices: &logged.choices,
             declared: &logged.declared,
             tool_update: step.tool_update,
+            preselected: self.preselected.as_ref(),
         };
         let after = McpSelection {
             choices: &choices,
@@ -687,11 +764,11 @@ impl PreStepHook for McpHook {
         // without changing names. Neither may leave stale bindings for this step.
         step.update_tools(|registry| Runtime::swap_mcp_tools(registry, tools));
 
-        // Guidance of preselected servers belongs to the system prompt; one the
-        // chat switched off has none. Refresh it here too: a connection can
-        // finish or restart during the current turn. Keep other products'
-        // sections and do not record an explicit per-chat activation.
-        let sections = rt.mcp_prompt_sections(&config, |server| after.offered(server));
+        // Guidance of the chat's preselected servers belongs to the system
+        // prompt; one the chat switched off has none. Refresh it here too: a
+        // connection can finish or restart during the current turn. Keep other
+        // products' sections and do not record an explicit per-chat activation.
+        let sections = rt.mcp_prompt_sections(|s| after.preselects(s) && after.offered(s));
         if step
             .prompt_sections()
             .into_iter()
@@ -711,6 +788,7 @@ impl PreStepHook for McpHook {
             let (was, now) = (before.offered(server), after.offered(server));
             if now {
                 let availability = config.mcp_availability(server);
+                let preselected = after.preselects(server);
                 let mut tool_names: Vec<String> = available
                     .iter()
                     .filter(|entry| {
@@ -726,13 +804,9 @@ impl PreStepHook for McpHook {
                     != Some(&guidance_stamp(&tool_names, resources, &instructions));
                 if !was {
                     // A preselected server's instructions are in the system prompt.
-                    let note = if availability.always {
-                        ""
-                    } else {
-                        &instructions
-                    };
+                    let note = if preselected { "" } else { &instructions };
                     entering.push(activation_message(server, &tool_names, resources, note));
-                } else if !availability.always && (changed || compacted.contains(server)) {
+                } else if !preselected && (changed || compacted.contains(server)) {
                     entering.push(server_message(
                         server,
                         &tool_names,
@@ -860,8 +934,17 @@ mod tests {
             choices: &fresh,
             declared: &declared,
             tool_update: None,
+            preselected: None,
         };
         assert!(selection.offered("pre") && !selection.offered("plain"));
+        // A chat created with a recorded preselection keeps it, whatever
+        // `always` says now.
+        let recorded: BTreeSet<String> = ["plain".to_owned()].into();
+        let created = McpSelection {
+            preselected: Some(&recorded),
+            ..selection
+        };
+        assert!(!created.offered("pre") && created.offered("plain"));
         // A preselected server the chat switched off stays off, also after a
         // restart: the deactivation note is the record.
         let off = deactivation_message("pre", false);

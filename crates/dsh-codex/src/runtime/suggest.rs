@@ -279,8 +279,12 @@ pub struct SuggestContext {
     pub cwd: Option<PathBuf>,
     /// The chat's mode (the start page: the mode it will create).
     pub preset: dshx_agent::Preset,
-    /// Session id and events (when the composer belongs to a chat).
-    pub session: Option<(String, Vec<dshx_core::SessionEvent>)>,
+    /// Session id, header and events (when the composer belongs to a chat).
+    pub session: Option<(
+        String,
+        dshx_core::SessionHeader,
+        Vec<dshx_core::SessionEvent>,
+    )>,
     pub model: Option<String>,
     pub goals: bool,
 }
@@ -401,7 +405,7 @@ impl Runtime {
             return Vec::new();
         }
         let active = match &ctx.session {
-            Some((id, events)) => self.active_mcp(id, events),
+            Some((id, header, events)) => self.active_mcp(id, header, events),
             None => Vec::new(),
         };
         let connectors = dshx_mcp::catalog::connectors();

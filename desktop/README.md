@@ -66,6 +66,13 @@ Contents/MacOS/dsh-codex web --no-open --port 0 --ready-file ~/Library/Applicati
   Browser), wie bisher Strg-C. Die App sendet SIGTERM beim Beenden, nach 6 s
   SIGKILL. Eine PID-Datei neben der Ready-Datei räumt nach einem Absturz einen
   verwaisten Server auf (nur wenn dessen Programmpfad passt).
+- **Rückfrage beim Beenden:** Vorher fragt die App jeden verbundenen lokalen
+  Server, ob Chats noch arbeiten (`GET /api/sessions`, Status `running` oder
+  `waiting-approval`) oder Hintergrundjobs leben (`job/registered` seit dem
+  Serverstart ohne `job/settled`, aus den Protokollen der höchstens 20 seither
+  geänderten Chats). Dann zeigt sie „N Chats arbeiten noch“ mit „Beenden“ und
+  „Abbrechen“ (Vorgabe). Jede Anfrage hat 1,5 s Zeit; was nicht antwortet, gilt
+  als untätig. SSH- und URL-Instanzen laufen ohnehin weiter.
 - Umgebung: die Umgebung der Login-Shell des Nutzers (`$SHELL -i -l -c env`,
   Zeitlimit 8 s), damit Werkzeuge denselben `PATH` sehen wie im Terminal;
   zusätzlich `DSHX_DESKTOP=<Version>`, optional `DSHX_HOME`.
@@ -200,6 +207,8 @@ dem Hauptframe mit genau dem Origin der eigenen Instanz.
 |---|---|---|
 | `version` | `string` | Version der App (`CFBundleShortVersionString`). |
 | `platform` | `"macos"` | |
+| `cliPath` | `string` | Pfad des mitgelieferten `dsh-codex` im App-Paket (`…/Aether.app/Contents/MacOS/dsh-codex`), für Befehle, die die Seite zum Ausführen auf diesem Mac zeigt (z. B. `dsh-codex pair --ssh`). Leer, wenn er fehlt. |
+| `ssh` | `{host, config} \| null` | Nur auf Seiten einer SSH-Instanz: deren Host und SSH-Konfigurationsdatei (Pfad ausgeschrieben), sonst `null`. |
 | `current` | `string` | ID der Instanz, **zu der diese Seite gehört**. Solange die Seite sichtbar ist, ist das auch die aktive Instanz. |
 | `instances` | `Array<{id, name, kind, active, status, unread, connectedAt?}>` | Alle Instanzen in Menüreihenfolge (Kopie). `kind`: `"local"`, `"ssh"`, `"url"`. `active`: wird gerade im Fenster gezeigt oder ist das Ziel eines laufenden Wechsels. `status`: `"idle"` (nicht gestartet), `"starting"`, `"ready"`, `"error"`. `unread`: zuletzt per `setBadge` gemeldete Zahl dieser Instanz. `connectedAt`: Zeitpunkt (ms) der letzten erfolgreichen Verbindung. |
 | `capabilities` | `{revealInFinder, openInEditor, pickFolder, transferFolder: boolean}` | `revealInFinder`, `openInEditor`, `pickFolder`: nur bei lokalen Instanzen `true` (Pfade entfernter Server gibt es auf dem Mac nicht). `transferFolder`: `true`, sobald es mindestens zwei Instanzen gibt (jede Art). |
