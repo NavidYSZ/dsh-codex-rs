@@ -845,6 +845,17 @@ impl Inner {
             let mut st = self.state.lock().await;
             st.stopping = true;
             if st.mapper.running().is_none() {
+                // Between turns only a compaction can run; Stop ends it too.
+                if st.compacting
+                    && let Some(r) = &st.process
+                {
+                    let process = r.process.clone();
+                    drop(st);
+                    let _ = process
+                        .rpc
+                        .request(json!({"type": "abort"}), ABORT_TIMEOUT)
+                        .await;
+                }
                 return Ok(());
             }
             match st.process.as_ref() {
