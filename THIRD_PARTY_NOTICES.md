@@ -42,3 +42,16 @@ Preact, htm and marked are vendored in `ui/vendor/`; their licenses are in
 The macOS app bundles Node.js 26.13.0 from https://nodejs.org/. Its full license
 and bundled dependency notices are included as `Contents/Resources/NODE-LICENSE.txt`.
 The source build verifies the archive checksum pinned in `desktop/fetch-node.py`.
+
+## Pi coding agent
+
+The macOS app bundles the Pi engine runtime in `Contents/Resources/pi/`:
+[`@earendil-works/pi-coding-agent`](https://github.com/earendil-works/pi) 1.5.0
+(`dist/bundle`, MIT License, see its README), with
+[jiti](https://github.com/unjs/jiti) 2.7.0 (MIT License, Copyright (c) Pooya
+Parsa; `node_modules/jiti/LICENSE`) and
+[photon-node](https://github.com/silvia-odwyer/photon) 0.3.4 (Apache License
+2.0; `node_modules/@silvia-odwyer/photon-node/LICENSE.md`). The source build
+verifies the SHA-512 of each npm tarball pinned in `desktop/fetch-pi.py`.
+`crates/dshx-pi/tests/fixtures/` holds event streams recorded from that Pi
+release with its faux test provider.
