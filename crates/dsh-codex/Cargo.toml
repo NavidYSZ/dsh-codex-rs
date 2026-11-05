@@ -45,6 +45,10 @@ tracing-subscriber.workspace = true
 url = "2"
 uuid.workspace = true
 
+# `dsh-codex web`: one server per data directory (`flock` on `run/web.lock`).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }
+
 [dev-dependencies]
 dshx-testkit.workspace = true
 reqwest.workspace = true

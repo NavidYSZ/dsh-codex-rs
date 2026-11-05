@@ -5,12 +5,12 @@
 //! Every bash call is a job while it runs (as in dsh): the registry reports
 //! `job/registered` and `job/settled` through [`JobRegistry::subscribe`], and the
 //! agent appends them to the session log and delivers completion notices.
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use dshx_core::{NewEvent, Tool, ToolContext, ToolError, ToolOutput, ToolSchema};
+use dshx_core::{NewEvent, SessionEvent, Tool, ToolContext, ToolError, ToolOutput, ToolSchema};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use tokio::sync::{mpsc, watch};
@@ -30,6 +30,8 @@ pub const WAIT_DEFAULT_MS: f64 = 30_000.0;
 pub const WAIT_MAX_MS: f64 = 600_000.0;
 /// dsh `CONTEXT_SUMMARY_MAX_CHARS`.
 const CONTEXT_SUMMARY_MAX_CHARS: usize = 120;
+/// Detail of a job [`JobRegistry::shutdown`] settled.
+pub const TEARDOWN_DETAIL: &str = "stopped when its session closed";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobStatus {
@@ -260,6 +262,112 @@ impl JobEvent {
             summary,
         })
     }
+}
+
+/// A job an earlier process of this session ran, known from the session
+/// log (`job/registered`, `job/settled`). It is gone, yet its id is not
+/// unknown: `job_output` and `job_kill` say how it ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EndedJob {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    /// Status of its `job/settled`; `None` when it never settled (it was
+    /// still running when that process stopped).
+    pub status: Option<String>,
+    pub detail: Option<String>,
+}
+
+impl EndedJob {
+    /// `[status: killed, stopped when its session closed]`
+    pub fn status_line(&self) -> String {
+        match (&self.status, &self.detail) {
+            (Some(status), Some(detail)) => format!("[status: {status}, {detail}]"),
+            (Some(status), None) => format!("[status: {status}]"),
+            (None, _) => "[status: ended when Aether stopped]".to_owned(),
+        }
+    }
+
+    fn how(&self) -> String {
+        match self.status {
+            Some(_) => format!("ended before this chat was reopened {}", self.status_line()),
+            None => "was still running when Aether stopped and ended with it".to_owned(),
+        }
+    }
+
+    /// The `job_output` answer.
+    pub fn output_text(&self) -> String {
+        format!(
+            "job {} ({}: {}) {}; its output is no longer available. Run the command again if you still need it.",
+            self.id,
+            self.kind,
+            self.label,
+            self.how()
+        )
+    }
+
+    /// The `job_kill` answer.
+    pub fn kill_text(&self) -> String {
+        format!(
+            "job {} had already ended: it {}. There is nothing to kill.",
+            self.id,
+            self.how()
+        )
+    }
+
+    pub fn public_json(&self) -> Value {
+        let mut map = Map::new();
+        map.insert("id".into(), json!(self.id));
+        map.insert("kind".into(), json!(self.kind));
+        map.insert("label".into(), json!(self.label));
+        map.insert(
+            "status".into(),
+            json!(self.status.as_deref().unwrap_or("ended")),
+        );
+        if let Some(detail) = &self.detail {
+            map.insert("detail".into(), json!(detail));
+        }
+        Value::Object(map)
+    }
+}
+
+/// The jobs a session log records, by id, with their settlement if any.
+pub fn ended_jobs(events: &[SessionEvent]) -> HashMap<String, EndedJob> {
+    let mut jobs: HashMap<String, EndedJob> = HashMap::new();
+    let text =
+        |e: &SessionEvent, key: &str| e.data.get(key).and_then(Value::as_str).map(str::to_owned);
+    for e in events {
+        let Some(id) = text(e, "jobId") else {
+            continue;
+        };
+        match e.kind.as_str() {
+            "job/registered" => {
+                jobs.insert(
+                    id.clone(),
+                    EndedJob {
+                        id,
+                        kind: text(e, "kind").unwrap_or_else(|| "job".into()),
+                        label: text(e, "label").unwrap_or_default(),
+                        status: None,
+                        detail: None,
+                    },
+                );
+            }
+            "job/settled" => {
+                let job = jobs.entry(id.clone()).or_insert_with(|| EndedJob {
+                    id,
+                    kind: text(e, "kind").unwrap_or_else(|| "job".into()),
+                    label: text(e, "label").unwrap_or_default(),
+                    status: None,
+                    detail: None,
+                });
+                job.status = Some(text(e, "status").unwrap_or_else(|| "finished".into()));
+                job.detail = text(e, "detail");
+            }
+            _ => {}
+        }
+    }
+    jobs
 }
 
 /// A completion message for the job's owner.
@@ -837,8 +945,16 @@ impl JobRegistry {
         Ok(())
     }
 
-    /// Stops every running job (session or server teardown); their
-    /// settlements carry cause `teardown`, so no completion notice follows.
+    /// Whether the registry holds job `id` (of any owner).
+    pub fn knows(&self, id: &str) -> bool {
+        self.shared.jobs.lock().unwrap().iter().any(|j| j.id == id)
+    }
+
+    /// Stops every running job (session or server teardown) and settles it
+    /// right away as `killed` with cause `teardown`, so no completion notice
+    /// follows. The owner is going away: its log must get the settlement
+    /// now, not whenever the process notices the kill (its own report is
+    /// ignored then).
     pub fn shutdown(&self, owner: Option<&str>) {
         let cancels: Vec<(String, Option<CancelFn>)> = {
             let mut jobs = self.shared.jobs.lock().unwrap();
@@ -856,10 +972,20 @@ impl JobRegistry {
                 })
                 .collect()
         };
-        for (_, cancel) in cancels {
+        for (id, cancel) in cancels {
             if let Some(cancel) = cancel {
                 cancel(Some("owner disposed"));
             }
+            self.settle(
+                &id,
+                JobOutcome {
+                    status: JobStatus::Killed,
+                    detail: Some(TEARDOWN_DETAIL.into()),
+                    result: None,
+                },
+                Some(SettleCause::Teardown),
+                false,
+            );
         }
     }
 }
@@ -963,6 +1089,14 @@ impl Tool for JobOutputTool {
         validate_job_id(&args.job_id)?;
         let state = ToolState::get(&ctx)?;
         let jobs = state.jobs();
+        if !jobs.knows(&args.job_id)
+            && let Some(ended) = state.ended_job(&args.job_id)
+        {
+            return Ok(ToolOutput {
+                value: Some(json!({"text": "", "job": ended.public_json()})),
+                ..ToolOutput::text(ended.output_text())
+            });
+        }
         let caller = Some(ctx.session_id.as_str());
         if args.wait == Some(true) {
             let timeout = args.timeout_ms.unwrap_or(WAIT_DEFAULT_MS).min(WAIT_MAX_MS);
@@ -1046,6 +1180,14 @@ impl Tool for JobKillTool {
         validate_job_id(&args.job_id)?;
         let state = ToolState::get(&ctx)?;
         let jobs = state.jobs();
+        if !jobs.knows(&args.job_id)
+            && let Some(ended) = state.ended_job(&args.job_id)
+        {
+            return Ok(ToolOutput {
+                value: Some(json!({"outcome": "already-finished", "job": ended.public_json()})),
+                ..ToolOutput::text(ended.kill_text())
+            });
+        }
         let caller = Some(ctx.session_id.as_str());
         let result = jobs
             .kill_inner(&args.job_id, caller, args.reason.as_deref(), true)
@@ -1176,6 +1318,62 @@ mod tests {
                 .await
                 .unwrap_err(),
             "invalid wait timeout: expected a positive number of milliseconds, got 0"
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_settles_at_once_and_a_restored_log_knows_the_job() {
+        let registry = JobRegistry::default();
+        let mut events = registry.subscribe();
+        let sink = registry.start(spec("s1")).unwrap();
+        let other = registry.start(spec("s2")).unwrap();
+        let killed = Arc::new(Mutex::new(false));
+        let k = killed.clone();
+        sink.bind_cancel(move |_| *k.lock().unwrap() = true);
+        registry.shutdown(Some("s1"));
+        assert!(*killed.lock().unwrap());
+        let view = registry.get(sink.id(), Some("s1")).unwrap();
+        assert_eq!(view.status, JobStatus::Killed);
+        assert_eq!(view.detail.as_deref(), Some(TEARDOWN_DETAIL));
+        assert_eq!(
+            registry.get(other.id(), Some("s2")).unwrap().status,
+            JobStatus::Running
+        );
+        // The producer's late report changes nothing.
+        sink.settle(JobOutcome {
+            status: JobStatus::Completed,
+            detail: None,
+            result: None,
+        });
+        let mut log = Vec::new();
+        while let Ok(event) = events.try_recv() {
+            if let Some(e) = event.session_event() {
+                log.push(SessionEvent {
+                    kind: e.kind,
+                    seq: log.len() as u64,
+                    time: 0,
+                    data: e.data,
+                    extra: Default::default(),
+                });
+            }
+        }
+        let settled: Vec<_> = log.iter().filter(|e| e.kind == "job/settled").collect();
+        assert_eq!(settled.len(), 1);
+        assert_eq!(settled[0].data["cause"], "teardown");
+        // After a restart: settled, and never settled (the old bug).
+        let ended = ended_jobs(&log);
+        let job = &ended[sink.id()];
+        assert_eq!(job.status.as_deref(), Some("killed"));
+        assert!(
+            job.output_text()
+                .contains("ended before this chat was reopened")
+        );
+        let running = &ended[other.id()];
+        assert_eq!(running.status, None);
+        assert!(
+            running
+                .kill_text()
+                .contains("was still running when Aether stopped")
         );
     }
 

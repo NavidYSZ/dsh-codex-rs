@@ -44,6 +44,14 @@ pub const DEFAULT_RETRYABLE_CODES: [&str; 5] = [
     "TRANSPORT",
 ];
 
+/// Retried in `normal` mode beside `retryable_codes` (dsh-codex), but only
+/// while the failed attempt showed nothing: a stream that ended before
+/// `message_stop` is a cut connection, and before any visible delta a fresh
+/// attempt repeats nothing. After visible output, observers that print as
+/// they stream (headless, SDK clients) would show it twice. Not part of the
+/// dsh `policyKey`.
+pub const SILENT_RETRYABLE_CODES: [&str; 1] = ["STREAM_CLOSED"];
+
 impl Default for RetryPolicy {
     fn default() -> Self {
         RetryPolicy {
@@ -130,9 +138,22 @@ impl RetryPolicy {
     /// Decides whether attempt `previous_retry + 1` happens and after which delay.
     /// `None` keeps the original failure.
     pub fn decide(&self, failure: &LlmFailure, previous_retry: u32) -> Option<f64> {
+        self.decide_attempt(failure, previous_retry, true)
+    }
+
+    /// [`Self::decide`] for an attempt that `visible`ly streamed output (or
+    /// not): without any, `SILENT_RETRYABLE_CODES` are retried as well.
+    pub fn decide_attempt(
+        &self,
+        failure: &LlmFailure,
+        previous_retry: u32,
+        visible: bool,
+    ) -> Option<f64> {
         match &self.mode {
             RetryMode::Normal { max_retries } => {
-                if !self.retryable_codes.contains(&failure.code) || previous_retry >= *max_retries {
+                let retryable = self.retryable_codes.contains(&failure.code)
+                    || (!visible && SILENT_RETRYABLE_CODES.contains(&failure.code.as_str()));
+                if !retryable || previous_retry >= *max_retries {
                     return None;
                 }
             }
@@ -211,5 +232,24 @@ mod tests {
         ra.provider_retry_after_ms = Some(20_000);
         assert_eq!(p.decide(&ra, 0), None);
         assert_eq!(js_json_number(500.0).to_string(), "500");
+    }
+
+    #[test]
+    fn a_closed_stream_is_retried_only_before_visible_output() {
+        let p = RetryPolicy {
+            random: Arc::new(|| 0.5),
+            ..Default::default()
+        };
+        let closed = LlmFailure::new("STREAM_CLOSED", "stream ended before message_stop");
+        assert_eq!(p.decide_attempt(&closed, 0, false), Some(500.0));
+        assert_eq!(p.decide_attempt(&closed, 5, false), None);
+        assert_eq!(p.decide_attempt(&closed, 0, true), None);
+        assert_eq!(p.decide(&closed, 0), None);
+        assert_eq!(
+            p.decide_attempt(&LlmFailure::new("AUTH", "x"), 0, false),
+            None
+        );
+        // The dsh policy key is unchanged.
+        assert!(!p.policy_key().contains("STREAM_CLOSED"));
     }
 }

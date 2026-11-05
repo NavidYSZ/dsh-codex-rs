@@ -12,6 +12,7 @@ use dshx_core::{SandboxMode, ToolContext, ToolError};
 
 use crate::args::fail;
 use crate::sandbox::{self, denial_marker, escalation_hint, writable_roots};
+use crate::state::Observation;
 
 pub mod image;
 pub mod lang;
@@ -152,20 +153,24 @@ pub struct Info {
     pub mode: u32,
 }
 
-/// `stat` following symlinks; `None` when absent (dsh `probe`).
+/// Modification time in nanoseconds since the epoch.
+fn mtime_ns(meta: &std::fs::Metadata) -> i128 {
+    use std::os::unix::fs::MetadataExt;
+    i128::from(meta.mtime()) * 1_000_000_000 + i128::from(meta.mtime_nsec())
+}
+
+/// `stat` following symlinks; `None` when absent (dsh `probe`). The version
+/// is `dev:ino:size:mtime`: content changes move the mtime (and usually the
+/// size), a replacement by rename the inode. dsh also takes the ctime, which
+/// a mere `chmod` bumps, so a script made executable after `write` could no
+/// longer be edited.
 pub fn probe(path: &Path) -> Result<Option<Info>, ToolError> {
     use std::os::unix::fs::MetadataExt;
     match std::fs::metadata(path) {
         Ok(meta) => {
-            let mtime = i128::from(meta.mtime()) * 1_000_000_000 + i128::from(meta.mtime_nsec());
-            let ctime = i128::from(meta.ctime()) * 1_000_000_000 + i128::from(meta.ctime_nsec());
+            let mtime = mtime_ns(&meta);
             Ok(Some(Info {
-                version: format!(
-                    "{}:{}:{}:{mtime}:{ctime}",
-                    meta.dev(),
-                    meta.ino(),
-                    meta.size()
-                ),
+                version: format!("{}:{}:{}:{mtime}", meta.dev(), meta.ino(), meta.size()),
                 is_file: meta.is_file(),
                 size: meta.size(),
                 mode: meta.mode() & 0o777,
@@ -176,6 +181,86 @@ pub fn probe(path: &Path) -> Result<Option<Info>, ToolError> {
         }
         Err(error) => Err(fail(format!("cannot stat \"{}\": {error}", path.display()))),
     }
+}
+
+/// `meta` key of the file version a successful `read`, `write`, `edit` or
+/// `read_image` observed; the session log keeps it for [`restored_observations`].
+pub const VERSION_META_KEY: &str = "fileVersion";
+
+/// Tools whose successful results observe their file (`meta.path`).
+const OBSERVING_TOOLS: [&str; 4] = ["read", "write", "edit", "read_image"];
+
+/// The read-before-write gate of a session resumed from its log: per file
+/// the last successful observation of this session (`tool/result`, nested
+/// PTC calls in `tool/ptc-dispatch`). A logged version is taken as is, so
+/// `write`/`edit` refuse a file changed since, exactly as without a restart.
+/// Older logs carry no version: such a file counts as observed at its
+/// current version only if it was not modified after that log entry.
+pub(crate) fn restored_observations(
+    events: &[dshx_core::SessionEvent],
+) -> HashMap<PathBuf, Observation> {
+    use serde_json::Value;
+    let mut names: HashMap<&str, &str> = HashMap::new();
+    // Per path: the logged version (if any) and the entry's time (ms).
+    let mut last: HashMap<PathBuf, (Option<String>, u64)> = HashMap::new();
+    for e in events {
+        let (name, failed, meta) = match e.kind.as_str() {
+            dshx_core::kinds::TOOL_CALL => {
+                if let (Some(id), Some(name)) = (
+                    e.data.get("callId").and_then(Value::as_str),
+                    e.data.get("name").and_then(Value::as_str),
+                ) {
+                    names.insert(id, name);
+                }
+                continue;
+            }
+            // Pruned replacements copy an older result's meta: originals only.
+            dshx_core::kinds::TOOL_RESULT
+                if !e.extra.get("surfaceOp").is_some_and(Value::is_object) =>
+            {
+                let message = &e.data["message"];
+                let name = message["toolCallId"]
+                    .as_str()
+                    .and_then(|id| names.get(id).copied());
+                (name, message["isError"] == true, e.data.get("meta"))
+            }
+            "tool/ptc-dispatch" => (
+                e.data.get("name").and_then(Value::as_str),
+                e.data["isError"] == true,
+                e.data.get("meta"),
+            ),
+            _ => continue,
+        };
+        if failed
+            || e.data.get("error").is_some()
+            || !name.is_some_and(|n| OBSERVING_TOOLS.contains(&n))
+        {
+            continue;
+        }
+        let Some(path) = meta.and_then(|m| m.get("path")).and_then(Value::as_str) else {
+            continue;
+        };
+        let version = meta
+            .and_then(|m| m.get(VERSION_META_KEY))
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        last.insert(PathBuf::from(path), (version, e.time));
+    }
+    last.into_iter()
+        .filter_map(|(path, (version, at_ms))| {
+            let version = match version {
+                Some(version) => version,
+                None => {
+                    let meta = std::fs::metadata(&path).ok().filter(|m| m.is_file())?;
+                    if mtime_ns(&meta) > i128::from(at_ms) * 1_000_000 {
+                        return None;
+                    }
+                    probe(&path).ok().flatten()?.version
+                }
+            };
+            Some((path, Observation::Present(version)))
+        })
+        .collect()
 }
 
 /// Serializes mutations per target (dsh `fs-local` `withLock`).
@@ -402,6 +487,115 @@ mod tests {
                 .contains("a parent path segment is not a directory"),
             "{e}"
         );
+    }
+
+    #[test]
+    fn chmod_keeps_the_version_and_a_restart_restores_what_was_seen() {
+        use dshx_core::SessionEvent;
+        use serde_json::{Value, json};
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = std::fs::canonicalize(tmp.path()).unwrap();
+        let version = |p: &Path| probe(p).unwrap().unwrap().version;
+        let script = dir.join("run.sh");
+        std::fs::write(&script, "echo 1\n").unwrap();
+        let seen = version(&script);
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(version(&script), seen, "chmod changes no content");
+        let changed = dir.join("changed.txt");
+        std::fs::write(&changed, "a").unwrap();
+        let read_then = version(&changed);
+        std::fs::write(&changed, "abc").unwrap();
+        assert_ne!(version(&changed), read_then);
+        let legacy = dir.join("legacy.txt");
+        std::fs::write(&legacy, "x").unwrap();
+        let modified_later = dir.join("later.txt");
+        std::fs::write(&modified_later, "y").unwrap();
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+
+        let mut events: Vec<SessionEvent> = Vec::new();
+        let mut push = |kind: &str, time: u64, data: Value, op: Value| {
+            let mut extra = serde_json::Map::new();
+            if !op.is_null() {
+                extra.insert("surfaceOp".into(), op);
+            }
+            events.push(SessionEvent {
+                kind: kind.into(),
+                seq: events.len() as u64,
+                time,
+                data,
+                extra,
+            });
+        };
+        let mut result = |id: &str, name: &str, time: u64, meta: Value, op: Value| {
+            push(
+                "tool/call",
+                time,
+                json!({"callId": id, "name": name}),
+                Value::Null,
+            );
+            push(
+                "tool/result",
+                time,
+                json!({"message": {"toolCallId": id, "isError": false}, "meta": meta}),
+                op,
+            );
+        };
+        let path = |p: &Path| p.to_str().unwrap().to_owned();
+        result(
+            "c1",
+            "write",
+            now_ms,
+            json!({"path": path(&script), "fileVersion": seen}),
+            json!("append"),
+        );
+        result(
+            "c2",
+            "read",
+            now_ms,
+            json!({"path": path(&changed), "fileVersion": read_then}),
+            json!("append"),
+        );
+        // Logs from before versions were kept: only files not modified since.
+        result(
+            "c3",
+            "read",
+            now_ms + 1_000,
+            json!({"path": path(&legacy)}),
+            json!("append"),
+        );
+        result(
+            "c4",
+            "read",
+            1_000,
+            json!({"path": path(&modified_later)}),
+            json!("append"),
+        );
+        // Not an observing tool, and a pruned copy of an older result.
+        result(
+            "c5",
+            "grep",
+            now_ms,
+            json!({"path": path(&dir)}),
+            json!("append"),
+        );
+        result(
+            "c1",
+            "write",
+            now_ms,
+            json!({"path": path(&script), "fileVersion": "stale"}),
+            json!({"op": "replace", "startSeq": 1, "endSeq": 1}),
+        );
+        let restored = restored_observations(&events);
+        assert_eq!(restored[&script], Observation::Present(seen));
+        // Restored as seen, so `write`/`edit` find it changed since.
+        assert_eq!(restored[&changed], Observation::Present(read_then));
+        assert_eq!(restored[&legacy], Observation::Present(version(&legacy)));
+        assert!(!restored.contains_key(&modified_later));
+        assert!(!restored.contains_key(&dir));
     }
 
     #[test]

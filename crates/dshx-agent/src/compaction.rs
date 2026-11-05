@@ -35,7 +35,7 @@ Output EXACTLY the Markdown structure below: keep every section, in order. Use t
 - [technologies, frameworks, patterns, and conventions in play]
 
 ## Files and Code
-- [exact path: why it matters, key changes or snippets]
+- [exact path: why it matters and what changed; name functions and symbols instead of copying code]
 
 ## Errors and Fixes
 - [error: how it was resolved, plus any related user feedback]
@@ -53,11 +53,19 @@ Output EXACTLY the Markdown structure below: keep every section, in order. Use t
 - [decisions and their rationale, constraints, user preferences, open questions, data needed to continue]
 
 Rules:
+- Keep the checkpoint short: at most about 3,000 words in total, however long the conversation is. Keep what the next steps need; drop resolved detours and superseded details.
+- Do not reproduce file contents, diffs, logs or long tool output. Quote only short snippets that are essential to continue.
 - Write concise English engineering prose. Preserve exact file paths, commands, error strings, identifiers, numeric values, function signatures, and syntax fragments.
 - Capture user feedback and explicit instructions faithfully, especially corrections.
 - Do NOT mention this summarization request or that the context was compacted.
 - Output only the checkpoint text: do not call any tool or take any other action.
 - If the conversation already contains a <compacted-summary> block, it is a PRIOR checkpoint. Do not copy it forward verbatim: preserve still-true facts, drop stale ones, and merge newer information into a single consolidated summary under the same structure.";
+
+/// dsh-codex: the summary's output cap when none is configured (dsh gives
+/// it the whole headroom). Verbose models otherwise wrote checkpoints of
+/// 40k tokens and took minutes. A summary truncated at this default cap is
+/// asked for once more with the whole headroom; a configured cap is final.
+pub(crate) const DEFAULT_SUMMARY_MAX_TOKENS: u32 = 16_384;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Trigger {
@@ -684,14 +692,17 @@ async fn summarize_and_commit(
         .and_then(|h| h.get("tools").cloned())
         .and_then(|t| serde_json::from_value(t).ok())
         .unwrap_or_default();
-    let (configured_model, max_tokens) = {
+    let (configured_model, mut max_tokens, mut fallback) = {
         let c = inner.config.lock().unwrap();
-        (
-            c.compaction.summarization_model.clone(),
-            c.compaction
-                .max_tokens
-                .unwrap_or(c.compaction.headroom_tokens.min(u32::MAX as u64) as u32),
-        )
+        let headroom = c.compaction.headroom_tokens.min(u32::MAX as u64) as u32;
+        let (cap, fallback) = match c.compaction.max_tokens {
+            Some(cap) => (cap, None),
+            None => {
+                let cap = headroom.min(DEFAULT_SUMMARY_MAX_TOKENS);
+                (cap, (cap < headroom).then_some(headroom))
+            }
+        };
+        (c.compaction.summarization_model.clone(), cap, fallback)
     };
     // The summarizer runs on the route of the model it names: the last
     // request's route, unless a summarization model is configured.
@@ -761,6 +772,16 @@ async fn summarize_and_commit(
                 return Err(LlmError(failure).into());
             }
             FinishReason::MaxTokens => {
+                // Truncated at the default cap: once more with the headroom.
+                if let Some(headroom) = fallback.take() {
+                    tracing::info!(
+                        max_tokens,
+                        headroom,
+                        "compaction summary hit its default cap; retrying with the headroom"
+                    );
+                    max_tokens = headroom;
+                    continue;
+                }
                 anyhow::bail!("summarization truncated at the token cap (incomplete checkpoint)")
             }
             _ => break (asm.blocks(), asm.usage().cloned()),

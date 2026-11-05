@@ -5,6 +5,7 @@ mod config_file;
 mod fork;
 mod headless;
 mod hub;
+mod instance_lock;
 mod jsonrpc;
 mod live;
 mod pair;
@@ -179,7 +180,12 @@ async fn async_main(cli: Cli) -> anyhow::Result<i32> {
             port,
             no_open,
             ready_file,
-        }) => web::run(start(Some(WEB_MCP_WAIT)).await?, port, !no_open, ready_file).await,
+        }) => {
+            // Before the runtime and its MCP servers: a second server on the
+            // same data directory would take chat locks and run Goals too.
+            instance_lock::acquire(&dshx_core::config::home_dir())?;
+            web::run(start(Some(WEB_MCP_WAIT)).await?, port, !no_open, ready_file).await
+        }
         Some(Command::Sdk) => sdk::run(start(None).await?).await,
         Some(Command::Pair(args)) => pair::run(*args),
         Some(Command::Hub { command }) => hub::run(command).await,

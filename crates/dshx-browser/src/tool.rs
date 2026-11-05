@@ -312,6 +312,11 @@ pub(crate) async fn run(
     if !ACTIONS.contains(&action) {
         bail!("unknown action \"{}\"", js::display(input.get("action")));
     }
+    // Another chat's call waits for the user's "Allow": answer now instead
+    // of queueing behind it for up to a minute.
+    if let Some(answer) = browser.waiting_for_allow() {
+        bail!("{answer}");
+    }
     let mut ctl = browser.lock().await;
     let result = run_locked(&mut ctl, action, input, settings).await;
     ctl.touch();

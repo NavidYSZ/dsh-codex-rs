@@ -171,10 +171,12 @@ impl Tool for ReadImageTool {
             .save_image(image)
             .await
             .map_err(|e| fail(format!("cannot read \"{display}\": {e}")))?;
-        state.observe(&target.key, Observation::Present(info.version));
+        state.observe(&target.key, Observation::Present(info.version.clone()));
         let path = target.process_path();
         let text = format_image_output(&path, &attachment);
         let value = json!({"path": path, "image": attachment});
+        let mut meta = json!({"path": path});
+        meta[super::VERSION_META_KEY] = info.version.into();
         Ok(ToolOutput {
             content: vec![
                 ToolResultPart::Text { text },
@@ -182,7 +184,7 @@ impl Tool for ReadImageTool {
             ],
             is_error: false,
             value: Some(value),
-            meta: Some(json!({"path": path})),
+            meta: Some(meta),
             contexts: Vec::new(),
         })
     }

@@ -11,6 +11,17 @@ use dshx_tools::sandbox::{denial_marker, escalation_hint};
 use dshx_tools::testing::{FixedApprover, builder, context};
 use serde_json::json;
 
+/// `meta` without the observed file version, which the session log keeps
+/// for a restart (`dev:ino:size:mtime`).
+fn without_version(mut meta: serde_json::Value) -> serde_json::Value {
+    let version = meta
+        .as_object_mut()
+        .and_then(|m| m.remove(dshx_tools::fs::VERSION_META_KEY))
+        .expect("the observed version");
+    assert_eq!(version.as_str().unwrap().split(':').count(), 4, "{version}");
+    meta
+}
+
 fn real(path: &std::path::Path) -> String {
     std::fs::canonicalize(path)
         .unwrap()
@@ -34,7 +45,7 @@ async fn read_formats_like_dsh() {
         )
     );
     assert_eq!(
-        out.meta.unwrap(),
+        without_version(out.meta.unwrap()),
         json!({"path": format!("{cwd}/greeting.txt"), "offset": 1, "lines": [{"number": 1, "text": "hello"}], "totalLines": 1})
     );
     let big: String = [
@@ -115,7 +126,7 @@ async fn write_requires_a_read_of_existing_files() {
         )
     );
     assert_eq!(
-        out.meta.unwrap(),
+        without_version(out.meta.unwrap()),
         json!({"operation": "create", "path": format!("{cwd}/notes.txt"), "diffs": []})
     );
     assert_eq!(
@@ -227,7 +238,7 @@ async fn edit_rules_and_messages() {
         format!("The file {cwd}/config.txt has been updated successfully.")
     );
     assert_eq!(
-        out.meta.unwrap(),
+        without_version(out.meta.unwrap()),
         json!({"path": format!("{cwd}/config.txt"), "diffs": [{"path": format!("{cwd}/config.txt"), "oldText": "mode=DEBUG\nlevel=info", "newText": "mode=RELEASE\nlevel=info"}]})
     );
     // Editing again needs no read: "unless you just created or edited it".
@@ -415,7 +426,10 @@ async fn read_image_returns_an_image_part() {
         .await
         .unwrap();
     assert_eq!(bytes.len(), 69);
-    assert_eq!(out.meta.unwrap(), json!({"path": format!("{cwd}/red.png")}));
+    assert_eq!(
+        without_version(out.meta.unwrap()),
+        json!({"path": format!("{cwd}/red.png")})
+    );
 
     let text_model = builder(dir.path()).images(false).build();
     dshx_tools::ToolState::get(&text_model)
