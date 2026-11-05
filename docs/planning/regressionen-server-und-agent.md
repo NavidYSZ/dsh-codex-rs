@@ -2,7 +2,7 @@
 
 - **Status:** Umgesetzt
 - **Stand:** 2026-11-05 19:20 (Europe/Berlin)
-- **Commits:** siehe Git-Log des Branches (Nachtrag folgt)
+- **Commits:** `a7ff89f`
 
 ## Ziel
 
