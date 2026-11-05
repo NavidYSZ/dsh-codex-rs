@@ -370,9 +370,8 @@ async fn run_locked(
                 bail!("\"type\" needs \"text\"");
             };
             point = target(ctl, input).await?;
-            if point.is_some() {
+            if let Some(p) = point {
                 ctl.mini(&status, point, true).await?;
-                let p = point.unwrap();
                 ctl.mouse_click(p.x, p.y, 1).await?;
             } else {
                 ctl.mini(&status, None, false).await?;
