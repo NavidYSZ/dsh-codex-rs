@@ -52,10 +52,16 @@ function remember(ref) {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch { /* storage blocked */ }
 }
 
-/** `info.models` in `info.providers` order; models of an older server count as DeepSeek. */
-export function modelGroups(info) {
-  const models = info?.models ?? [];
-  const order = info?.providers ?? [{ id: DEEPSEEK, name: 'DeepSeek', available: true }];
+/** The engine the picker serves: the open chat's, else the new chat's. */
+const pickerEngine = (s) => (s.activeId ? s.header?.engine ?? 'dsh' : s.composer.engine ?? s.info?.settings?.defaultEngine ?? 'dsh');
+
+/** `info.models` in `info.providers` order; models of an older server count as DeepSeek.
+ * With `engine`, only models that engine can run (`engines` of a row). */
+export function modelGroups(info, engine) {
+  const models = (info?.models ?? []).filter((m) => !engine || !m.engines || m.engines.includes(engine));
+  const order = [...(info?.providers ?? [{ id: DEEPSEEK, name: 'DeepSeek', available: true }])];
+  // A provider only one engine knows (Pi's test model) still gets its group.
+  for (const m of models) if (m.provider && !order.some((p) => p.id === m.provider)) order.push({ id: m.provider, name: m.providerName ?? m.provider, available: true });
   const of = (m) => m.provider ?? DEEPSEEK;
   return order
     .map((p) => ({ ...p, models: models.filter((m) => of(m) === p.id) }))
@@ -89,12 +95,13 @@ function PickerBody({ sel, onClose }) {
   const [q, setQ] = useState('');
   const [cursor, setCursor] = useState(-1);
   const list = useRef(null);
-  const groups = useMemo(() => modelGroups(info), [info]);
+  const engine = useStore(store, pickerEngine);
+  const groups = useMemo(() => modelGroups(info, engine), [info, engine]);
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const matches = (m) => terms.every((w) => `${m.name ?? ''} ${m.id} ${m.providerName ?? ''}`.toLowerCase().includes(w));
   const recent = terms.length || groups.length < 2 ? [] : readRecent()
     .map((r) => sel.models.find((m) => m.id === r))
-    .filter((m) => m && m.available !== false)
+    .filter((m) => m && m.available !== false && (!m.engines || m.engines.includes(engine)))
     .slice(0, 3);
   const sections = [
     ...(recent.length ? [{ key: 'recent', title: t.pickerRecent, models: recent }] : []),

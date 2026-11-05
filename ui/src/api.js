@@ -97,8 +97,8 @@ class HttpApi {
   fsPick(body) { return this.req('POST', '/api/fs/pick', body ?? {}); }
   sessions() { return this.req('GET', '/api/sessions'); }
   /** An empty `cwd` starts a chat without a project (the server gives it its own folder);
-   * `preset` is the chat's mode (default: the server's). */
-  createSession(cwd, preset) { return this.req('POST', '/api/sessions', { ...(cwd ? { cwd } : {}), ...(preset ? { preset } : {}) }); }
+   * `preset` is the chat's mode (default: the server's), `engine` its engine (`dsh`, `pi`). */
+  createSession(cwd, preset, engine) { return this.req('POST', '/api/sessions', { ...(cwd ? { cwd } : {}), ...(preset ? { preset } : {}), ...(engine ? { engine } : {}) }); }
   session(id) { return this.req('GET', `/api/sessions/${enc(id)}`); }
   /** `{title?, pinned?, archived?, seen?, unread?}` → the session's list row. */
   updateSession(id, patch) { return this.req('PATCH', `/api/sessions/${enc(id)}`, patch); }
@@ -271,6 +271,7 @@ const DEFAULT_INFO = {
     browser: { enabled: true, chrome: null },
   },
   presets: [{ id: 'standard', name: 'Standard' }, { id: 'minimal', name: 'Minimal' }, { id: 'ptc', name: 'PTC' }],
+  engines: [{ id: 'dsh', name: 'DSH', available: true }, { id: 'pi', name: 'Pi', available: true, version: '1.5.0' }],
   apiKeyConfigured: true,
   tools: { browser: true, app: true, computer: true },
   ui: { workDetails: 'standard', performanceUsage: 'detailed' },
@@ -432,18 +433,20 @@ class FixtureApi {
     return clone(row);
   }
 
-  async createSession(cwd, preset) {
+  async createSession(cwd, preset, engine) {
     await this.ready;
     const id = `session-fixture-${Date.now().toString(36)}`;
     const scratch = !cwd;
     if (scratch) cwd = `/Users/alex/.dsh-codex/chats/chat-${id.slice(-8)}`;
-    const agentPreset = preset ?? this.infoData.settings.defaultPreset ?? 'standard';
-    this.sessionData = { header: { type: 'session', version: 4, id, createdAt: Date.now(), cwd, isSeeded: false, delegationDepth: 0, agentPreset }, events: [] };
+    const pi = engine === 'pi';
+    const agentPreset = pi ? undefined : preset ?? this.infoData.settings.defaultPreset ?? 'standard';
+    const engineFields = pi ? { engine: 'pi', engineVersion: '1.5.0' } : {};
+    this.sessionData = { header: { type: 'session', version: 4, id, createdAt: Date.now(), cwd, isSeeded: false, delegationDepth: 0, ...(agentPreset ? { agentPreset } : {}), ...engineFields }, events: [] };
     this.history = [];
     this.pendingLive = [];
     this.seq = -1;
     this.status = 'idle';
-    this.created = { id, title: '', cwd, scratch, createdAt: Date.now(), updatedAt: Date.now(), status: 'idle', preset: agentPreset };
+    this.created = { id, title: '', cwd, scratch, createdAt: Date.now(), updatedAt: Date.now(), status: 'idle', ...(agentPreset ? { preset: agentPreset } : {}), ...(pi ? { engine: 'pi' } : {}) };
     return { id };
   }
 

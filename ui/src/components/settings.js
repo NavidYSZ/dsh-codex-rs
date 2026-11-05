@@ -14,7 +14,7 @@ import {
   IconChevronLeft, IconSidebar, IconArchive, IconGear, IconSun, IconCube, IconCompose, IconChart, IconInfo, IconContext, IconGlobe, IconPhone,
 } from '../icons.js';
 import { workspaceName } from './composer.js';
-import { ModeSetting } from './modes.js';
+import { ModeSetting, EngineSetting } from './modes.js';
 import { AppearanceCard } from './worklog.js';
 import { UsageCard, shortTokens } from './usage.js';
 import { ModelsSection, ModelSelect, modelHint } from './models.js';
@@ -65,6 +65,7 @@ function Defaults() {
   const model = models.find((m) => m.id === s.model) ?? models[0];
   const efforts = model?.reasoningEfforts ?? [];
   return html`<section class="card">
+    <${EngineSetting} />
     <${ModeSetting} />
     <${Field} label=${t.model} hint=${[modelHint(model), model?.offPeakCost ? t.pickerOffPeak : null].filter(Boolean).join(' · ')}>
       <${ModelSelect} value=${s.model} onChange=${(m) => updateSettings({ model: m })} />

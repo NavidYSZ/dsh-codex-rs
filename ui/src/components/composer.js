@@ -13,7 +13,7 @@ import {
 import { Menu, MenuItem, ActionItem } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
 import { PlanBar } from './plan.js';
-import { ModeChip, useChatMode, useStagedMode } from './modes.js';
+import { ModeChip, EngineChip, useChatMode, useStagedMode, useChatEngine, useStagedEngine } from './modes.js';
 import { ProjectMenu } from './folders.js';
 import { ModelChip, openModelPicker } from './models.js';
 import { IconImage } from '../icons.js';
@@ -86,6 +86,7 @@ function HeroTray({ sel }) {
       </button>
       <${WorkspaceMenu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} />
     </span>
+    <${EngineChip} />
     <${ModeChip} />
     <${AccessChip} sel=${sel} plain />
   </div>`;
@@ -128,7 +129,11 @@ export function Composer({ hero, tx }) {
   const [plus, setPlus] = useState(false);
   const plusAnchor = useRef(null);
   const chatMode = useChatMode();
-  const goals = !!info?.automation?.goals && !!activeId && chatMode !== 'minimal';
+  // A Pi chat has no goals and no MCP connectors yet (engine-pi.md, phase 3/4).
+  const chatEngine = useChatEngine();
+  const stagedEngine = useStagedEngine();
+  const pi = (hero ? stagedEngine : chatEngine) === 'pi';
+  const goals = !!info?.automation?.goals && !!activeId && chatMode !== 'minimal' && !pi;
   useEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -153,7 +158,7 @@ export function Composer({ hero, tx }) {
     const ok = await send(body, refs, { messageId: submitted.messageId, model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}), sandbox: sel.sandbox, ...(steer ? { steer } : {}) }, {
       sessionId: submitted.sessionId,
       // The start page's connector choice applies before the first prompt.
-      onCreate: applyStagedMcp,
+      onCreate: pi ? undefined : applyStagedMcp,
       onSession: (id, following) => {
         drafts.bindSession(submitted, id);
         if (following) drafts.move(submitted, id);
@@ -197,7 +202,7 @@ export function Composer({ hero, tx }) {
       </span>
       <input ref=${file} type="file" multiple hidden
         onChange=${(e) => { att.add(e.currentTarget.files); e.currentTarget.value = ''; }} />
-      <${ConnectorsButton} />
+      ${pi ? null : html`<${ConnectorsButton} />`}
       <${ModelChip} sel=${sel} />
       ${hero ? null : html`<${AccessChip} sel=${sel} />`}
       <span class="spacer" />
