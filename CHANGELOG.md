@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fix: subagents show up in the chat again. Calls a PTC `run_code` program
+  makes (subagent, read, bash …) were only in the log; they get rows of their
+  own now, and what a subagent reports back or its finishing summary appears
+  as a quiet line (“Message from …”, “Subagent … finished”) like Team mail.
+- Fix: the side panel no longer opens on every chat. Only the top bar button
+  pins it (kept across chats and restarts); a file path click, “Review” or
+  “Show in panel” opens it for the current chat only. The old stored setting
+  is ignored, so a panel that was once opened by a file click stays closed.
+
 - Fix: “use my Chrome” no longer opens a second Chrome with a fresh profile.
   The `browser` tool gains `browser: "user"`: it attaches to the user's own
   running Chrome (Chromium, Brave or Edge) over the DevTools WebSocket the

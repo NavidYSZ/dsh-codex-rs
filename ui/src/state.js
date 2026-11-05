@@ -53,7 +53,9 @@ export const store = createStore({
   renaming: null,
   desktop: readDesktop(),
   // Right side panel: 'changes', 'files', 'live' or 'file:<path relative to the chat folder>'.
-  panel: { open: readLocal('dshx-panel', '') === 'open', tab: 'changes', files: [] },
+  // `pinned`: opened with the top bar button, so it stays open in other chats and after a
+  // restart. A file click or "Review" opens it for the current chat only.
+  panel: { open: readLocal('dshx-panel-pinned', '') === 'open', pinned: readLocal('dshx-panel-pinned', '') === 'open', tab: 'changes', files: [] },
   panelWidth: Number(readLocal('dshx-panel-width', '0')) || 0,
   // Message sent while a turn runs: 'steer' joins it, 'queue' waits for it.
   followup: readLocal('dshx-followup', 'steer'),
@@ -152,7 +154,7 @@ const EMPTY_SESSION = {
 };
 
 /** Another chat: file tabs belong to the old one. */
-const freshPanel = (p) => ({ ...p, files: [], tab: p.tab.startsWith('file:') ? 'changes' : p.tab });
+const freshPanel = (p) => ({ ...p, open: !!p.pinned, files: [], tab: p.tab.startsWith('file:') ? 'changes' : p.tab });
 
 function showNewChat() {
   closeStream?.();
@@ -644,13 +646,13 @@ export function toggleFolded(path) {
 
 function setPanel(patch) {
   const panel = { ...store.get().panel, ...patch };
-  writeLocal('dshx-panel', panel.open ? 'open' : '');
+  if ('pinned' in patch) writeLocal('dshx-panel-pinned', panel.pinned ? 'open' : '');
   store.set({ panel });
 }
 
 export const openPanel = (tab) => setPanel({ open: true, ...(tab ? { tab } : {}) });
-export const closePanel = () => setPanel({ open: false });
-export const togglePanel = () => setPanel({ open: !store.get().panel.open });
+export const closePanel = () => setPanel({ open: false, pinned: false });
+export const togglePanel = () => { const open = !store.get().panel.open; setPanel({ open, pinned: open }); };
 export const setPanelTab = (tab) => setPanel({ tab });
 
 export function setPanelWidth(px) {

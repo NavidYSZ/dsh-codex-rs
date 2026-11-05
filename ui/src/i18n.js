@@ -157,7 +157,7 @@ const EN = {
   // team
   team: 'Team', teamTasks: 'Tasks', teamMembers: 'Members', noTasks: 'No tasks yet',
   taskStatus: { pending: 'Open', in_progress: 'In progress', completed: 'Done' }, memberStatus: { running: 'Working', inactive: 'Idle', provisioning: 'Starting', failed: 'Failed' },
-  owner: 'Owner', blockedBy: 'Waits for', teamMessageFrom: (n) => `Message from ${n}`,
+  owner: 'Owner', blockedBy: 'Waits for', teamMessageFrom: (n) => `Message from ${n}`, subagentDone: (n) => `Subagent ${n} finished`,
   toolLabels: {
     schedule_create: 'Created automation', schedule_update: 'Changed automation', schedule_delete: 'Deleted automation', schedule_list: 'Looked at automations',
     create_goal: 'Set goal', update_goal: 'Updated goal', get_goal: 'Looked at goal',
@@ -830,7 +830,7 @@ const DE = {
   attachImage: 'Bild',
   team: 'Team', teamTasks: 'Aufgaben', teamMembers: 'Mitglieder', noTasks: 'Noch keine Aufgaben',
   taskStatus: { pending: 'Offen', in_progress: 'In Arbeit', completed: 'Erledigt' }, memberStatus: { running: 'Arbeitet', inactive: 'Wartet', provisioning: 'Startet', failed: 'Fehlgeschlagen' },
-  owner: 'Zuständig', blockedBy: 'Wartet auf', teamMessageFrom: (n) => `Nachricht von ${n}`,
+  owner: 'Zuständig', blockedBy: 'Wartet auf', teamMessageFrom: (n) => `Nachricht von ${n}`, subagentDone: (n) => `Subagent ${n} fertig`,
   toolLabels: {
     schedule_create: 'Automation angelegt', schedule_update: 'Automation geändert', schedule_delete: 'Automation gelöscht', schedule_list: 'Automationen angesehen',
     create_goal: 'Ziel festgelegt', update_goal: 'Ziel aktualisiert', get_goal: 'Ziel angesehen',

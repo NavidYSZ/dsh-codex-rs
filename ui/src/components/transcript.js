@@ -52,9 +52,10 @@ function Notice({ item }) {
   if (item.code === 'job') {
     return html`<div class="source-line"><span class="source-label">${t.jobLabel}</span><span class="source-detail" title=${item.text}>${item.text}</span></div>`;
   }
-  if (item.code === 'goal' || item.code === 'schedule' || item.code === 'team-message') {
+  if (item.code === 'goal' || item.code === 'schedule' || item.code === 'team-message' || item.code === 'agent-message' || item.code === 'subagent-settled') {
     const [label, detail] = item.code === 'goal' ? [t.goal, t.goalRounds(item.round ?? '?', item.max ?? '∞')]
-      : item.code === 'schedule' ? [t.automations, item.prompt] : [t.teamMessageFrom(item.sender), item.text];
+      : item.code === 'schedule' ? [t.automations, item.prompt]
+      : item.code === 'subagent-settled' ? [t.subagentDone(item.sender), item.text] : [t.teamMessageFrom(item.sender), item.text];
     return html`<div class="source-line"><span class="source-label">${label}</span>${detail ? html`<span class="source-detail">${detail}</span>` : null}</div>`;
   }
   const text = item.code === 'interrupted' ? t.interrupted : t.stopped;
@@ -91,7 +92,7 @@ function ChangesCard({ turn, cwd }) {
   </div>`;
 }
 
-const SOURCES = new Set(['goal', 'schedule', 'team-message', 'job', 'mcp-activation', 'mcp-deactivation']);
+const SOURCES = new Set(['goal', 'schedule', 'team-message', 'agent-message', 'subagent-settled', 'job', 'mcp-activation', 'mcp-deactivation']);
 
 /**
  * The running turn's segments plus what streams: reasoning and starting tool

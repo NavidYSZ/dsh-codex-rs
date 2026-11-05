@@ -75,6 +75,8 @@ export function buildTranscript(events) {
   const calls = new Map();
   const approvals = new Map();
   const compactions = new Map();
+  // Subagent labels by child session (subagent/catalog), for their messages.
+  const agents = new Map();
   const shots = {};
   let turn = null;
   let lastTodoCall = null;
@@ -118,6 +120,13 @@ export function buildTranscript(events) {
         // An MCP server the user switched on or off for this chat: a quiet line.
         if (kind === 'mcp-activation' || kind === 'mcp-deactivation') {
           current(null, e.time).items.push({ kind: 'notice', key: `m:${e.seq}`, code: kind, tone: 'muted', server: d.source.server ?? '' });
+          break;
+        }
+        // A subagent reported back or finished: a quiet line like a Team message.
+        if (kind === 'agent-message' || kind === 'subagent-settled') {
+          const id = d.source.senderSessionId ?? '';
+          const text = kind === 'subagent-settled' ? d.source.summary ?? textOf(d.content) : textOf(d.content).replace(/^Agent \S+ sent a message:\s*/, '');
+          current(null, e.time).items.push({ kind: 'notice', key: `a:${e.seq}`, code: kind, tone: 'muted', sender: agents.get(id) || id.slice(0, 8), text });
           break;
         }
         // A background job finished and woke the agent (dsh tool-jobs notice): a quiet line.
@@ -182,6 +191,26 @@ export function buildTranscript(events) {
         }
         break;
       }
+
+      // PTC: the calls a run_code program made (subagent, read, bash …) get rows of their own.
+      case 'tool/ptc-dispatch-start': {
+        if (calls.has(d.subCallId)) break;
+        current(d.turn, e.time).items.push(toolItem(d.subCallId, d.name, d.arguments, e.time));
+        break;
+      }
+      case 'tool/ptc-dispatch': {
+        let item = calls.get(d.subCallId);
+        if (!item) {
+          item = toolItem(d.subCallId, d.name, d.arguments, e.time);
+          current(d.turn, e.time).items.push(item);
+        }
+        item.result = { content: d.content ?? [], isError: !!d.isError, error: d.error ?? null, meta: d.meta ?? null, time: e.time };
+        break;
+      }
+
+      case 'subagent/catalog':
+        if (d.childId) agents.set(d.childId, d.label ?? '');
+        break;
 
       case 'todo/write': {
         out.todos = d.todos ?? [];
