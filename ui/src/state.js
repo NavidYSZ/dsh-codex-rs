@@ -17,6 +17,25 @@ function readJson(key, fallback) {
   try { return JSON.parse(readLocal(key, '')) ?? fallback; } catch { return fallback; }
 }
 
+/** The side panel switch the user picked last: 'live' (Browser) or 'files'; never the diff or a file. */
+const PANEL_HOME_KEY = 'dshx-panel-home';
+const panelChoice = () => {
+  const v = readLocal(PANEL_HOME_KEY, '');
+  return v === 'live' || v === 'files' ? v : null;
+};
+/** How long a finished browser/computer step still counts as current work (and stays up floating). */
+export const LIVE_LINGER_MS = 8000;
+/** Browser/computer work going on in this chat right now (or its last step just ended). */
+const liveNow = (live) => !!live && !live.ended && (live.active || Date.now() - (live.time ?? 0) < LIVE_LINGER_MS);
+/**
+ * Tab the side panel opens on: Browser while the agent works there, else the
+ * user's last pick, else Browser when the chat has a picture, else Files.
+ */
+export function panelHome(live) {
+  if (liveNow(live)) return 'live';
+  return panelChoice() ?? (live ? 'live' : 'files');
+}
+
 /** Last project picked on the start page; '' means a chat without a project. */
 const PROJECT_KEY = 'dshx-project';
 
@@ -52,10 +71,14 @@ export const store = createStore({
   palette: false,
   renaming: null,
   desktop: readDesktop(),
-  // Right side panel: 'changes', 'files', 'live' or 'file:<path relative to the chat folder>'.
-  // `pinned`: opened with the top bar button, so it stays open in other chats and after a
-  // restart. A file click or "Review" opens it for the current chat only.
-  panel: { open: readLocal('dshx-panel-pinned', '') === 'open', pinned: readLocal('dshx-panel-pinned', '') === 'open', tab: 'changes', files: [] },
+  // Right side panel: 'live' (Browser), 'files', 'team', 'changes' or 'file:<path relative to
+  // the chat folder>'. `pinned`: opened with the top bar button, so it stays open in other chats
+  // and after a restart. A file click or "Review" opens it for the current chat only.
+  // `diff`: the diff tab, shown only after "Review"; `back` is the tab its close button returns to.
+  panel: {
+    open: readLocal('dshx-panel-pinned', '') === 'open', pinned: readLocal('dshx-panel-pinned', '') === 'open',
+    tab: panelHome(null), files: [], diff: false, back: null,
+  },
   panelWidth: Number(readLocal('dshx-panel-width', '0')) || 0,
   // Message sent while a turn runs: 'steer' joins it, 'queue' waits for it.
   followup: readLocal('dshx-followup', 'steer'),
@@ -153,8 +176,8 @@ const EMPTY_SESSION = {
   goal: null, team: null, goalForm: false,
 };
 
-/** Another chat: file tabs belong to the old one. */
-const freshPanel = (p) => ({ ...p, open: !!p.pinned, files: [], tab: p.tab.startsWith('file:') ? 'changes' : p.tab });
+/** Another chat: file tabs and the diff belong to the old one; its live work is not known yet. */
+const freshPanel = (p) => ({ ...p, open: !!p.pinned, files: [], diff: false, back: null, tab: panelHome(null) });
 
 function showNewChat() {
   closeStream?.();
@@ -315,8 +338,10 @@ function onLive(m) {
   const fresh = m.active && (!prev?.active || JSON.stringify(prev.args) !== JSON.stringify(m.args));
   // A hidden floating picture stays hidden for this call; a new call brings it back.
   store.set(fresh ? { live: m, liveHidden: null } : { live: m });
+  // Files gives way to the Browser for a new call, and for the chat's first picture while the
+  // user has not picked a home tab yet. A diff the user asked for stays (the picture floats).
   const p = store.get().panel;
-  if (fresh && p.open && (p.tab === 'changes' || p.tab === 'files')) setPanelTab('live');
+  if (p.open && p.tab === 'files' && (fresh || (!prev && !panelChoice()))) setPanel({ tab: 'live' });
 }
 
 /** The browser's zone, which dsh's time context passes on to the model. */
@@ -650,10 +675,36 @@ function setPanel(patch) {
   store.set({ panel });
 }
 
-export const openPanel = (tab) => setPanel({ open: true, ...(tab ? { tab } : {}) });
-export const closePanel = () => setPanel({ open: false, pinned: false });
-export const togglePanel = () => { const open = !store.get().panel.open; setPanel({ open, pinned: open }); };
-export const setPanelTab = (tab) => setPanel({ tab });
+/** Opens the panel on `tab`, or where it is / its home tab. 'changes' adds the temporary diff tab. */
+export function openPanel(tab) {
+  const s = store.get();
+  const p = s.panel;
+  if (tab === 'changes') {
+    const back = p.open ? (p.tab === 'changes' ? p.back : p.tab) : panelHome(s.live);
+    setPanel({ open: true, diff: true, back, tab: 'changes' });
+    return;
+  }
+  setPanel({ open: true, tab: tab || (p.open ? p.tab : panelHome(s.live)) });
+}
+export const closePanel = () => setPanel({ open: false, pinned: false, diff: false, back: null, tab: panelHome(store.get().live) });
+/** The top bar button: pins the panel, always on its home tab. */
+export function togglePanel() {
+  const open = !store.get().panel.open;
+  setPanel({ open, pinned: open, diff: false, back: null, tab: panelHome(store.get().live) });
+}
+/** A tab click; Browser and Files become the home tab for later chats and restarts. */
+export function setPanelTab(tab) {
+  if (tab === 'live' || tab === 'files') writeLocal(PANEL_HOME_KEY, tab);
+  setPanel({ tab });
+}
+/** Closes the diff tab and goes back to the tab that was open before it. */
+export function closeDiff() {
+  const s = store.get();
+  const p = s.panel;
+  const b = p.back;
+  const ok = b === 'live' || b === 'files' || (b === 'team' && !!s.team) || (!!b?.startsWith('file:') && p.files.includes(b.slice(5)));
+  setPanel({ diff: false, back: null, tab: p.tab !== 'changes' ? p.tab : ok ? b : panelHome(s.live) });
+}
 
 export function setPanelWidth(px) {
   writeLocal('dshx-panel-width', String(Math.round(px)));
@@ -682,7 +733,7 @@ export function openFile(path) {
 export function closeFile(rel) {
   const p = store.get().panel;
   const files = p.files.filter((f) => f !== rel);
-  const tab = p.tab === `file:${rel}` ? (files.length ? `file:${files[files.length - 1]}` : 'changes') : p.tab;
+  const tab = p.tab === `file:${rel}` ? (files.length ? `file:${files[files.length - 1]}` : panelHome(store.get().live)) : p.tab;
   setPanel({ files, tab });
 }
 

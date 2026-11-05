@@ -118,6 +118,7 @@ const EN = {
   emptyFolder: 'Empty folder', firstRows: (n) => `First ${n} rows`, loading: 'Loading…', open: 'Open',
   // live view
   live: 'Live', liveActive: 'Working', liveIdle: 'Paused', liveEnded: 'Done', liveWaiting: 'Waiting for the first picture…',
+  browserIdle: 'The browser view appears here as soon as the agent uses the browser or the computer in this chat.',
   showInPanel: 'Show in panel', hide: 'Hide', stopAgent: 'Stop agent',
   // follow-ups and notifications
   placeholderRunning: { steer: 'Add to the running task (⌘↩ to queue)', queue: 'Queue a follow-up (⌘↩ to add now)' },
@@ -796,6 +797,7 @@ const DE = {
   binary: 'Binärdatei, keine Vorschau', outsideFolder: 'Vorschau nur für Dateien im Ordner dieses Chats',
   emptyFolder: 'Leerer Ordner', firstRows: (n) => `Erste ${n} Zeilen`, loading: 'Lädt …', open: 'Öffnen',
   live: 'Live', liveActive: 'Arbeitet', liveIdle: 'Pausiert', liveEnded: 'Fertig', liveWaiting: 'Warte auf das erste Bild …',
+  browserIdle: 'Sobald der Agent in diesem Chat den Browser oder den Computer nutzt, erscheint die Ansicht hier.',
   showInPanel: 'Im Panel zeigen', hide: 'Ausblenden', stopAgent: 'Agenten stoppen',
   placeholderRunning: { steer: 'In die laufende Aufgabe einbringen (⌘↩ für danach)', queue: 'Für danach einreihen (⌘↩ sofort einbringen)' },
   followup: 'Nachrichten während der Arbeit', followups: { steer: 'Sofort einbringen', queue: 'Danach senden' },

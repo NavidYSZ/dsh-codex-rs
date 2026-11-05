@@ -1,5 +1,6 @@
 // Live view of browser and computer work, like the plugin's 0.4 preview: a
-// small floating picture while the panel is closed, a full "Live" tab in it.
+// small floating picture while the panel is closed, the panel's Browser tab
+// (always there; a quiet note until the chat has a picture).
 // Browser frames arrive as JPEG; computer/app steps show their screenshot.
 // The floating picture is borderless (the image is the surface, controls on
 // hover) and stays away while the macOS helper's own mini window shows the
@@ -8,13 +9,10 @@ import { useEffect, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, cancel, openPanel, hideLive } from '../state.js';
+import { store, cancel, openPanel, hideLive, LIVE_LINGER_MS } from '../state.js';
 import { IconStop, IconX, IconPanelRight } from '../icons.js';
 import { useImage } from './common.js';
 import { liveLabel, CursorGlyph, ICONS } from './codex.js';
-
-/** How long a finished step stays up in the floating picture. */
-const LINGER_MS = 8000;
 
 function phase(live) {
   if (live.ended) return 'ended';
@@ -67,10 +65,10 @@ function StopButton() {
   return html`<button type="button" class="live-stop" onClick=${cancel} title=${t.stopAgent}><${IconStop} size=${12} />${t.stop}</button>`;
 }
 
-/** The panel's Live tab. */
+/** The panel's Browser tab. */
 export function LivePanel() {
   const live = useStore(store, (s) => s.live);
-  if (!live) return html`<div class="panel-empty">${t.liveWaiting}</div>`;
+  if (!live) return html`<div class="panel-empty"><${ICONS.browser} size=${20} /><span>${t.browserIdle}</span></div>`;
   return html`<div class="live-panel">
     <div class="live-bar"><${Caption} live=${live} /><span class="spacer" /><${StopButton} /></div>
     <div class="live-stage"><${Picture} live=${live} /></div>
@@ -86,14 +84,14 @@ export function LiveFloat() {
   // Re-check once the last step has lingered long enough.
   useEffect(() => {
     if (!live || live.active) return undefined;
-    const id = setTimeout(() => tick((n) => n + 1), LINGER_MS + 50);
+    const id = setTimeout(() => tick((n) => n + 1), LIVE_LINGER_MS + 50);
     return () => clearTimeout(id);
   }, [live?.time, live?.active]);
   if (!live || live.ended) return null;
   if (live.native) return null;
   if (panel.open && panel.tab === 'live') return null;
   if (hidden) return null;
-  if (!live.active && Date.now() - (live.time ?? 0) > LINGER_MS) return null;
+  if (!live.active && Date.now() - (live.time ?? 0) > LIVE_LINGER_MS) return null;
   return html`<div class=${cx('live-float', `is-${phase(live)}`)} role="region" aria-label=${t.live}>
     <${Picture} live=${live} />
     <div class="live-float-top">
@@ -104,13 +102,12 @@ export function LiveFloat() {
   </div>`;
 }
 
-/** Tab entry for the panel while there is something live in this chat. */
+/** The panel's Browser tab: named after the chat's live tool, Browser while nothing is live. */
 export function useLiveTab() {
   const live = useStore(store, (s) => s.live);
-  if (!live) return null;
   return {
-    label: live.tool === 'computer' ? 'Computer' : live.tool === 'app' ? (live.meta?.place || 'App') : 'Browser',
-    badge: live.active ? html`<span class="live-dot is-active" />` : null,
+    label: live?.tool === 'computer' ? 'Computer' : live?.tool === 'app' ? (live.meta?.place || 'App') : 'Browser',
+    badge: live?.active ? html`<span class="live-dot is-active" />` : null,
     body: html`<${LivePanel} />`,
   };
 }

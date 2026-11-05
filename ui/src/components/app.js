@@ -106,7 +106,7 @@ function Chat() {
   const sub = hero || listed?.scratch ? '' : workspaceName(cwd);
   const liveTab = useLiveTab();
   const teamTab = useTeamTab();
-  const extraTabs = liveTab || teamTab ? { ...(liveTab ? { live: liveTab } : {}), ...(teamTab ? { team: teamTab } : {}) } : null;
+  const extraTabs = teamTab ? { team: teamTab } : null;
   return html`<div class="workspace">
     <div class=${cx('chat', hero && 'is-hero')}>
       <${TopBar} title=${title} sub=${sub} row=${listed} />
@@ -114,7 +114,7 @@ function Chat() {
       <${ComposerSeat} hero=${hero} tx=${hero ? null : tx} />
       ${hero ? null : html`<${LiveFloat} />`}
     </div>
-    ${hero ? null : html`<${Panel} tx=${tx} extraTabs=${extraTabs} />`}
+    ${hero ? null : html`<${Panel} tx=${tx} liveTab=${liveTab} extraTabs=${extraTabs} />`}
   </div>`;
 }
 

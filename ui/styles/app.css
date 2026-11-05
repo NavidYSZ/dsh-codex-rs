@@ -625,6 +625,7 @@ html.dshx-desktop:not(.dshx-fullscreen) .app.sidebar-collapsed .topbar { padding
 .ptab-name { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0 4px 0 10px; height: 28px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 .ptab-x { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 5px; background: none; color: var(--ink-3); cursor: pointer; padding: 0; }
 .ptab-x:hover { background: var(--hover); color: var(--ink); }
+.ptab-name .ptab-count { margin-left: 6px; }
 .panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .panel-scroll { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px 24px; }
 .panel-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 16px; color: var(--ink-3); font-size: 13px; text-align: center; }

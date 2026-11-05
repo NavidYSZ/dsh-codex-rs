@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fix: the side panel opens on Browser and Files again instead of the diff.
+  Browser is always there (it shows the chat's browser, Computer or app
+  work, or a short note until the agent uses them) and is where the panel
+  opens while that work runs; otherwise it opens on the switch you picked
+  last, which is kept across chats and restarts. The diff (“Changes”) left
+  the tab bar: “Review” under a turn opens it as a closable tab, and closing
+  it returns to the tab you were on.
 - Fix: Chrome no longer asks “Allow remote debugging?” again and again while
   the agent works in your own Chrome. Chrome 144+ asks for every new DevTools
   connection; Aether now keeps the approved one while it runs (no detach after

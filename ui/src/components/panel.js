@@ -1,13 +1,14 @@
-// Right side panel, like the Codex app's: tabs for the chat's changes, its
-// folder, live browser/computer work and open files. Files load through the
-// server's read-only preview grant, so pages and PDFs render as themselves.
+// Right side panel: the Browser (live browser/computer work) and Files
+// switches, the Team tab, the diff when the user asks for it ("Review") and
+// open files. Files load through the server's read-only preview grant, so
+// pages and PDFs render as themselves.
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, compact } from '../i18n.js';
 import { useStore } from '../store.js';
 import { highlight } from '../highlight.js';
 import { countChanges } from '../diff.js';
-import { store, api, openFile, closeFile, closePanel, setPanelTab, setPanelWidth, relTo } from '../state.js';
+import { store, api, openFile, closeFile, closePanel, closeDiff, setPanelTab, setPanelWidth, relTo, panelHome } from '../state.js';
 import {
   IconX, IconFile, IconFolder, IconRefresh, IconExternal, IconCopy, IconChevronRight, IconDiff, IconPencil,
 } from '../icons.js';
@@ -294,7 +295,7 @@ function useEditVersions(tx) {
   }, [tx]);
 }
 
-export function Panel({ tx, extraTabs }) {
+export function Panel({ tx, liveTab, extraTabs }) {
   const panel = useStore(store, (s) => s.panel);
   const id = useStore(store, (s) => s.activeId);
   const cwd = useStore(store, (s) => s.header?.cwd ?? '');
@@ -302,26 +303,33 @@ export function Panel({ tx, extraTabs }) {
   const versions = useEditVersions(tx);
   const changes = useMemo(() => collectChanges(tx?.turns ?? [], cwd).length, [tx, cwd]);
   if (!panel.open || !id) return null;
-  const fileTab = panel.tab.startsWith('file:') ? panel.tab.slice(5) : null;
-  const tab = (key, label, extra) => html`<button type="button" key=${key} role="tab" aria-selected=${panel.tab === key}
-    class=${cx('ptab', panel.tab === key && 'is-on')} onClick=${() => setPanelTab(key)}>${label}${extra}</button>`;
+  // A tab that went away (Team ended, diff closed) falls back to the home tab.
+  const known = panel.tab === 'live' || panel.tab === 'files' || (panel.tab === 'changes' && panel.diff)
+    || !!extraTabs?.[panel.tab] || panel.tab.startsWith('file:');
+  const active = known ? panel.tab : panelHome(store.get().live);
+  const fileTab = active.startsWith('file:') ? active.slice(5) : null;
+  const tab = (key, label, extra) => html`<button type="button" key=${key} role="tab" aria-selected=${active === key}
+    class=${cx('ptab', active === key && 'is-on')} onClick=${() => setPanelTab(key)}>${label}${extra}</button>`;
+  const closable = (key, label, extra, title, onClose) => html`<span key=${key} class=${cx('ptab', 'ptab-file', active === key && 'is-on')} title=${title}>
+    <button type="button" class="ptab-name" role="tab" aria-selected=${active === key} onClick=${() => setPanelTab(key)}>${label}${extra}</button>
+    <button type="button" class="ptab-x" aria-label=${t.closeTab} title=${t.closeTab} onClick=${onClose}><${IconX} size=${12} /></button>
+  </span>`;
   let body;
   if (fileTab != null) {
     const abs = cwd ? `${cwd}/${fileTab}` : fileTab;
     body = html`<${FileView} key=${`${id}:${fileTab}`} id=${id} rel=${fileTab} version=${(versions[abs] ?? 0) + (versions[fileTab] ?? 0)} />`;
-  } else if (panel.tab === 'files') body = html`<${FilesView} key=${id} id=${id} />`;
-  else if (extraTabs?.[panel.tab]) body = extraTabs[panel.tab].body;
-  else body = html`<${ChangesView} tx=${tx} cwd=${cwd} />`;
+  } else if (active === 'files') body = html`<${FilesView} key=${id} id=${id} />`;
+  else if (active === 'changes') body = html`<${ChangesView} tx=${tx} cwd=${cwd} />`;
+  else if (extraTabs?.[active]) body = extraTabs[active].body;
+  else body = liveTab?.body ?? null;
   return html`<aside class="panel" style=${width ? `width:${width}px` : undefined} aria-label=${t.sidePanel}>
     <${Resizer} />
     <div class="panel-tabs" role="tablist">
-      ${tab('changes', t.changes, changes ? html`<span class="ptab-count">${changes}</span>` : null)}
+      ${liveTab ? tab('live', liveTab.label, liveTab.badge) : null}
       ${tab('files', t.filesTab)}
       ${Object.entries(extraTabs ?? {}).map(([k, v]) => tab(k, v.label, v.badge))}
-      ${panel.files.map((f) => html`<span key=${f} class=${cx('ptab', 'ptab-file', panel.tab === `file:${f}` && 'is-on')} title=${f}>
-        <button type="button" class="ptab-name" onClick=${() => setPanelTab(`file:${f}`)}>${baseName(f)}</button>
-        <button type="button" class="ptab-x" aria-label=${t.closeTab} onClick=${() => closeFile(f)}><${IconX} size=${12} /></button>
-      </span>`)}
+      ${panel.diff ? closable('changes', t.changes, changes ? html`<span class="ptab-count">${changes}</span>` : null, t.changes, closeDiff) : null}
+      ${panel.files.map((f) => closable(`file:${f}`, baseName(f), null, f, () => closeFile(f)))}
       <span class="spacer" />
       <button type="button" class="icon-btn" aria-label=${t.closePanel} title=${t.closePanel} onClick=${closePanel}><${IconX} size=${14} /></button>
     </div>
