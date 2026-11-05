@@ -201,10 +201,11 @@ fn help(status: &UserChromeStatus) -> String {
     }
 }
 
-/// `GET http://127.0.0.1:<port>/json/version` → `webSocketDebuggerUrl`.
-/// Chrome 147+ answers 404 for the default profile; the path from
-/// `DevToolsActivePort` still works then. 403 means the per-session prompt
-/// was declined.
+/// `GET http://127.0.0.1:<port>/json/version` → `webSocketDebuggerUrl`, only
+/// when `DevToolsActivePort` names no WebSocket path: every extra request to
+/// the port is one more chance for Chrome to ask the user. Chrome 147+
+/// answers 404 for the default profile anyway. 403 means the per-session
+/// prompt was declined.
 async fn version_ws_url(port: u16) -> Result<Option<String>> {
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     let mut stream =
@@ -232,7 +233,7 @@ async fn version_ws_url(port: u16) -> Result<Option<String>> {
             Ok(json["webSocketDebuggerUrl"].as_str().map(str::to_owned))
         }
         403 => bail!(
-            "the browser refused the DevTools connection (HTTP 403): Chrome's \"Allow remote debugging?\" prompt was not accepted for this browser session"
+            "the browser refused the DevTools connection (HTTP 403): Chrome's \"Allow remote debugging?\" prompt was not accepted for this browser session; ask the user before trying again"
         ),
         _ => Ok(None),
     }
@@ -251,20 +252,14 @@ pub async fn resolve_in(profiles: &[PathBuf]) -> Result<UserChrome> {
         .ok_or_else(|| anyhow!("{}", help(&status)))?;
     let port = status.port.unwrap_or(0);
     let (_, path) = active_port(&profile).ok_or_else(|| anyhow!("{}", help(&status)))?;
-    let from_file = (!path.is_empty()).then(|| format!("ws://127.0.0.1:{port}{path}"));
-    let ws_url = match version_ws_url(port).await {
-        Ok(Some(url)) => url,
-        Ok(None) => from_file.ok_or_else(|| {
+    let ws_url = if path.is_empty() {
+        version_ws_url(port).await?.ok_or_else(|| {
             anyhow!(
                 "{name} publishes no DevTools WebSocket path; ask the user to quit and reopen it"
             )
-        })?,
-        Err(e) => {
-            if e.to_string().contains("403") {
-                return Err(e);
-            }
-            from_file.ok_or(e)?
-        }
+        })?
+    } else {
+        format!("ws://127.0.0.1:{port}{path}")
     };
     Ok(UserChrome {
         name,

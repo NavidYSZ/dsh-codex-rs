@@ -3,8 +3,9 @@
 //! debugging port), headless unless the user asks to see it. With
 //! [`BrowserOptions::user_chrome`] the same handle attaches to the user's own
 //! running Chrome instead (see `user.rs`): their tabs and sign-ins, no second
-//! window, nothing is killed on close. Screencast frames and the agent cursor
-//! go to the mini window when there is one.
+//! window, nothing is killed on close, and the approved connection is kept
+//! while the app runs. Screencast frames and the agent cursor go to the mini
+//! window when there is one.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +22,13 @@ use crate::cdp::{self, Cdp, DEFAULT_TIMEOUT, Event};
 use crate::js;
 use crate::mini::{MiniReply, MiniShow, MiniSink, MiniStep};
 use crate::scripts;
+use crate::user::UserChrome;
+
+/// How long one call waits for the user's browser to accept the DevTools
+/// connection (Chrome 144+ first asks "Allow remote debugging?").
+const USER_CONNECT_WAIT: Duration = Duration::from_secs(60);
+/// How long an unanswered connection attempt stays open for the next call.
+const USER_CONNECT_KEEP: Duration = Duration::from_secs(5 * 60);
 
 /// How the background browser runs.
 #[derive(Debug, Clone)]
@@ -32,7 +40,9 @@ pub struct BrowserOptions {
     /// Viewport in CSS pixels (= screenshot pixels).
     pub width: u32,
     pub height: u32,
-    /// Chrome quits after this long without a browser action.
+    /// The background Chrome quits after this long without a browser action.
+    /// The user's own Chrome stays attached: reconnecting would make it ask
+    /// for permission again.
     pub idle: Duration,
     /// `de` or `en`: Chrome's UI language and the mini window's status line.
     pub locale: String,
@@ -157,10 +167,26 @@ impl Drop for Proc {
     }
 }
 
+/// A DevTools WebSocket handshake with the user's browser. Chrome asks
+/// "Allow remote debugging?" for every new connection, so at most one runs:
+/// a call whose wait ran out leaves it here and the next call adopts it.
+struct Connecting {
+    found: UserChrome,
+    task: tokio::task::JoinHandle<Result<cdp::Ws, String>>,
+}
+
+impl Drop for Connecting {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 #[derive(Default)]
 struct Ops {
     proc: Option<Proc>,
     visible: bool,
+    /// Attached mode: a connection attempt still waiting for the user.
+    connecting: Option<Connecting>,
 }
 
 pub(crate) struct Inner {
@@ -179,7 +205,8 @@ impl Drop for Inner {
 }
 
 /// Handle to the background browser; cheap to clone. Chrome starts lazily on
-/// the first action and quits after `idle` without one.
+/// the first action and quits after `idle` without one (the user's own
+/// Chrome is attached on the first action and stays attached).
 #[derive(Clone)]
 pub struct Browser {
     inner: Arc<Inner>,
@@ -523,8 +550,12 @@ impl<'a> Ctl<'a> {
                 return Ok(());
             }
             // The tab went away (closed by the page or the user): take another.
-            if self.reattach().await.is_ok() {
-                return Ok(());
+            match self.reattach().await {
+                Ok(()) => return Ok(()),
+                // Keep the user's approved connection: a new one would make
+                // Chrome ask again. Reconnect only once Chrome closed it.
+                Err(e) if self.attached() => return Err(e),
+                Err(_) => {}
             }
         }
         let visible = self.ops.visible;
@@ -597,10 +628,7 @@ impl<'a> Ctl<'a> {
     /// Attaches to the user's running browser over its DevTools WebSocket.
     async fn attach_user(&mut self, urls: Vec<String>) -> Result<()> {
         self.discard().await;
-        let found = crate::user::resolve_in(&self.inner.opts.user_profiles).await?;
-        let ws = cdp::connect_ws(&found.ws_url, Duration::from_secs(60))
-            .await
-            .map_err(|e| anyhow!("could not connect to {}: {e}", found.name))?;
+        let (found, ws) = self.connect_user().await?;
         let generation = {
             let mut st = self.st();
             st.generation += 1;
@@ -639,10 +667,55 @@ impl<'a> Ctl<'a> {
             "attached to the user's browser"
         );
         let result = self.boot(urls).await;
-        if result.is_err() {
+        // An open connection stays even when taking a tab failed: the next
+        // call tries again on it instead of making Chrome ask once more.
+        if result.is_err() && !self.alive() {
             self.discard().await;
         }
         result
+    }
+
+    /// The DevTools WebSocket of the user's browser: the attempt an earlier
+    /// call left pending, else a new one. An attempt the user has not
+    /// answered within [`USER_CONNECT_WAIT`] stays open (up to
+    /// [`USER_CONNECT_KEEP`]) for the next call instead of being replaced by
+    /// a second "Allow remote debugging?" prompt.
+    async fn connect_user(&mut self) -> Result<(UserChrome, cdp::Ws)> {
+        let mut adopted = self.ops.connecting.is_some();
+        loop {
+            if self.ops.connecting.is_none() {
+                let found = crate::user::resolve_in(&self.inner.opts.user_profiles).await?;
+                let url = found.ws_url.clone();
+                let task =
+                    tokio::spawn(async move { cdp::connect_ws(&url, USER_CONNECT_KEEP).await });
+                self.ops.connecting = Some(Connecting { found, task });
+            }
+            let Some(attempt) = self.ops.connecting.as_mut() else {
+                bail!("no connection attempt");
+            };
+            let name = attempt.found.name;
+            let Ok(joined) = tokio::time::timeout(USER_CONNECT_WAIT, &mut attempt.task).await
+            else {
+                bail!(
+                    "{name} is showing \"Allow remote debugging?\" and waits for the user. Ask the user to click Allow in {name}, then call the browser tool once more: that call takes over this pending connection. Do not retry in a loop, and never connect to the browser's DevTools port yourself (curl, WebSocket/CDP scripts, Puppeteer, Playwright, project helpers): every new connection makes {name} ask again."
+                );
+            };
+            let found = attempt.found.clone();
+            self.ops.connecting = None;
+            let error = match joined {
+                Ok(Ok(ws)) => return Ok((found, ws)),
+                Ok(Err(e)) => e,
+                Err(e) => e.to_string(),
+            };
+            // An attempt left over from an earlier call that failed meanwhile
+            // (browser restarted, nobody answered) is replaced once; a
+            // declined prompt is reported.
+            if adopted && !error.contains("HTTP 403") {
+                adopted = false;
+                continue;
+            }
+            bail!("could not connect to {name}: {error}");
+        }
     }
 
     /// Whether the current tab still exists.
@@ -795,6 +868,7 @@ impl<'a> Ctl<'a> {
     /// The user's own browser is only detached from; it keeps running.
     pub async fn close(&mut self) {
         self.inner.shared.stop_timers();
+        self.ops.connecting = None;
         if self.attached() {
             self.stop_cast().await;
             let session = self.st().page.as_ref().map(|p| p.session_id.clone());
@@ -847,8 +921,10 @@ impl<'a> Ctl<'a> {
         if let Some(h) = slot.take() {
             h.abort();
         }
-        if self.ops.visible && !self.attached() {
-            return; // the user is looking at it; never pull it away
+        // A visible window is in use by the user; the user's own Chrome
+        // stays attached, as a new connection would make it ask again.
+        if self.ops.visible || self.attached() {
+            return;
         }
         let weak = Arc::downgrade(self.inner);
         let idle = self.inner.opts.idle;
@@ -1098,6 +1174,29 @@ impl<'a> Ctl<'a> {
         Ok(res["result"].get("value").cloned().unwrap_or(Value::Null))
     }
 
+    /// The `eval` action: runs the model's JavaScript in the current tab
+    /// (promises awaited) and returns the value as text, at most `max`
+    /// UTF-16 units. A thrown exception is the result, not a failure.
+    pub async fn eval_text(&self, expression: &str, max: usize) -> Result<String> {
+        let res = self
+            .send(
+                "Runtime.evaluate",
+                json!({ "expression": expression, "returnByValue": true, "awaitPromise": true }),
+            )
+            .await
+            .map_err(|e| {
+                let text = e.to_string();
+                if text.contains("by value") || text.contains("reference chain") {
+                    anyhow!(
+                        "{text}; return plain data instead (pick the fields you need or JSON.stringify them)"
+                    )
+                } else {
+                    e
+                }
+            })?;
+        Ok(cap_text(eval_result(&res), max))
+    }
+
     pub async fn settle(&self, max: Duration) {
         tokio::time::sleep(Duration::from_millis(250)).await;
         let start = Instant::now();
@@ -1280,14 +1379,54 @@ fn text_page(text: &str, offset: usize, max: usize) -> String {
     }
 }
 
-/// Closes Chrome once nothing used it for `idle`.
+/// `Runtime.evaluate` result → text: strings as they are, other values as
+/// JSON, an exception as "The expression threw: …".
+pub(crate) fn eval_result(res: &Value) -> String {
+    if let Some(ex) = res.get("exceptionDetails").filter(|e| !e.is_null()) {
+        let exception = &ex["exception"];
+        let what = match (exception["description"].as_str(), exception.get("value")) {
+            (Some(d), _) if !d.is_empty() => d.to_owned(),
+            (_, Some(Value::String(v))) => v.clone(),
+            (_, Some(v)) if !v.is_null() && !(v.is_object() || v.is_array()) => v.to_string(),
+            _ => js::display(ex.get("text")),
+        };
+        return format!("The expression threw: {what}");
+    }
+    let result = &res["result"];
+    if let Some(v) = result["unserializableValue"].as_str() {
+        return v.to_owned();
+    }
+    match result.get("value") {
+        Some(Value::String(s)) => s.clone(),
+        Some(v) => v.to_string(),
+        None => match result["type"].as_str() {
+            None | Some("undefined") => "undefined".to_owned(),
+            Some(kind) => format!("({kind} without a JSON value)"),
+        },
+    }
+}
+
+/// Cuts `text` to `max` UTF-16 units and says how much is missing.
+fn cap_text(text: String, max: usize) -> String {
+    let n = js::len(&text);
+    if n <= max {
+        return text;
+    }
+    let head = js::slice(&text, max.max(2));
+    format!(
+        "{head}\n… ({} more characters; return a smaller part)",
+        n - js::len(head)
+    )
+}
+
+/// Closes the background Chrome once nothing used it for `idle`.
 async fn idle_watch(weak: Weak<Inner>, idle: Duration) {
     let mut wait = idle;
     loop {
         tokio::time::sleep(wait).await;
         let Some(inner) = weak.upgrade() else { return };
         let mut ctl = Ctl::lock(&inner).await;
-        if (ctl.ops.visible && !ctl.attached()) || ctl.ops.proc.is_none() {
+        if ctl.ops.visible || ctl.attached() || ctl.ops.proc.is_none() {
             return;
         }
         let since = ctl.st().last_use.map_or(idle, |t| t.elapsed());

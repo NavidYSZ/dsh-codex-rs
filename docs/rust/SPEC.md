@@ -192,8 +192,14 @@ Read the source; it is short. Summary:
 - Port `lib/browser.js` + `lib/browser-tool.js`: Chrome/Chromium headless with its own profile dir
   (`~/.dsh-codex/browser-profile`; macOS: keep `~/Library/Application Support/dsh-codex/browser-profile`),
   DevTools protocol over `--remote-debugging-pipe` (fds 3/4, no port), same actions, element outline
-  format `[3] button "Search" @(x,y)`, screenshots (JPEG quality), `read`, tabs, `show`/`hide`, password
-  refusal, downloads blocked, idle exit. Tool name/description/schema **verbatim** from `lib/browser-tool.js`.
+  format `[3] button "Search" @(x,y)`, screenshots (JPEG quality), `read`, `eval` (`Runtime.evaluate`
+  with `awaitPromise`/`returnByValue`, value as text capped by `maxChars`), tabs, `show`/`hide`,
+  downloads blocked, idle exit. Tool name/description/schema **verbatim** from `lib/browser-tool.js`.
+- `browser: "user"` attaches to the user's running Chrome over the WebSocket path in
+  `DevToolsActivePort` (`/json/version` only as a fallback). Chrome 144+ asks for every new connection,
+  so the connection is kept while the app runs (no idle detach; reconnect only after Chrome closed it)
+  and at most one connect attempt is pending: an unanswered handshake survives the call's 60 s wait
+  (up to 5 min) and the next call adopts it.
 - Output through `ToolOutput`: text summary + screenshot via `AttachmentStore` when
   `model_accepts_images`, `value`/`meta` exactly like `index.js` (`summary`, `image`, `screen`,
   `cursor`, `place`, `target`; presentationMeta fields `tool, action, label, x, y, toX, toY, screen,

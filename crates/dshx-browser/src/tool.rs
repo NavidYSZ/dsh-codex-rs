@@ -16,7 +16,7 @@ use crate::{js, scripts};
 
 pub const TOOL_NAME: &str = "browser";
 
-pub const ACTIONS: [&str; 18] = [
+pub const ACTIONS: [&str; 19] = [
     "open",
     "state",
     "click",
@@ -25,6 +25,7 @@ pub const ACTIONS: [&str; 18] = [
     "scroll",
     "select",
     "read",
+    "eval",
     "back",
     "forward",
     "reload",
@@ -41,13 +42,14 @@ pub const DESCRIPTION: &str = r#"Use a real Chrome browser. By default it runs i
 
 Two browsers, chosen with "browser":
 - "background" (default): Aether's own Chrome with a separate profile; cookies persist between uses, but it has none of the user's logins.
-- "user": the user's OWN running Google Chrome (or Chromium/Brave/Edge) with all their tabs, cookies and sign-ins, attached over DevTools. Use it whenever the user asks for their Chrome, "the open Chrome", their logged-in browser, an open tab or "the browser I have open". Never open a separate window or profile for that, and never fall back to "app"/"computer" control of Chrome. The first action without a tab of its own attaches to the tab the user is looking at ("state"/"read" work on it); "open" never navigates a tab the user opened away but takes a new tab, which Chrome brings to the front. Once a chat used "user", later calls keep it until "browser":"background" is passed. If it cannot attach, the error says what the user has to enable (chrome://inspect/#remote-debugging → "Allow remote debugging for this browser instance", or click Allow in Chrome) — relay that instead of switching browsers silently.
+- "user": the user's OWN running Google Chrome (or Chromium/Brave/Edge) with all their tabs, cookies and sign-ins, attached over DevTools. Use it whenever the user asks for their Chrome, "the open Chrome", their logged-in browser, an open tab or "the browser I have open". Never open a separate window or profile for that, and never fall back to "app"/"computer" control of Chrome. The first action without a tab of its own attaches to the tab the user is looking at ("state"/"read" work on it); "open" never navigates a tab the user opened away but takes a new tab, which Chrome brings to the front. Once a chat used "user", later calls keep it until "browser":"background" is passed. If it cannot attach, the error says what the user has to enable (chrome://inspect/#remote-debugging → "Allow remote debugging for this browser instance", or click Allow in Chrome) — relay that instead of switching browsers silently, and call once more after the user clicked Allow instead of retrying in a loop. Never open DevTools connections of your own to that Chrome (DevToolsActivePort, port 9222, curl /json, WebSocket/CDP scripts, Puppeteer connect, Playwright connectOverCDP, project helpers such as cdp.mjs): Chrome asks the user to approve every new connection, and this tool already holds the approved one. Use the actions here; "eval" runs JavaScript in the page.
 
 Workflow:
 - Start with action "open" and a URL (plain words search DuckDuckGo). Every action returns the page title and URL, a numbered list of visible interactive elements ([index] kind "name" @(x,y)) and a screenshot.
 - Act on elements by [index] from the latest result: "click", "type", "select", "scroll". Indices change after every action, so always use the newest list. Use x/y (screenshot pixels = page coordinates) only for things missing from the list.
 - "type" clicks the element and inserts "text"; "clear": true replaces what is there; "submit": true presses Enter afterwards.
 - "read" returns the readable text of the page. Use it to answer questions instead of squinting at screenshots. For long pages, use the returned next offset to read subsequent text; scrolling does not advance the text offset. Optional maxChars is capped at 40000.
+- "eval" runs JavaScript ("expression") in the current tab and returns its value: strings as they are, anything else as JSON; a returned promise is awaited (put statements with await in an async IIFE); a thrown exception is reported as the result; maxChars caps it like "read". Use it for page data the element list and "read" do not show. It runs with the page's session and sign-ins, so the ask-first rule below applies to anything that changes data.
 - "key" presses keys or combinations ("Enter", "Escape", "Tab", "ArrowDown", "cmd+a").
 - Tabs: "tabs" lists them, "new_tab" opens a URL in a new tab, "switch_tab"/"close_tab" take the 1-based "tab" number.
 - Logins: password fields may be typed into, with the credentials of the sign-in the user asked for. If a login is needed and you do not have the credentials, or the user prefers to sign in themselves, in the background browser call "show" so they can do it in the visible window, then continue ("hide" returns to the background). In the user's Chrome they are usually signed in already; otherwise ask them to sign in in their Chrome. "show" there only brings the tab to the front; "hide" does nothing.
@@ -76,9 +78,10 @@ pub fn input_schema() -> Value {
             "value": { "type": "string", "description": "For \"select\": option label or value." },
             "tab": { "type": "integer", "description": "For \"switch_tab\" / \"close_tab\": 1-based tab number from \"tabs\"." },
             "count": { "type": "integer", "description": "For \"click\": 2 for a double-click." },
-            "seconds": { "type": "number", "description": "For \"wait\": seconds (max 10)." }
+            "seconds": { "type": "number", "description": "For \"wait\": seconds (max 10)." },
+            "expression": { "type": "string", "description": "For \"eval\": JavaScript to run in the current tab; its value is returned (a promise is awaited)." }
             ,"offset": { "type": "integer", "minimum": 0, "description": "For \"read\": text offset from the previous result, in UTF-16 characters (default 0)." }
-            ,"maxChars": { "type": "integer", "minimum": 2, "maximum": 40000, "description": "For \"read\": maximum text characters per result (default 12000, minimum 2 for Unicode)." }
+            ,"maxChars": { "type": "integer", "minimum": 2, "maximum": 40000, "description": "For \"read\" and \"eval\": maximum text characters per result (default 12000, minimum 2 for Unicode)." }
         },
         "required": ["action"],
         "additionalProperties": false
@@ -141,6 +144,11 @@ fn describe_action(action: &str, input: &Value, at: &str) -> String {
                 .map_or("down".to_owned(), |v| js::display(Some(v)));
             format!("Scroll {dir}{at}")
         }
+        "eval" => {
+            let code = or_empty(input, "expression");
+            let code: Vec<&str> = code.split(js::is_space).filter(|w| !w.is_empty()).collect();
+            format!("Run JavaScript “{}”", js::clip(&code.join(" "), 60))
+        }
         "new_tab" => format!("New tab {}", js::clip(&or_empty(input, "url"), 60)),
         "switch_tab" | "close_tab" => {
             let verb = if action == "switch_tab" {
@@ -179,6 +187,7 @@ fn verb(locale: &str, action: &str) -> Option<&'static str> {
             "scroll" => "Scrollt",
             "select" => "Wählt aus",
             "read" => "Liest die Seite",
+            "eval" => "Führt JavaScript aus",
             "back" => "Geht zurück",
             "forward" => "Geht vor",
             "reload" => "Lädt neu",
@@ -201,6 +210,7 @@ fn verb(locale: &str, action: &str) -> Option<&'static str> {
             "scroll" => "Scrolling",
             "select" => "Selecting",
             "read" => "Reading the page",
+            "eval" => "Running JavaScript",
             "back" => "Going back",
             "forward" => "Going forward",
             "reload" => "Reloading",
@@ -281,6 +291,15 @@ async fn target(ctl: &Ctl<'_>, input: &Value) -> Result<Option<Point>> {
         })),
         _ => Ok(None),
     }
+}
+
+/// `maxChars` of "read" and "eval": 12000 by default, 2…40000.
+fn max_chars(input: &Value) -> usize {
+    input
+        .get("maxChars")
+        .and_then(Value::as_u64)
+        .unwrap_or(12_000)
+        .clamp(2, 40_000) as usize
 }
 
 /// Runs one action (browser-tool.js `run`).
@@ -429,14 +448,27 @@ async fn run_locked(
         "read" => {
             ctl.mini(&status, None, false).await?;
             let offset = input.get("offset").and_then(Value::as_u64).unwrap_or(0);
-            let max = input
-                .get("maxChars")
-                .and_then(Value::as_u64)
-                .unwrap_or(12_000)
-                .clamp(2, 40_000);
             let text = ctl
-                .read_text(offset.min(usize::MAX as u64) as usize, max as usize)
+                .read_text(offset.min(usize::MAX as u64) as usize, max_chars(input))
                 .await?;
+            return Ok(RunResult {
+                text,
+                image: None,
+                cursor: None,
+                target: None,
+                url: None,
+            });
+        }
+        "eval" => {
+            let Some(expression) = input
+                .get("expression")
+                .and_then(Value::as_str)
+                .filter(|e| !js::trim(e).is_empty())
+            else {
+                bail!("\"eval\" needs \"expression\"");
+            };
+            ctl.mini(&status, None, false).await?;
+            let text = ctl.eval_text(expression, max_chars(input)).await?;
             return Ok(RunResult {
                 text,
                 image: None,

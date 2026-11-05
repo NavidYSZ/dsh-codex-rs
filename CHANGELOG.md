@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Fix: Chrome no longer asks “Allow remote debugging?” again and again while
+  the agent works in your own Chrome. Chrome 144+ asks for every new DevTools
+  connection; Aether now keeps the approved one while it runs (no detach after
+  15 idle minutes, reconnect only when Chrome closed it), connects straight to
+  the path in `DevToolsActivePort` without an extra `/json/version` request,
+  and opens at most one connection at a time: if you have not clicked Allow
+  within 60 s, the attempt stays open for a few minutes and the next call
+  takes it over instead of showing a second prompt. The error tells the
+  model to ask you to click Allow and call once more, not to retry in a
+  loop. The tool description and routing prompt forbid the model's own
+  DevTools connections to your Chrome (curl on port 9222, CDP/WebSocket
+  scripts, Puppeteer, Playwright, project helpers such as `cdp.mjs`), which
+  each triggered another prompt.
+- Add the `browser` action `eval`: runs JavaScript (`expression`) in the
+  current tab of the background browser or your Chrome and returns its value
+  (strings as they are, other values as JSON, promises awaited, exceptions
+  as the result, capped by `maxChars`).
 - Fix: subagents show up in the chat again. Calls a PTC `run_code` program
   makes (subagent, read, bash …) were only in the log; they get rows of their
   own now, and what a subagent reports back or its finishing summary appears

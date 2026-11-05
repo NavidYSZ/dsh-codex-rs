@@ -283,9 +283,10 @@ fn is_truthy(v: &Value) -> bool {
     }
 }
 
-/// Opens the DevTools WebSocket of a running browser. Chrome 144+ may first
-/// show an "Allow remote debugging?" prompt and answers only once the user
-/// clicks Allow, so the handshake is given `timeout`.
+/// Opens the DevTools WebSocket of a running browser. Chrome 144+ shows an
+/// "Allow remote debugging?" prompt for every new connection and answers
+/// only once the user clicks Allow, so the handshake is given `timeout`
+/// (the caller keeps one attempt alive rather than opening a second one).
 pub(crate) async fn connect_ws(url: &str, timeout: Duration) -> Result<Ws, String> {
     let connect = tokio_tungstenite::connect_async(url);
     match tokio::time::timeout(timeout, connect).await {
@@ -293,7 +294,7 @@ pub(crate) async fn connect_ws(url: &str, timeout: Duration) -> Result<Ws, Strin
         Ok(Err(tokio_tungstenite::tungstenite::Error::Http(res))) => {
             let status = res.status().as_u16();
             Err(if status == 403 {
-                "the browser refused the connection (HTTP 403): Chrome's \"Allow remote debugging?\" prompt was not accepted for this browser session".to_owned()
+                "the browser refused the connection (HTTP 403): Chrome's \"Allow remote debugging?\" prompt was not accepted for this browser session; ask the user before trying again".to_owned()
             } else {
                 format!(
                     "the browser answered HTTP {status} instead of upgrading to the DevTools WebSocket"

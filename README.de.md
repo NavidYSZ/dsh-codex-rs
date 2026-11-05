@@ -55,10 +55,11 @@ Google Chrome (auch Chromium, Brave, Edge) samt Tabs und Anmeldungen, statt
 einen zweiten Browser zu starten (`browser: "user"`). Einmalig in Chrome unter
 `chrome://inspect/#remote-debugging` → „Allow remote debugging for this
 browser instance“ erlauben; fragt Chrome beim Verbinden „Allow remote
-debugging?“, auf „Allow“ klicken. Der Agent beginnt auf dem Tab, den du gerade
-siehst, öffnet für neue Seiten einen eigenen Tab, navigiert deinen Tab nie weg
-und schließt deinen Browser nie. Einstellungen → Browser Use zeigt, ob die
-Verbindung gerade möglich ist.
+debugging?“, auf „Allow“ klicken. Aether hält diese Verbindung, solange es
+läuft, sodass Chrome nicht bei jeder Aktion erneut fragt. Der Agent beginnt
+auf dem Tab, den du gerade siehst, öffnet für neue Seiten einen eigenen Tab,
+navigiert deinen Tab nie weg und schließt deinen Browser nie. Einstellungen →
+Browser Use zeigt, ob die Verbindung gerade möglich ist.
 
 HuntProxy muss in **Aether → Plugins → MCP-Server** eingerichtet sein, auch
 wenn es bereits mit einem anderen Agenten verbunden ist. Im Eingabefeld unter

@@ -16,11 +16,11 @@ const T = de
       type: 'Type', key: 'Press', open: 'Open', wait: 'Wait', cursor: 'Pointer position', failed: 'Failed', into: 'into' };
 
 const B = de
-  ? { open: 'Öffnet', state: 'Seite ansehen', windowState: 'Fenster ansehen', read: 'Seite lesen', back: 'Zurück',
+  ? { open: 'Öffnet', state: 'Seite ansehen', windowState: 'Fenster ansehen', read: 'Seite lesen', eval: 'JavaScript ausführen', back: 'Zurück',
       forward: 'Vor', reload: 'Neu laden', tabs: 'Tabs ansehen', newTab: 'Neuer Tab', tab: 'Tab', closeTab: 'Tab schließen',
       select: 'Auswahl', setValue: 'Trägt ein', menu: 'Menü', apps: 'Apps auflisten', showApp: 'Nach vorn holen',
       showBrowser: 'Browser zeigen', hideBrowser: 'Zurück in den Hintergrund', scroll: 'Scrollen' }
-  : { open: 'Open', state: 'Look at page', windowState: 'Look at window', read: 'Read page', back: 'Back',
+  : { open: 'Open', state: 'Look at page', windowState: 'Look at window', read: 'Read page', eval: 'Run JavaScript', back: 'Back',
       forward: 'Forward', reload: 'Reload', tabs: 'Tabs', newTab: 'New tab', tab: 'Tab', closeTab: 'Close tab',
       select: 'Select', setValue: 'Fill in', menu: 'Menu', apps: 'List apps', showApp: 'Bring to front',
       showBrowser: 'Show browser', hideBrowser: 'Back to background', scroll: 'Scroll' };
@@ -43,6 +43,7 @@ function bgLabel(tool, args, target) {
     case 'menu': return `${B.menu} ${(args.path ?? []).join(' › ')}`;
     case 'action': return `${args.name ?? ''}${at}`;
     case 'read': return B.read;
+    case 'eval': return B.eval;
     case 'back': return B.back;
     case 'forward': return B.forward;
     case 'reload': return B.reload;

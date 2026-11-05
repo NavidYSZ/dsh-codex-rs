@@ -39,11 +39,22 @@ the default profile. Instead the user allows remote debugging once in
 instance”); Chrome then writes its DevTools port and browser WebSocket path to
 `DevToolsActivePort` in the profile directory, which Aether reads
 (`~/Library/Application Support/Google/Chrome` on macOS, `~/.config/google-chrome`
-on Linux, plus the Chromium, Brave and Edge equivalents). Chrome 144+ may show
-“Allow remote debugging?” once per browser run when Aether connects; the
-handshake waits up to 60 s for Allow. Chrome 147+ answers 404 on
-`/json/version` for the default profile; the WebSocket path from the file is
-used then.
+on Linux, plus the Chromium, Brave and Edge equivalents), and connects straight
+to the WebSocket path from that file (`/json/version` is only asked when the
+file names no path; Chrome 147+ answers 404 there for the default profile).
+
+Chrome 144+ shows “Allow remote debugging?” for every new DevTools
+connection. Aether therefore opens one and keeps it while it runs: there is no
+idle detach for the user's Chrome, and it reconnects only after Chrome closed
+the connection (for example after a browser restart). A call waits up to 60 s
+for Allow; when the user has not answered by then, the attempt stays open for
+up to five minutes, the error asks the model to have the user click Allow and
+call once more, and that next call takes over the pending connection instead
+of opening a second prompt. A declined prompt (HTTP 403) is reported as such.
+The model is told never to open DevTools connections of its own to the user's
+Chrome (curl on the port, CDP/WebSocket scripts, Puppeteer, Playwright,
+project helpers): each would make Chrome ask again; `eval` covers page
+JavaScript.
 
 Behaviour in the user's browser:
 
@@ -55,8 +66,7 @@ Behaviour in the user's browser:
   are hidden from the tab list.
 - `show` activates the current tab; `hide` does nothing. Downloads, device
   metrics and the user's settings are not changed.
-- The idle timeout and host shutdown only detach; the user's Chrome keeps
-  running.
+- Host shutdown only detaches; the user's Chrome keeps running.
 - Errors name the fix (allow remote debugging, click Allow, reopen Chrome);
   the model must relay them instead of silently starting the background
   browser or desktop control.
@@ -73,11 +83,22 @@ console.log(page.summary);
 const text = await tools.browser({action: "read", maxChars: 12000});
 console.log(text.summary);
 // A truncated result supplies the next offset for another read.
+const links = await tools.browser({action: "eval",
+  expression: "[...document.links].slice(0, 20).map((a) => a.href)"});
+console.log(links.summary); // JSON text; strings come back as they are
 ```
 
 Use element indices from the latest returned state. Text pagination offsets are
 UTF-16 characters; `maxChars` ranges from 2 to 40,000. Scrolling changes the
 viewport, not the text-read offset.
+
+`eval` runs `expression` in the current tab (`Runtime.evaluate` with
+`awaitPromise` and `returnByValue`) in the background browser and in the
+user's Chrome. A returned promise is awaited; statements with `await` belong
+in an async IIFE. Strings come back as they are, other values as JSON, a
+thrown exception as “The expression threw: …”, cut to `maxChars` (default
+12,000). It runs with the page's session, so the same ask-first rule applies
+to anything that changes data. There is no raw-CDP action.
 
 ## HuntProxy
 

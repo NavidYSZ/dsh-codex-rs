@@ -652,6 +652,37 @@ async fn actions_end_to_end() {
         "summary and browser marker"
     );
 
+    // "eval": strings as they are, other values as JSON, promises awaited,
+    // exceptions as the result, capped by maxChars
+    let eval = |expression: &str| json!({ "action": "eval", "expression": expression });
+    let title = h.ok(eval("document.title")).await;
+    assert_eq!(summary(&title), "Test Home");
+    assert_eq!(title.content.len(), 1, "eval has no screenshot");
+    assert_eq!(
+        summary(&h.ok(eval("({ n: 1 + 1, list: [1, 'a'] })")).await),
+        r#"{"n":2,"list":[1,"a"]}"#
+    );
+    assert_eq!(summary(&h.ok(eval("Promise.resolve(7)")).await), "7");
+    assert_eq!(summary(&h.ok(eval("undefined")).await), "undefined");
+    let threw = summary(&h.ok(eval("null.x")).await);
+    assert!(
+        threw.starts_with("The expression threw: TypeError"),
+        "{threw}"
+    );
+    let long = summary(
+        &h.ok(json!({ "action": "eval", "expression": "'x'.repeat(50)", "maxChars": 10 }))
+            .await,
+    );
+    assert!(
+        long.starts_with("xxxxxxxxxx\n… (40 more characters"),
+        "{long}"
+    );
+    assert!(
+        h.err(json!({ "action": "eval" }))
+            .await
+            .contains("\"eval\" needs \"expression\"")
+    );
+
     // password fields accept typing (logins the user asked for), by index and
     // by coordinates — and the typed secret never shows up in outputs
     let text = summary(&out);
@@ -1077,12 +1108,17 @@ async fn attaches_to_the_users_running_chrome_without_a_second_window() {
         summary(&out)
     );
 
-    // Idle: the attachment is released, the user's Chrome keeps running.
+    // Idle: the approved connection is kept (a new one would make Chrome ask
+    // the user again), and "eval" runs in the user's tab.
     tokio::time::sleep(Duration::from_millis(2500)).await;
     assert!(
-        !tool.user_browser().unwrap().attached(),
-        "detached after the idle time"
+        tool.user_browser().unwrap().attached(),
+        "still attached after the idle time"
     );
+    let out = call(json!({ "action": "eval", "expression": "document.title" }))
+        .await
+        .unwrap();
+    assert_eq!(summary(&out), "Popup Page");
     assert!(user.running(), "the user's Chrome must never be closed");
     // Closing the tool is just as harmless.
     tool.user_browser().unwrap().close().await;

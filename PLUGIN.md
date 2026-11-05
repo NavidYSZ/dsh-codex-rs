@@ -109,7 +109,7 @@ Linux, `computer` and `app` are off. `browser` registers only when
 ### Background browser (`lib/browser.js`, `lib/browser-tool.js`)
 
 - **Actions:**
-  - pages: `open`, `state`, `read`, `wait`;
+  - pages: `open`, `state`, `read`, `eval`, `wait`;
   - input: `click`, `type`, `key`, `scroll`, `select`;
   - navigation: `back`, `forward`, `reload`;
   - tabs: `tabs`, `new_tab`, `switch_tab`, `close_tab`;
@@ -122,7 +122,7 @@ Linux, `computer` and `app` are off. `browser` registers only when
   never moves.
 - **What the model sees:** a numbered outline of the visible controls, such
   as `[3] button "Search" @(x,y)`, plus a screenshot. `read` returns the
-  page text.
+  page text; `eval` runs JavaScript in the page and returns its value.
 - **`show` and `hide`:** `show` brings the browser up as a normal window
   with its tabs intact, so you can sign in. `hide` sends it back.
 - **Off limits:** downloads are blocked. Password fields may be typed into

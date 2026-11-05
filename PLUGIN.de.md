@@ -114,7 +114,7 @@ ausführen.
 ### Hintergrund-Browser (`lib/browser.js`, `lib/browser-tool.js`)
 
 - **Aktionen:**
-  - Seiten: `open`, `state`, `read`, `wait`;
+  - Seiten: `open`, `state`, `read`, `eval`, `wait`;
   - Eingabe: `click`, `type`, `key`, `scroll`, `select`;
   - Navigation: `back`, `forward`, `reload`;
   - Tabs: `tabs`, `new_tab`, `switch_tab`, `close_tab`;
@@ -127,7 +127,8 @@ ausführen.
   Fokus wechselt nie.
 - **Was das Modell sieht:** eine nummerierte Liste der sichtbaren
   Bedienelemente, etwa `[3] button "Suchen" @(x,y)`, und einen Screenshot.
-  `read` liefert den Seitentext.
+  `read` liefert den Seitentext; `eval` führt JavaScript in der Seite aus und
+  liefert dessen Wert.
 - **`show` und `hide`:** `show` holt den Browser als normales Fenster nach
   vorn, die Tabs bleiben erhalten. So kannst du dich anmelden. `hide`
   schickt ihn zurück.

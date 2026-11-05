@@ -137,9 +137,11 @@ with your tabs and sign-ins instead of starting a second browser
 (`browser: "user"`). Allow it once in Chrome under
 `chrome://inspect/#remote-debugging` → “Allow remote debugging for this
 browser instance”, and click Allow if Chrome asks when the agent connects.
-The agent starts on the tab you are looking at, opens its own tab for new
-pages, never navigates your tab away and never closes your browser.
-Settings → Browser Use shows whether attaching is possible right now.
+Aether keeps that connection while it runs, so Chrome does not ask again for
+each action. The agent starts on the tab you are looking at, opens its own
+tab for new pages, never navigates your tab away and never closes your
+browser. Settings → Browser Use shows whether attaching is possible right
+now.
 
 Connect HuntProxy in Aether's **Plugins → MCP servers**, even if another agent
 already uses it: applications keep their own MCP configuration. Switch it on
