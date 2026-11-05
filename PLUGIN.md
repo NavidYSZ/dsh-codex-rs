@@ -125,7 +125,8 @@ Linux, `computer` and `app` are off. `browser` registers only when
   page text.
 - **`show` and `hide`:** `show` brings the browser up as a normal window
   with its tabs intact, so you can sign in. `hide` sends it back.
-- **Off limits:** password fields are refused and downloads are blocked.
+- **Off limits:** downloads are blocked. Password fields may be typed into
+  for sign-ins the user asked for.
 - **Idle exit:** Chrome quits after 15 idle minutes.
 
 ### Background apps (`lib/app-tool.js`, `helper/Sources/AppControl.swift`)
@@ -140,8 +141,7 @@ Linux, `computer` and `app` are off. `browser` registers only when
 - **Fallback:** where Accessibility offers no route, the tool sends events
   straight to the app's process. That can bring the app to the front, and
   the tool says so when it happens.
-- **Off limits:** right-click menus are unavailable in the background, and
-  password fields are refused.
+- **Off limits:** right-click menus are unavailable in the background.
 
 ### Mini window (`helper/Sources/Mini.swift`)
 

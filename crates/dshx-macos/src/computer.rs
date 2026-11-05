@@ -41,7 +41,7 @@ Workflow:
 - Click the centre of controls. After typing into a search or address field, press "Return" with "key".
 - Scroll with dy > 0 to move content down (reveal what is below), dy < 0 to go up.
 - The user sees your cursor and can press Esc at any time; if a result says the user cancelled, stop immediately and ask how to continue.
-- Never enter passwords, payment data or other secrets, and ask before sending, buying, deleting or publishing anything.
+- Passwords may be entered with the credentials of the sign-in the user asked for; never enter payment data or other secrets. Ask before sending, buying, deleting or publishing anything.
 - macOS permission prompts ("Allow"/"Erlauben"), login or Touch ID dialogs, System Settings, keychains and password managers are off limits: never click or type there. If one appears or blocks you, stop and ask the user to handle it. The helper refuses such targets anyway."#;
 
 const TEXT_ONLY_HINT: &str =

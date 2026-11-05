@@ -56,7 +56,7 @@ Behaviour in the user's browser:
 - `show` activates the current tab; `hide` does nothing. Downloads, device
   metrics and the user's settings are not changed.
 - The idle timeout and host shutdown only detach; the user's Chrome keeps
-  running. Never type passwords there either.
+  running.
 - Errors name the fix (allow remote debugging, click Allow, reopen Chrome);
   the model must relay them instead of silently starting the background
   browser or desktop control.

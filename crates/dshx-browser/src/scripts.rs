@@ -87,5 +87,3 @@ pub(crate) fn select(index: &str, value_json: &str) -> String {
 pub(crate) const SELECT_ACTIVE: &str = r#"(() => { const el = document.activeElement; if (!el) return;
           if (typeof el.select === 'function') el.select(); else document.execCommand('selectAll'); })()"#;
 
-pub(crate) const ACTIVE_IS_PASSWORD: &str =
-    r#"document.activeElement && document.activeElement.type === "password""#;

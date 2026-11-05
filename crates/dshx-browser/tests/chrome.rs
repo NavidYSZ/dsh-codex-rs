@@ -571,7 +571,7 @@ async fn actions_end_to_end() {
         .keys()
         .map(String::as_str)
         .collect();
-    assert_eq!(keys, ["summary", "place", "screen", "image"]);
+    assert_eq!(keys, ["summary", "browser", "place", "screen", "image"]);
     assert_eq!(out.content.len(), 2);
     assert!(matches!(&out.content[0], ToolResultPart::Text { text: t } if *t == text));
     assert!(
@@ -580,7 +580,7 @@ async fn actions_end_to_end() {
     let meta = out.meta.clone().unwrap();
     assert_eq!(
         meta,
-        json!({ "tool": "browser", "action": "open", "label": format!("Open {}/", site.base), "x": null, "y": null,
+        json!({ "tool": "browser", "browser": "background", "action": "open", "label": format!("Open {}/", site.base), "x": null, "y": null,
                 "toX": null, "toY": null, "screen": { "width": 1280, "height": 800 }, "cursor": null,
                 "place": host, "target": null })
     );
@@ -648,31 +648,22 @@ async fn actions_end_to_end() {
     assert_eq!(read.content.len(), 1, "read has no screenshot");
     assert_eq!(
         read.value.as_ref().unwrap().as_object().unwrap().len(),
-        1,
-        "only the summary"
+        2,
+        "summary and browser marker"
     );
 
-    // password fields are refused, by index and by coordinates
+    // password fields accept typing (logins the user asked for), by index and
+    // by coordinates — and the typed secret never shows up in outputs
     let text = summary(&out);
     let pw = index_of(&text, "(password)");
-    let e = h
-        .err(json!({ "action": "type", "index": pw, "text": "secret" }))
+    h.ok(json!({ "action": "type", "index": pw, "text": "secret" }))
         .await;
-    assert_eq!(
-        e,
-        "Refused: that is a password field. Call \"show\" and ask the user to sign in themselves."
-    );
     let line = text.lines().find(|l| l.contains("(password)")).unwrap();
     let (x, y) = line[line.rfind("@(").unwrap() + 2..line.len() - 1]
         .split_once(',')
         .unwrap();
-    let e = h.err(json!({ "action": "type", "x": x.parse::<f64>().unwrap(), "y": y.parse::<f64>().unwrap(), "text": "secret" })).await;
-    assert!(e.starts_with("Refused:"), "{e}");
-    let e = h.err(json!({ "action": "type", "text": "secret" })).await;
-    assert_eq!(
-        e,
-        "Refused: the focused field is a password field. Call \"show\" and ask the user to sign in themselves."
-    );
+    h.ok(json!({ "action": "type", "x": x.parse::<f64>().unwrap(), "y": y.parse::<f64>().unwrap(), "text": "secret", "clear": true })).await;
+    h.ok(json!({ "action": "type", "text": "secret" })).await;
     let read = summary(&h.ok(json!({ "action": "state" })).await);
     assert!(
         read.contains("input[password] \"Password\" (password) focused"),

@@ -40,7 +40,7 @@ Workflow:
 - "key" sends keys to the app ("Return", "Escape", "Tab", "Down"). Return and Escape use Accessibility when the focused element supports it.
 - x/y are screenshot pixels of the app window; use them only when the element is not in the outline. "window" picks another window by id or title. Right-click menus are not available in the background.
 - "show" brings the app to the front, only when the user wants to see it. "list_apps" lists running apps.
-- Never type passwords or payment data; password fields are refused. System Settings, permission and login dialogs, keychains and password managers are off limits, and the helper refuses them. Ask the user before sending, deleting, buying or publishing anything.
+- Password fields may be typed into, with the credentials of the sign-in the user asked for. Never type payment data. System Settings, permission and login dialogs, keychains and password managers are off limits, and the helper refuses them. Ask the user before sending, deleting, buying or publishing anything.
 - If a result says the user stopped the agent, stop immediately and ask how to continue."#;
 
 /// `INPUT_SCHEMA`
