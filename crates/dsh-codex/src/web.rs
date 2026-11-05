@@ -662,7 +662,12 @@ impl Backend for WebBackend {
     }
 
     async fn update_session(&self, id: &str, patch: Value) -> anyhow::Result<Value> {
-        if self.runtime.store.locate(id)?.is_none() && !self.open.lock().await.contains_key(id) {
+        // A fresh Pi chat has no log file before its first prompt, like an
+        // open DSH chat; renaming or archiving it must still work.
+        if self.runtime.store.locate(id)?.is_none()
+            && !self.open.lock().await.contains_key(id)
+            && self.pi.open_chat(id).is_none()
+        {
             return Err(NotFound(id.to_owned()).into());
         }
         self.chats.update(id, &patch, now_ms())?;
