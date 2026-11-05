@@ -1,0 +1,38 @@
+{"_sent":{"id":"c1","type":"set_model","provider":"pi-faux","modelId":"faux-1"}}
+{"id":"c1","type":"response","command":"set_model","success":true,"data":{"id":"faux-1","provider":"pi-faux"}}
+{"_sent":{"id":"c2","type":"prompt","message":"todo"}}
+{"id":"c2","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"todo"}],"timestamp":1793902507590}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"todo"}],"timestamp":1793902507590}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902507576:noes8ng3si","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":27,"cacheRead":0,"cacheWrite":1400,"totalTokens":1427,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902507594}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","contentIndex":0,"id":"tool:1793902507594:fla71c502qe","toolName":"todo_write"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"{\"todos\":[{\""}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"content\":\"Plan\",\"sta"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"tus\":\"comple"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"ted\"},{\"cont"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"ent\":\"Build\",\"st"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"atus\":\"in_progress\"}"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"]}"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":0,"toolCall":{"type":"toolCall","id":"tool:1793902507594:fla71c502qe","name":"todo_write","arguments":{"todos":[{"content":"Plan","status":"completed"},{"content":"Build","status":"in_progress"}]}}}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"tool:1793902507594:fla71c502qe","name":"todo_write","arguments":{"todos":[{"content":"Plan","status":"completed"},{"content":"Build","status":"in_progress"}]}}],"api":"faux:1793902507576:noes8ng3si","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":27,"cacheRead":0,"cacheWrite":1400,"totalTokens":1427,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1793902507594,"durationMs":1,"thinkingLevel":"medium"}}
+{"type":"tool_execution_start","toolCallId":"tool:1793902507594:fla71c502qe","toolName":"todo_write","args":{"todos":[{"content":"Plan","status":"completed"},{"content":"Build","status":"in_progress"}]}}
+{"type":"tool_execution_end","toolCallId":"tool:1793902507594:fla71c502qe","toolName":"todo_write","result":{"content":[{"type":"text","text":"Tool todo_write not found"}],"details":{}},"isError":true}
+{"type":"message_start","message":{"role":"toolResult","toolCallId":"tool:1793902507594:fla71c502qe","toolName":"todo_write","content":[{"type":"text","text":"Tool todo_write not found"}],"details":{},"isError":true,"timestamp":1793902507605}}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"tool:1793902507594:fla71c502qe","toolName":"todo_write","content":[{"type":"text","text":"Tool todo_write not found"}],"details":{},"isError":true,"timestamp":1793902507605}}
+{"type":"turn_end"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902507576:noes8ng3si","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":12,"cacheRead":1400,"cacheWrite":41,"totalTokens":1453,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902507612}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Done with todo_write"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":": Tool todo_writ"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"e not found"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"Done with todo_write: Tool todo_write not found"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Done with todo_write: Tool todo_write not found"}],"api":"faux:1793902507576:noes8ng3si","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":12,"cacheRead":1400,"cacheWrite":41,"totalTokens":1453,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902507612,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c3","type":"get_entries"}}
+{"id":"c3","type":"response","command":"get_entries","success":true,"data":{"entries":[],"leafId":"d6b01803"}}
+{"_sent":{"id":"c4","type":"get_state"}}

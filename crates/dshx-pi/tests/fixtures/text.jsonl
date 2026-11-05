@@ -1,0 +1,24 @@
+{"_sent":{"id":"c1","type":"set_model","provider":"pi-faux","modelId":"faux-1"}}
+{"id":"c1","type":"response","command":"set_model","success":true,"data":{"id":"faux-1","provider":"pi-faux"}}
+{"_sent":{"id":"c2","type":"prompt","message":"hello there"}}
+{"id":"c2","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"hello there"}],"timestamp":1793902498038}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"hello there"}],"timestamp":1793902498038}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902498020:4saf8rqg8lc","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":9,"cacheRead":0,"cacheWrite":1402,"totalTokens":1411,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902498043}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"Thinking about i"}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"t."}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_end","contentIndex":0,"content":"Thinking about it."}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":1}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"Echo: hello ther"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"e"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":1,"content":"Echo: hello there"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Thinking about it."},{"type":"text","text":"Echo: hello there"}],"api":"faux:1793902498020:4saf8rqg8lc","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":9,"cacheRead":0,"cacheWrite":1402,"totalTokens":1411,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902498043,"durationMs":1,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c3","type":"get_entries"}}
+{"id":"c3","type":"response","command":"get_entries","success":true,"data":{"entries":[],"leafId":"1b13f5f8"}}
+{"_sent":{"id":"c4","type":"get_state"}}
