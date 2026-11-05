@@ -1,0 +1,45 @@
+{"_sent":{"id":"c1","type":"set_model","provider":"pi-faux","modelId":"faux-1"}}
+{"id":"c1","type":"response","command":"set_model","success":true,"data":{"id":"faux-1","provider":"pi-faux"}}
+{"_sent":{"id":"c2","type":"prompt","message":"hello one"}}
+{"id":"c2","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"hello one"}],"timestamp":1793902497467}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"hello one"}],"timestamp":1793902497467}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902497448:2tuogqqsto9","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":9,"cacheRead":0,"cacheWrite":1401,"totalTokens":1410,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902497471}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"Thinking about i"}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"t."}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_end","contentIndex":0,"content":"Thinking about it."}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":1}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"Echo: hello one"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":1,"content":"Echo: hello one"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Thinking about it."},{"type":"text","text":"Echo: hello one"}],"api":"faux:1793902497448:2tuogqqsto9","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":9,"cacheRead":0,"cacheWrite":1401,"totalTokens":1410,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902497471,"durationMs":1,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c3","type":"prompt","message":"hello two"}}
+{"id":"c3","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"hello two"}],"timestamp":1793902497477}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"hello two"}],"timestamp":1793902497477}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902497448:2tuogqqsto9","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":9,"cacheRead":1401,"cacheWrite":16,"totalTokens":1426,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902497481}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"Thinking about i"}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"t."}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_end","contentIndex":0,"content":"Thinking about it."}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":1}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"Echo: hello two"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":1,"content":"Echo: hello two"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Thinking about it."},{"type":"text","text":"Echo: hello two"}],"api":"faux:1793902497448:2tuogqqsto9","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":9,"cacheRead":1401,"cacheWrite":16,"totalTokens":1426,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902497481,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c4","type":"compact"}}
+{"type":"compaction_start","reason":"manual"}
+{"type":"compaction_end","reason":"manual","result":{"summary":"Echo: <conversation>\n[User]: hello one\n\n[Assistant]: Echo: hello one\n</conversation>\n\nThe messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.\n\nUse this EXACT format:\n\n## Goal\n[What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]\n\n## Constraints & Preferences\n- [Any constraints, preferences, or requirements mentioned by user]\n- [Or \"(none)\" if none were mentioned]\n\n## Progress\n### Done\n- [x] [Completed tasks/changes]\n\n### In Progress\n- [ ] [Current work]\n\n### Blocked\n- [Issues preventing progress, if any]\n\n## Key Decisions\n- **[Decision]**: [Brief rationale]\n\n## Next Steps\n1. [Ordered list of what should happen next]\n\n## Critical Context\n- [Any data, examples, or references needed to continue]\n- [Or \"(none)\" if not applicable]\n\nKeep each section concise. Preserve exact file paths, function names, and error messages.","firstKeptEntryId":"a8bf0a37","tokensBefore":1426,"estimatedTokensAfter":1642,"usage":{"input":321,"output":246,"cacheRead":0,"cacheWrite":0,"totalTokens":567,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"details":{"readFiles":[],"modifiedFiles":[]}},"aborted":false,"willRetry":false}
+{"id":"c4","type":"response","command":"compact","success":true,"data":{"summary":"Echo: <conversation>\n[User]: hello one\n\n[Assistant]: Echo: hello one\n</conversation>\n\nThe messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.\n\nUse this EXACT format:\n\n## Goal\n[What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]\n\n## Constraints & Preferences\n- [Any constraints, preferences, or requirements mentioned by user]\n- [Or \"(none)\" if none were mentioned]\n\n## Progress\n### Done\n- [x] [Completed tasks/changes]\n\n### In Progress\n- [ ] [Current work]\n\n### Blocked\n- [Issues preventing progress, if any]\n\n## Key Decisions\n- **[Decision]**: [Brief rationale]\n\n## Next Steps\n1. [Ordered list of what should happen next]\n\n## Critical Context\n- [Any data, examples, or references needed to continue]\n- [Or \"(none)\" if not applicable]\n\nKeep each section concise. Preserve exact file paths, function names, and error messages.","firstKeptEntryId":"a8bf0a37","tokensBefore":1426,"estimatedTokensAfter":1642,"usage":{"input":321,"output":246,"cacheRead":0,"cacheWrite":0,"totalTokens":567,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"details":{"readFiles":[],"modifiedFiles":[]}}}
+{"_sent":{"id":"c5","type":"get_entries"}}
+{"id":"c5","type":"response","command":"get_entries","success":true,"data":{"entries":[],"leafId":"74faa1a2"}}
+{"_sent":{"id":"c6","type":"get_state"}}

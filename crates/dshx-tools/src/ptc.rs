@@ -177,6 +177,12 @@ fn render_value(value: &Value, depth: usize, text: &mut String) {
     text.push(close);
 }
 
+/// The Node binary PTC uses (`DSHX_NODE`, else beside the program, else
+/// `PATH`); shared with the Pi engine.
+pub fn node_binary() -> Result<PathBuf, String> {
+    node_executable().map_err(|e| e.to_string())
+}
+
 /// Locate Node before clearing the environment. Explicit overrides fail rather
 /// than silently falling back; app bundles put `node` beside the Rust binary.
 fn node_executable() -> Result<PathBuf, ToolError> {

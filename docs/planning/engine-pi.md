@@ -1,8 +1,8 @@
 # Umschaltbare Engine: DSH oder Pi-Agent
 
-- **Status:** `Geplant`
-- **Stand:** 2026-11-05 18:55 (Europe/Berlin)
-- **Commits:** –
+- **Status:** `In Arbeit` – Phase 0 und 1 (MVP) `Umgesetzt`, Phasen 2–5 `Geplant`
+- **Stand:** 2026-11-05 19:50 (Europe/Berlin)
+- **Commits:** `64a3eb7`, `6a87fc2`, `04be314`, `679c0c9`, `f4d2526`, `b0a70d2`, `3868d75`, `b50599c` (Branch `worktree-agent-a233e76e410e23a51` auf `codex-app` `a485d78`)
 
 ## 1. Ziel
 
@@ -365,21 +365,199 @@ Windows.
 
 ## 4. Umsetzung
 
-Noch nicht gebaut.
+Phase 0 und 1 sind gebaut. Die Entscheidungen F1–F9 folgen den Empfehlungen
+(Tabelle in §6). Abweichungen vom Plan stehen jeweils dabei.
+
+### 4.1 Phase 0: Pin, Auflösung, Aufnahmen
+
+- `desktop/fetch-pi.py [Ordner]` (Standard `desktop/build/pi`) lädt
+  `pi-coding-agent@1.5.0`, `jiti@2.7.0` und `photon-node@0.3.4` aus der
+  npm-Registry, prüft jeweils den fest eingetragenen SHA-512 und übernimmt
+  nur reguläre Dateien unter `package/` (keine Links, kein `..`):
+  `package.json`, `README.md`, `dist/bundle/**` bzw. die Laufzeitdateien und
+  Lizenzen von jiti und photon. Ergebnis etwa 13 MB. Pis Tarball enthält
+  keine LICENSE-Datei (MIT laut README); der Hinweis steht in
+  `THIRD_PARTY_NOTICES.md`.
+- `crates/dshx-pi/src/install.rs`: `DSHX_PI` → neben dem Programm (`pi/`,
+  `../Resources/pi/`, `../share/dsh-codex/pi/`) →
+  `$DSHX_HOME/runtime/pi-1.5.0/`; Node über das neue
+  `dshx_tools::ptc::node_binary()` (gleiche Auflösung wie PTC). Verfügbar nur,
+  wenn `cli.js --version` genau `1.5.0` liefert (einmal pro Prozess, mit
+  bereinigter Umgebung, 15 s Frist); sonst `reason`.
+- Fixtures `crates/dshx-pi/tests/fixtures/*.jsonl` (text, bash, bash-fail,
+  files, steer, queue, abort, abort-stream, error, compact, todo): echte
+  RPC-Ströme der gepinnten Laufzeit mit der Faux-Erweiterung
+  `crates/dshx-pi/extension/aether-faux.ts` (Provider `pi-faux`, Modell
+  `faux-1`, gesteuert über den Prompttext). System-Prompt-Dumps und
+  `agent_end`-Nachrichtenlisten sind entfernt. Der eine echte
+  Provider-Request zur Usage-Semantik wurde bewusst nicht gemacht.
+- Der v4-Header erlaubt zusätzlich `engine` und `engineVersion` (Strings, an
+  allen drei Stellen in `dshx-session/src/format.rs`, neben dem inzwischen
+  hinzugekommenen `mcpPreselected`); `SessionSummary.engine` in `store.rs`.
+  Abweichung: Das offizielle dsh lehnt Header mit diesen Schlüsseln ab, kann
+  Pi-Chats also nicht öffnen (DSH-Chats schreiben die Schlüssel nie).
+
+### 4.2 Crate `crates/dshx-pi`
+
+| Datei | Inhalt |
+|---|---|
+| `install.rs` | Auflösung und Versionsprüfung (s. o.) |
+| `rpc.rs` | `LineSplitter` (nur LF, CR abgestreift), `Rpc` mit `id`-Korrelation und Fristen, `Ring` (64 KB stderr) |
+| `process.rs` | `PiDirs` (`$DSHX_HOME/pi/{agent,sessions,run,tmp,ext}`, `run`/`agent` 0700), Argumente wie geplant plus `--no-prompt-templates --no-themes`, `env_clear` + Allowlist, eigene Prozessgruppe, `PR_SET_PDEATHSIG` (Linux), Sandbox-Hülle um den ganzen Prozess (sandbox-exec-Profil bzw. bwrap mit `--bind` für die Pi-Ordner), Kill der Gruppe |
+| `mapper.rs` | Reiner Zustandsautomat; schreibt *alle* Ereignisse eines Pi-Chats und kennt deshalb jede `seq`; enthält auch die Warteschlange (Plan: eigenes `inbox.rs`, zusammengelegt) |
+| `meta.rs` | Zeilen-`meta` für `read`/`write`/`edit`/`bash` und Bridge-Werkzeuge |
+| `bridge.rs` | Unix-Socket `run/<sha16>.sock` (0600), Token mit 64 Hex-Zeichen, Constant-Time-Vergleich; `hello`→`config`, `gate`, `call`, `cancel`, Push `providers` |
+| `chat.rs` | `PiChat`: Prompt, Steer, Stopp, `/compact`, Warteschlange, Absturz, Neustart, Leerlauf; `PiEnv`, `PiHost`, `ModelChoice`, `thinking_level`, `gate_write` |
+| `pool.rs` | Prozessgrenze: der am längsten untätige Prozess weicht, sonst wartet der Start |
+| `extension/aether-bridge.ts` | per `include_str!` eingebettet, als `ext/aether-bridge-<sha8>.ts` geschrieben |
+| `extension/aether-faux.ts` | Testmodell, nur mit `DSHX_PI_TEST=1` geladen |
+
+Abbildung wie in §3.4, mit diesen Präzisierungen:
+
+- Ein Aether-Step öffnet erst bei der ersten Assistenzausgabe; ein Steer
+  steht dadurch vor seinem Step (wie bei dsh). Ein fehlgeschlagener Request
+  ohne Werkzeugaufrufe hält den Step offen, damit Pis Retries `llm/retry`
+  1, 2, 3 im selben Step und mit derselben `retryId` schreiben.
+- Prompts liegen durabel in `next-turn`, bis Pi sie zurückmeldet; dann
+  Entnahme plus `user/message` (Aethers eigene Nachricht mit `messageId` und
+  Bild-Referenzen) und beim ersten Mal `session/title` (Quelle `fallback`).
+  Steers liegen in `next-step` und werden FIFO nach Text zugeordnet.
+- Abgebrochene oder fehlerhafte Antworten ohne Inhalt →
+  `assistant/attempt`, mit Inhalt → `assistant/message {interrupted: true}`;
+  ihre Teil-Werkzeugaufrufe werden verworfen. Offene Aufrufe beim Step-Ende
+  bekommen Fehlerergebnisse.
+- `tool_execution_end` liefert das Ergebnis (nicht `message_end
+  toolResult`); Bilder darin speichert der Treiber vorher im
+  `AttachmentStore`. `todo_write` schreibt `todo/write` aus
+  `details.aether.value`.
+- Kompaktierung: `compaction/summary` mit der Spanne „alles vor dem letzten
+  Prompt“ und ein `compact-checkpoint`-`user/message`, das diese Spanne
+  ersetzt. Die Pi-Datei bleibt maßgeblich für den Modellkontext; das
+  Aether-Log ist eine Näherung für Anzeige und spätere Übergabe.
+- `pi/cursor {entryId}` (ignorable) nach jedem `agent_settled` aus
+  `get_entries {since}`.
+
+### 4.3 Aether-Seite
+
+- `crates/dsh-codex/src/pi.rs` (`PiEngine`): Engine-Erkennung über die
+  Headerzeile (`reader::read_header_file`, gecacht), offene `PiChat`s und
+  ihre `FileLog`s (zum Freigeben der Sperre beim Löschen und Beenden),
+  `/api/info.engines`, Modellzuordnung (`deepseek-official` → Pis `deepseek`,
+  `[providers.<id>]` → `aether-<id>`), Live-Weiterleitung als
+  `StreamMessage::{Event, Delta, Status}`, Leerlauf-Reaper alle 30 s,
+  Testmodus `DSHX_PI_TEST=1`.
+- `runtime/providers.rs::pi_providers()`: DeepSeek-Schlüssel über Pis
+  eingebauten Provider, jede Route mit `baseUrl`, `api`, `headers`, Modellen
+  und Schlüssel (`$`→`$$`, führendes `!`→`$!`).
+- `web.rs` (kleine Einschübe): Feld `pi`; Weiche am Anfang von `prompt`,
+  `cancel`, `session`, `events_after`, `status`, `session_root`,
+  `delete_session`, `session_stats`; `session_handle` verweigert Pi-Chats;
+  `fork_session` und `goal_command` antworten 400; `info` mit `engines`,
+  `settings.defaultEngine` und `engines` pro Modellzeile;
+  `update_settings {defaultEngine}`; `create_session_with_engine` (eine
+  gewählte Preset-ID bedeutet DSH, sonst `default_engine`);
+  `create_pi_session`. `web/composer.rs`: Pi-Weichen für `chat`,
+  `session_mcp` (`minimal: true, engine: "pi"`), `set_session_mcp` (400),
+  `compact`, `update_queue`.
+- `dshx-server`: `CreateBody.engine`, Trait-Methoden
+  `create_session_with_engine` und `engines` (mit Standard), Route
+  `GET /api/engines`.
+- `dshx-core/config.rs`: `default_engine`, `[codex.pi] max_processes`
+  (macOS 6, Linux 3), `idle_secs` (600).
+- `usage.rs`: `Tally::add_reported` zählt `usage.costUsd` für Modelle ohne
+  Aether-Preis (Sitzungsstatistik und Nutzungsindex).
+
+### 4.4 Oberfläche
+
+- `modes.js`: `EngineChip` (Startseite; Pi ausgegraut mit Grund, wenn nicht
+  verfügbar), `EngineLabel` statt `ModeLabel` in Pi-Chats (Version, „Zugriff
+  gemäß Modus“, Aktionen „Neuer Chat mit DSH/Pi“), `EngineSetting` in den
+  Einstellungen mit Pi-Status; `ModeChip` verschwindet bei Pi.
+- `composer.js`: Engine-Chip im Hero-Tray; Ziele und MCP-Connectors bei Pi
+  ausgeblendet. `models.js`: Der Picker zeigt nur Modelle der Engine
+  (`engines` der Zeile), Gruppen auch für Provider, die nur eine Engine
+  kennt. `state.js`/`api.js`: `createSession(cwd, preset, engine)`.
+  `tools.js`: `args.path`, `args.edits`, `meta.exitCode`. `i18n.js`: Texte
+  DE/EN. `reduce.js` brauchte keine Änderung (die UI liest `header.engine`
+  direkt). iOS bleibt unverändert und liest dieselben Ereignisse.
+
+### 4.5 Bündelung
+
+`desktop/build.sh` ruft `fetch-pi.py` auf und kopiert `build/pi` nach
+`Aether.app/Contents/Resources/pi`; Pi läuft mit dem gebündelten Node
+26.13.0. Ohne Laufzeit meldet die Engine `available: false` mit Grund, statt
+zu scheitern.
 
 ## 5. Prüfung
 
 Beim Planen geprüft (2026-11-05, nur Scratch-Ordner): Pi-Doku und Typen
-gelesen; RPC-Proben mit Faux-Provider ohne Modellaufruf (Ereignisfolge,
-Gate, bash-Umgebung, Abbruch mit steer/followUp, `--session-id` anlegen und
-fortsetzen, Start und Speicher, eigenständige 13-MB-Laufzeit mit
-TS-Erweiterung). Nicht geprüft: echte Provider-Requests, Usage-Semantik
-echter Modelle, Sandbox um den Pi-Prozess, Linux ARM64, Verhalten bei
-geschlossenem stdin während eines Laufs. Am Code wurde nichts geändert.
+gelesen, RPC-Proben mit Faux-Provider ohne Modellaufruf.
 
-## 6. Offen – Fragen an den Nutzer
+Beim Bauen am 2026-11-05 ausgeführt (nur Scratch- und Temp-Ordner, kein
+echter Modell-Request, keine Schlüssel gelesen):
 
-| # | Frage | Empfehlung |
+- `python3 desktop/fetch-pi.py` und `fetch-node.py` in `desktop/build/`:
+  Prüfsummen ok, `cli.js --version` mit gebündeltem Node = `1.5.0`.
+- Aufnahme der elf Faux-Ströme mit der gepinnten Laufzeit (eigenes
+  `PI_CODING_AGENT_DIR`, `env -i`). Ohne Bridge zeigte `bash` eine
+  `*_API_KEY`-Variable (bestätigt den Befund aus der Planung).
+- `cargo test -p dshx-pi`: 8 Unit-Tests und 10 Golden-Tests (alle Fixtures
+  plus synthetische Retry- und Absturzfolgen, jeweils mit `validate_log`).
+- Live-Test `DSHX_PI_LIVE=1 cargo test -p dshx-pi --test live` gegen die
+  gepinnte Laufzeit mit macOS-Sandbox (Seatbelt) und Faux-Modell: Antwort mit
+  Deltas; `env` in bash ohne KEY/TOKEN/SECRET/PASSWORD/AETHER_ (0 Treffer);
+  `todo_write` über die Bridge; Gate-Text bei `/etc/…`; Schreiben im
+  Arbeitsordner; Steer im laufenden Turn; Stopp mit gehaltenem Steer (zurück
+  in der Warteschlange, kein Weiterlaufen); FIFO danach; Absturz per
+  `kill -9` (`ENGINE_EXITED`, Neustart beim nächsten Prompt);
+  Leerlauf-Ende; Aether-Neustart (Log über `SessionStore::resume`, Pi setzt
+  dieselbe Datei fort); `validate_log` des fertigen Logs. Zweiter Live-Test:
+  Pi listet `deepseek/deepseek-flash` und eine `aether-<id>`-Route nur mit
+  den über die Bridge gereichten Schlüsseln.
+- `cargo test -p dsh-codex --test pi_engine` (mit `DSHX_PI_TEST_RUNTIME`,
+  `DSHX_PI_TEST_NODE`): ohne Laufzeit `available: false` mit Grund und 400
+  beim Anlegen, DSH-Chat unverändert; mit Laufzeit `POST /api/sessions` über
+  `defaultEngine: "pi"`, Header `engine`/`engineVersion`, Faux-Antwort über
+  `/prompt`, Listenzeile mit `engine`, Stats, MCP-Antwort, Löschen entfernt
+  Pis Sitzungsdatei. Dazu `cargo test -p dsh-codex --test on_demand
+  a_chat_switches_off_a_preselected_server` (DSH-Chat über die API).
+- `cargo check --workspace --tests`, `rustfmt --edition 2024` auf den
+  berührten Dateien, `node --check` auf den berührten JS-Dateien.
+
+Nicht geprüft (Nutzerwunsch oder außerhalb des MVP): echte Provider-Requests
+und die Usage-Semantik echter Modelle (`input` mit oder ohne Cache), die
+Oberfläche im Browser und in der Mac-App, `desktop/build.sh` und das
+App-Bundle, Linux mit bwrap, `cargo clippy`, die Workspace-Testsuite und
+`ui/dev/*_check.mjs`.
+
+## 6. Offen
+
+**MVP-Lücken:**
+
+- Nachspiegeln fehlender Pi-Einträge nach einem Aether-Absturz: `pi/cursor`
+  wird geschrieben, Einträge nach dem Cursor werden beim Wiederöffnen aber
+  noch nicht ins Aether-Log übernommen (das Modell sieht sie trotzdem).
+- Ein abweichender DeepSeek-`base_url` (Proxy) wird an Pi nicht
+  weitergegeben; Pi nutzt `https://api.deepseek.com` (openai-completions).
+  Provider-spezifische `compat`-Felder (z. B. für GLM) fehlen.
+- Keine Live-Ausgabe von `bash` (`tool_execution_update` verworfen), keine
+  LLM-Titel (nur der Ersatztitel), kein `set_session_name`.
+- Slash-Vorschläge im Composer sind die von DSH; Skills werden in Pi-Chats
+  nicht expandiert (`--no-skills`).
+- `extension_ui_request`-Dialoge werden abgebrochen.
+- `ui/fixtures/pi.json` und `ui/dev/engine_check.mjs` aus §3.4 fehlen.
+- Proxy-Variablen (`HTTP(S)_PROXY`) gehen nicht an Pi.
+- Kein Release-Tarball mit `share/dsh-codex/pi/` und kein
+  `dsh-codex runtime install` für Linux.
+
+**Folgephasen** wie in §3.8: 2 (Übergabe/Fortsetzungs-Chat), 3
+(Werkzeugbrücke: Web, Browser, App/Computer, MCP, Skills, Live-bash,
+LLM-Titel, Pi-Modelle), 4 (Ziele, Zeitpläne, Freigabekarte, Fork,
+Subagenten), 5 (iOS-Abzeichen und -Wahl, VPS-Laufzeit, OracleVPS-Doku).
+
+**Entscheidungen** (nach den Empfehlungen, vom Nutzer noch änderbar):
+
+| # | Frage | Entscheidung (Empfehlung) |
 |---|---|---|
 | **F1** | Wechsel als verknüpfter Fortsetzungs-Chat oder Wechsel im selben Chat? | Fortsetzungs-Chat mit Übergabe, Ketten in der Seitenleiste gruppiert. Den Wechsel im selben Chat nur angehen, wenn sich die Kette nicht bewährt. |
 | **F2** | Aether-eigenes Pi-Verzeichnis (`$DSHX_HOME/pi/agent`) oder dein `~/.pi/agent` mit deinen Logins, `models.json` und Skills? | Aether-eigen als Standard (sicher, VPS-tauglich). Optional ein Experten-Schalter „`~/.pi` verwenden“, ohne Gewähr für eigene Erweiterungen. |

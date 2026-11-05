@@ -1,0 +1,48 @@
+{"_sent":{"id":"c1","type":"set_model","provider":"pi-faux","modelId":"faux-1"}}
+{"id":"c1","type":"response","command":"set_model","success":true,"data":{"id":"faux-1","provider":"pi-faux"}}
+{"_sent":{"id":"c2","type":"prompt","message":"bash: sleep 1; echo first"}}
+{"id":"c2","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"bash: sleep 1; echo first"}],"timestamp":1793902501054}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"bash: sleep 1; echo first"}],"timestamp":1793902501054}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902501040:h2qti6gzp3r","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":13,"cacheRead":0,"cacheWrite":1405,"totalTokens":1418,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902501058}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"Running it."}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_end","contentIndex":0,"content":"Running it."}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","contentIndex":1,"id":"tool:1793902501058:kg1aynu2t6d","toolName":"bash"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":1,"delta":"{\"command\":\""}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":1,"delta":"sleep 1; echo first\""}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":1,"delta":"}"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":1,"toolCall":{"type":"toolCall","id":"tool:1793902501058:kg1aynu2t6d","name":"bash","arguments":{"command":"sleep 1; echo first"}}}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Running it."},{"type":"toolCall","id":"tool:1793902501058:kg1aynu2t6d","name":"bash","arguments":{"command":"sleep 1; echo first"}}],"api":"faux:1793902501040:h2qti6gzp3r","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":13,"cacheRead":0,"cacheWrite":1405,"totalTokens":1418,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1793902501058,"durationMs":1,"thinkingLevel":"medium"}}
+{"type":"tool_execution_start","toolCallId":"tool:1793902501058:kg1aynu2t6d","toolName":"bash","args":{"command":"sleep 1; echo first"}}
+{"type":"tool_execution_update","toolCallId":"tool:1793902501058:kg1aynu2t6d","toolName":"bash","args":{"command":"sleep 1; echo first"},"partialResult":{"content":[]}}
+{"_sent":{"id":"c3","type":"prompt","message":"steered text","streamingBehavior":"steer"}}
+{"type":"queue_update","steering":["steered text"],"followUp":[]}
+{"id":"c3","type":"response","command":"prompt","success":true,"data":{"disposition":"queued"}}
+{"type":"tool_execution_update","toolCallId":"tool:1793902501058:kg1aynu2t6d","toolName":"bash","args":{"command":"sleep 1; echo first"},"partialResult":{"content":[{"type":"text","text":"first\n"}],"details":{}}}
+{"type":"tool_execution_end","toolCallId":"tool:1793902501058:kg1aynu2t6d","toolName":"bash","result":{"content":[{"type":"text","text":"first\n"}],"structuredContent":{"output":"first\n","truncated":false,"exit_code":0,"wall_time_seconds":1}},"isError":false,"durationMs":1024}
+{"type":"message_start","message":{"role":"toolResult","toolCallId":"tool:1793902501058:kg1aynu2t6d","toolName":"bash","content":[{"type":"text","text":"first\n"}],"isError":false,"durationMs":1024,"timestamp":1793902502088}}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"tool:1793902501058:kg1aynu2t6d","toolName":"bash","content":[{"type":"text","text":"first\n"}],"isError":false,"durationMs":1024,"timestamp":1793902502088}}
+{"type":"turn_end"}
+{"type":"turn_start"}
+{"type":"queue_update","steering":[],"followUp":[]}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"steered text"}],"timestamp":1793902501366}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"steered text"}],"timestamp":1793902501366}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902501040:h2qti6gzp3r","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":10,"cacheRead":1405,"cacheWrite":26,"totalTokens":1441,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902502096}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"Thinking abo"}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"ut it."}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_end","contentIndex":0,"content":"Thinking about it."}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":1}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"Echo: steered te"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"xt"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":1,"content":"Echo: steered text"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Thinking about it."},{"type":"text","text":"Echo: steered text"}],"api":"faux:1793902501040:h2qti6gzp3r","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":10,"cacheRead":1405,"cacheWrite":26,"totalTokens":1441,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902502096,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c4","type":"get_entries"}}
+{"id":"c4","type":"response","command":"get_entries","success":true,"data":{"entries":[],"leafId":"8f08fc95"}}
+{"_sent":{"id":"c5","type":"get_state"}}

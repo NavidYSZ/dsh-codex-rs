@@ -424,6 +424,22 @@ impl Tally {
         self.approximate |= q.approximate;
     }
 
+    /// [`Tally::add`] where an engine reported the request's cost itself
+    /// (Pi's `costUsd`): it counts for a model without an Aether price.
+    pub fn add_reported(
+        &mut self,
+        usage: &TokenUsage,
+        quote: Option<Quote>,
+        reported: Option<f64>,
+    ) {
+        let priced = quote.is_some();
+        self.add(usage, quote);
+        if let Some(cost) = reported.filter(|c| !priced && c.is_finite() && *c >= 0.0) {
+            self.cost_usd += cost;
+            self.unpriced_requests -= 1;
+        }
+    }
+
     pub fn merge(&mut self, other: &Tally) {
         self.requests += other.requests;
         self.input_tokens += other.input_tokens;
@@ -469,6 +485,11 @@ fn request_of(
     let p = p.and_then(Value::as_str).unwrap_or(provider).to_owned();
     let m = m.and_then(Value::as_str).unwrap_or(model).to_owned();
     Some((p, m, usage))
+}
+
+/// The cost an engine reported with the usage (Pi: `usage.costUsd`).
+fn reported_cost(e: &SessionEvent) -> Option<f64> {
+    e.data.pointer("/usage/costUsd").and_then(Value::as_f64)
 }
 
 // ---- one session -------------------------------------------------------------
@@ -779,7 +800,7 @@ pub fn session_stats(
                 if let Some((p, m, usage)) = request_of(e, &provider, &model) {
                     let quote = prices.quote(&p, &m, e.time);
                     let mut one = Tally::default();
-                    one.add(&usage, quote);
+                    one.add_reported(&usage, quote, reported_cost(e));
                     totals.merge(&one);
                     if let Some(n) = turn {
                         let t = turn_mut(&mut turns, &mut index, n);
@@ -1009,7 +1030,7 @@ fn buckets_of(events: &[SessionEvent], prices: &PriceBook) -> Vec<Bucket> {
         by_key
             .entry((e.time - e.time % HOUR_MS, p, m))
             .or_default()
-            .add(&usage, quote);
+            .add_reported(&usage, quote, reported_cost(e));
     }
     by_key
         .into_iter()

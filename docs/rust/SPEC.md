@@ -292,6 +292,86 @@ targets are visible, and claimed input remains recoverable until its user
 message is committed. Recovery reconciles partial promotion/admission batches
 by message identity. Explicit cancellation/removal remains authoritative.
 
+### 5.8b Chat engines: DSH and Pi (`crates/dshx-pi`, `crates/dsh-codex/src/pi.rs`)
+A chat runs on one engine, fixed at creation: **DSH** (everything above; every
+session without an `engine` header) or **Pi** (the Pi coding agent pinned to
+1.5.0, plan `docs/planning/engine-pi.md`). A Pi session's v4 header carries
+`engine: "pi"` and `engineVersion: "1.5.0"` (allowed optional header keys; DSH
+sessions never write them, so their logs stay dsh-readable) and no
+`agentPreset`. `WebBackend::session_handle` refuses a Pi chat, so
+`Runtime::new_agent` never sees one; every route that acts on a chat
+(`prompt`, `cancel`, `compact`, queue changes, stats, delete) asks
+`PiEngine::is_pi` (header line only, cached) first. Goals, MCP, branching,
+schedules and subagents answer 400 for Pi chats in this version.
+
+- **Process:** one `node <runtime>/dist/bundle/cli.js --mode rpc --session-dir
+  $DSHX_HOME/pi/sessions --session-id <aether id> --no-extensions -e
+  $DSHX_HOME/pi/ext/aether-bridge-<sha8>.ts --no-skills --no-mcp --no-approve
+  --no-prompt-templates --no-themes` per active Pi chat, cwd = the chat folder,
+  own process group (`PR_SET_PDEATHSIG` on Linux), `env_clear()` plus `PATH`,
+  `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `SHELL`, `TERM=dumb`,
+  `TMPDIR=$DSHX_HOME/pi/tmp`, `PI_CODING_AGENT_DIR=$DSHX_HOME/pi/agent`,
+  `PI_OFFLINE=1`, `PI_TELEMETRY=0`, `PI_SKIP_VERSION_CHECK=1`, `AETHER_BRIDGE`,
+  `AETHER_BRIDGE_TOKEN`. The host runner (sandbox-exec / bwrap) wraps the whole
+  process for the chat's mode; writable: the mode's roots plus
+  `$DSHX_HOME/pi/{agent,sessions,run,tmp}`. It starts with the first prompt,
+  ends after `[codex.pi] idle_secs` (600) idle, and at most `max_processes`
+  (macOS 6, Linux 3) run; a new one replaces the longest idle, else it waits
+  while its prompt stays queued. Model and thinking level go through
+  `set_model` / `get_available_thinking_levels` / `set_thinking_level` before
+  a prompt; a changed access mode restarts Pi (it resumes its session file).
+- **RPC:** strict JSONL (LF only, CR stripped), `id`-correlated requests,
+  a 64 KB stderr tail. Runtime resolution: `DSHX_PI` → beside the binary
+  (`pi/`, `../Resources/pi/`, `../share/dsh-codex/pi/`) →
+  `$DSHX_HOME/runtime/pi-1.5.0/`; Node like PTC (`DSHX_NODE` → beside the
+  binary → `PATH`); available only when `cli.js --version` prints `1.5.0`.
+- **Mapping** (`dshx_pi::mapper`, golden-tested against faux recordings with
+  `validate_log`): an Aether turn = Aether's `prompt` … Pi's `agent_settled`;
+  an Aether step = one Pi turn, opened at the first assistant output (a retried
+  request stays in its step). Pi's user echo commits the queued message
+  (`agent/inbox/spliced` removal + `user/message`, the first one also the
+  fallback `session/title`); assistant messages → `request/context`,
+  `assistant/message` (`reasoning`/`text`/`tool-call`, source `{kind: model,
+  provider, model}` in Aether's names, `usage` in `TokenUsage` shape plus
+  `costUsd`) or `assistant/attempt`; `tool_execution_*` → `tool/call` +
+  `tool/result` with row `meta` (`read`/`write` `{path}`, `edit` `{path,
+  diffs}`, `bash` `{exitCode, truncated, fullOutputPath}`); bridge
+  `todo_write` → `todo/write`; `auto_retry_start` → `llm/retry`;
+  `compaction_*` → `compaction/start|summary|end` plus a `compact-checkpoint`
+  user message replacing the surface before the latest prompt; `agent_settled`
+  → `turn/end` (`completed`, `aborted`, `error`, `max-tokens`) and
+  `pi/cursor {entryId}` (`ignorable`). Deltas go out as `delta` stream
+  messages (`text`, `reasoning`, `tool-call`).
+- **Queue, steer, Stop:** prompts wait durably in `next-turn`, steers in
+  `next-step` and go to Pi as `prompt {streamingBehavior: "steer"}` (Pi's
+  `followUp` is never used). Stop sends `clear_queue` first (its steering
+  texts return to the front of `next-turn`), then `abort` (SIGTERM/SIGKILL to
+  the group after 10 s); nothing continues by itself until the next prompt.
+  A process exit during a turn closes open calls with error results and the
+  turn with `{kind: "error", error: {code: "ENGINE_EXITED", message}}`; the
+  next prompt restarts Pi on the same `--session-id`.
+- **Bridge** (`$DSHX_HOME/pi/run/<sha16>.sock`, folder 0700, socket 0600,
+  32-byte token, JSON lines): `hello` → `config {session, cwd, sandbox, tools,
+  providers}`; `gate` for `write`/`edit` (DSH's
+  `[sandbox: file access denied under <mode> mode]`); `call` runs an Aether
+  tool (`todo_write`) with a `ToolContext` whose `session_id` is the chat;
+  `providers` pushes new keys. Providers: the DeepSeek key over Pi's built-in
+  `deepseek`, each `[providers.<id>]` as `aether-<id>` with its models; keys
+  are escaped for Pi (`$` → `$$`, a leading `!` → `$!`) and exist only in the
+  extension's memory. The extension replaces `bash` with Pi's own whose
+  environment drops names containing `KEY`, `TOKEN`, `SECRET`, `PASSWORD` and
+  every `AETHER_*`, and deletes both `AETHER_*` variables from `process.env`.
+- **Compaction:** Pi's own pressure compaction stays on; Aether's
+  `[codex.compaction]` mode adds a turn-end `compact` after `agent_settled`
+  (never after a Stop; written only when it succeeds); `/compact` sends
+  `compact` between turns.
+- **Costs:** `usage.rs` prices Pi requests like DSH ones by Aether provider and
+  model; a request whose model has no Aether price counts Pi's `costUsd`.
+  `GET /api/sessions/:id/stats` of a Pi chat takes the context window from its
+  last `request/context`.
+- `DSHX_PI_TEST=1` also loads `extension/aether-faux.ts` (provider `pi-faux`,
+  model `faux-1`, no network) and offers `pi-faux/faux-1` in `/api/info.models`.
+
 ### 5.9 Automation: `dshx-goal`, `dshx-schedule`, `dshx-team`
 Ports of the dsh 0.2.0-rc.2 packages, with tool names, descriptions and schemas byte-identical to
 the goldens in `docs/rust/upstream/tools-0.2.0-rc.2/` (compiled with `tools/dev/extract_tool_schemas.mjs`;
@@ -330,8 +410,9 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset, compaction:{mode, thresholdTokens}, browser:{enabled, chrome}}, apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin, personalSkills}}` (`personalSkills`: the personal skills folder, `~`-relative); each model row adds `{provider, providerName, model, maxTokens, available, cost?, offPeakCost?}` (DeepSeek rows: `cost` at peak hours and `offPeakCost`, both from the usage price book) and its `id` is the model reference (bare DeepSeek id or `provider/model`); `apiKeyConfigured` = some route can take a prompt |
-| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, compaction?: {mode?, thresholdTokens?}, browser?: {enabled?, chrome?}, ui?: {workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?, sidebarArchived?, confirmFullAccess?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `compaction` → `[codex.compaction]`, `mode` one of `threshold`, `every-turn`, `off`, `thresholdTokens` 20000–1000000, else 400, and open Standard/PTC chats follow at once; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
+| GET | `/api/info` | → `{version, platform, locale, models:[ModelInfo], providers:[{id, name, available}], settings:{model, effort, sandbox, approval, defaultPreset, defaultEngine, compaction:{mode, thresholdTokens}, browser:{enabled, chrome}}, engines:[{id, name, available, version?, reason?, processes?, maxProcesses?}], apiKeyConfigured, tools:{browser, app, computer}, extensions:{plugins, pluginsEnabled, marketplaces, skills, mcpServers, mcpConnected, mcpNeedsLogin, personalSkills}}` (`personalSkills`: the personal skills folder, `~`-relative); each model row adds `{provider, providerName, model, maxTokens, available, cost?, offPeakCost?}` (DeepSeek rows: `cost` at peak hours and `offPeakCost`, both from the usage price book) and its `id` is the model reference (bare DeepSeek id or `provider/model`), plus `engines: ["dsh", "pi"]` (the engines that run it); `engines[pi].reason` says why Pi cannot run here; `apiKeyConfigured` = some route can take a prompt |
+| GET | `/api/engines` | → the `engines` rows of `/api/info` |
+| PUT | `/api/settings` | `{model?, effort?, sandbox?, approval?, apiKey?, defaultPreset?, defaultEngine?, compaction?: {mode?, thresholdTokens?}, browser?: {enabled?, chrome?}, ui?: {workDetails?, performanceUsage?, sidebarGroup?, sidebarOrder?, sidebarArchived?, confirmFullAccess?}}` → `/api/info` shape (`defaultPreset` → config `default_preset`; `defaultEngine` `dsh`/`pi` → config `default_engine`; `compaction` → `[codex.compaction]`, `mode` one of `threshold`, `every-turn`, `off`, `thresholdTokens` 20000–1000000, else 400, and open Standard/PTC chats follow at once; `ui` goes to `$DSHX_HOME/ui-state.json`, so every browser sees it) |
 | GET | `/api/browser/status` | Saved `configured:{enabled,chrome}`, current `active:{enabled,available,chrome,profile,running}`, `resolvedChrome` and `restartRequired`. Does not start a browser. |
 | POST | `/api/browser/test` | Tests saved settings with a temporary profile and loopback page; returns `{ok,checkedAt,durationMs,chrome,isolated:true,checks:[{name,ok}],error?}`. Checks: launch, open, type, click, read. Bounded execution; one check per instance at a time. Does not test website logins or MCP browser interaction. |
 | GET | `/api/workspaces` | → `[{path, name, lastUsed}]` |
@@ -340,8 +421,8 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | GET | `/api/fs/suggestions` | → `{repos:[{name, path}]}`: up to 12 repositories (folders with `.git`) at most three levels below the roots, most recently changed first; skips dot folders, build output and, on macOS, the privacy-protected home folders |
 | POST | `/api/fs/mkdir` | `{path, name}` → 201 `{path}`; `name` is one plain folder name; exists → 409 `exists` |
 | POST | `/api/fs/pick` | `{prompt?, defaultPath?}` → `{path \| null}` (`null` = cancelled) from `osascript` "choose folder"; only on macOS when the server was not started from an SSH session, else 501 `unsupported` (the UI then shows its folder browser); a second dialog → 409 `busy` |
-| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread, preset?, parentSession?}]` (newest first; `preset` when the session recorded one; `parentSession` for branches; subagent children, header `origin: "subagent"`, are left out) |
-| POST | `/api/sessions` | `{cwd?, preset?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`); `preset` (`standard`, `ptc`, `minimal`, default `settings.defaultPreset`) is fixed for the session and recorded as header `agentPreset`; unknown → 400 |
+| GET | `/api/sessions?cwd=` | → `[{id, title, cwd, createdAt, updatedAt, status, scratch, pinned, archived, unread, preset?, engine?, parentSession?}]` (newest first; `preset` when the session recorded one; `parentSession` for branches; subagent children, header `origin: "subagent"`, are left out) |
+| POST | `/api/sessions` | `{cwd?, preset?, engine?}` → `{id}`; without `cwd` the chat gets its own folder under `$DSHX_HOME/chats/` (`scratch: true`); `preset` (`standard`, `ptc`, `minimal`, default `settings.defaultPreset`) is fixed for the session and recorded as header `agentPreset`; unknown → 400. `engine` (`dsh`, `pi`; without it a given `preset` means `dsh`, else `settings.defaultEngine`) is fixed too; `pi` writes header `engine`/`engineVersion` (§5.8b) and fails with Pi's reason when it cannot run |
 | GET | `/api/sessions/:id` | → `{header, events:[SessionEvent], status}` |
 | PATCH | `/api/sessions/:id` | `{title?, pinned?, archived?, seen?, unread?}` → list row; kept in `$DSHX_HOME/ui-state.json`, not in the log |
 | POST | `/api/sessions/:id/preview` | → `{base, root}`: `base` is `/preview/<grant>/`, a 2-hour read-only capability for the chat's folder |

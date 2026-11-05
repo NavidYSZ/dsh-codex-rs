@@ -115,8 +115,16 @@ pub fn needs_ignorable_for_dsh_0_2_0(kind: &str) -> bool {
 /// Optional event envelope keys beside `type`, `seq`, `time`, `data`.
 const EVENT_OPTIONAL_KEYS: &[&str] = &["ignorable", "sourceEventSeqs", "surfaceOp"];
 /// `mcpPreselected` (Aether, not dsh): the MCP servers a chat was created
-/// with preselected, a list of server names.
-const HEADER_OPTIONAL_KEYS: &[&str] = &["parentSession", "origin", "agentPreset", "mcpPreselected"];
+/// with preselected, a list of server names. `engine`/`engineVersion` mark
+/// an Aether chat run by another engine (Pi); DSH chats never carry them.
+const HEADER_OPTIONAL_KEYS: &[&str] = &[
+    "parentSession",
+    "origin",
+    "agentPreset",
+    "mcpPreselected",
+    "engine",
+    "engineVersion",
+];
 
 // --- paths ---
 
@@ -252,6 +260,11 @@ pub fn encode_header_line(header: &SessionHeader) -> Result<String> {
     }
     if let Some(v) = header.extra.get("mcpPreselected") {
         line.insert("mcpPreselected".into(), v.clone());
+    }
+    for key in ["engine", "engineVersion"] {
+        if let Some(v) = header.extra.get(key) {
+            line.insert(key.into(), v.clone());
+        }
     }
     Ok(Value::Object(line).to_string())
 }

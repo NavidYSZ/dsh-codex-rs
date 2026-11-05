@@ -1,0 +1,18 @@
+{"_sent":{"id":"c1","type":"set_model","provider":"pi-faux","modelId":"faux-1"}}
+{"id":"c1","type":"response","command":"set_model","success":true,"data":{"id":"faux-1","provider":"pi-faux"}}
+{"_sent":{"id":"c2","type":"set_auto_retry","enabled":false}}
+{"id":"c2","type":"response","command":"set_auto_retry","success":true}
+{"_sent":{"id":"c3","type":"prompt","message":"fail"}}
+{"id":"c3","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"fail"}],"timestamp":1793902506652}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"fail"}],"timestamp":1793902506652}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902506637:b2yvi3c2y4m","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":1400,"totalTokens":1400,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","errorMessage":"faux provider failure","timestamp":1793902506656}}
+{"type":"message_end","message":{"role":"assistant","content":[],"api":"faux:1793902506637:b2yvi3c2y4m","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":1400,"totalTokens":1400,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"error","errorMessage":"faux provider failure","timestamp":1793902506656,"durationMs":1,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c4","type":"get_entries"}}
+{"id":"c4","type":"response","command":"get_entries","success":true,"data":{"entries":[],"leafId":"eea3b70a"}}
+{"_sent":{"id":"c5","type":"get_state"}}

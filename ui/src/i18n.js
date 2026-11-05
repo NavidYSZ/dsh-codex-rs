@@ -195,6 +195,21 @@ const EN = {
   modeGuideTitle: 'Modes',
   modeHowTo: 'How to use it',
   modeTry: 'Try it',
+  // Chat engines: DSH (Aether's own agent) or the Pi coding agent.
+  engine: 'Engine',
+  engines: {
+    dsh: { name: 'DSH', hint: 'Aether\u2019s own agent with Standard, PTC and Minimal' },
+    pi: { name: 'Pi', hint: 'The Pi coding agent: read, bash, edit, write and a plan' },
+  },
+  engineSeat: 'Choose the engine for your new chat',
+  engineOfChat: 'Engine of this chat',
+  engineFixed: 'A chat keeps the engine it started with.',
+  engineNewChat: (name) => `New chat with ${name}`,
+  engineUnavailable: (reason) => `Not available: ${reason}`,
+  engineVersion: (v) => `Version ${v}`,
+  engineAccess: 'Access follows the chat\u2019s mode; Pi asks no per-call approvals.',
+  piSetting: 'Pi runtime',
+  piReady: (v) => `Pi ${v} is ready.`,
   modeGuides: {
     standard: {
       intro: 'Choose Standard mode when starting a new task. Describe what you want to accomplish, point to the relevant files, and explain how to check the result.',
@@ -875,6 +890,20 @@ const DE = {
   modeGuideTitle: 'Modi',
   modeHowTo: 'So nutzt du ihn',
   modeTry: 'Ausprobieren',
+  engine: 'Engine',
+  engines: {
+    dsh: { name: 'DSH', hint: 'Aethers eigener Agent mit Standard, PTC und Minimal' },
+    pi: { name: 'Pi', hint: 'Der Pi-Coding-Agent: read, bash, edit, write und ein Plan' },
+  },
+  engineSeat: 'Engine für den neuen Chat wählen',
+  engineOfChat: 'Engine dieses Chats',
+  engineFixed: 'Ein Chat behält die Engine, mit der er gestartet ist.',
+  engineNewChat: (name) => `Neuer Chat mit ${name}`,
+  engineUnavailable: (reason) => `Nicht verfügbar: ${reason}`,
+  engineVersion: (v) => `Version ${v}`,
+  engineAccess: 'Der Zugriff folgt dem Modus des Chats; Pi fragt nicht bei einzelnen Aufrufen nach.',
+  piSetting: 'Pi-Laufzeit',
+  piReady: (v) => `Pi ${v} ist bereit.`,
   modeGuides: {
     standard: {
       intro: 'Wähle Standard, wenn du eine neue Aufgabe beginnst. Beschreibe, was du erreichen willst, nenne die wichtigen Dateien und sag, wie sich das Ergebnis prüfen lässt.',

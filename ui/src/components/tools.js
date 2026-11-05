@@ -81,7 +81,8 @@ function BashRow({ item }) {
   const text = resultText(result);
   const out = useMemo(() => splitShellOutput(text) ?? splitBashOutput(text), [text]);
   const failed = result?.isError;
-  const exit = failed ? null : out.exit;
+  // Pi's bash reports its exit code in meta; dsh's appends "[exit code: N]".
+  const exit = failed ? null : result?.meta?.exitCode ?? out.exit;
   const badge = html`<${ApprovalBadge} item=${item} />${exit ? html`<span class="badge badge-error">${t.exit(exit)}</span>` : null}${out.note && !failed
     ? html`<span class=${cx('badge', out.noteError && 'badge-error')}>${out.note}</span>` : null}`;
   return html`<${Row} icon=${html`<${IconTerminal} size=${14} />`} title=${running || waiting(item) ? t.running : t.ran}
@@ -106,12 +107,13 @@ function ReadRow({ item, cwd }) {
   const meta = result?.meta;
   const running = !result;
   const failed = result?.isError;
-  const path = relPath(meta?.path ?? args.file_path, cwd);
+  // `path`: Pi's argument name.
+  const path = relPath(meta?.path ?? args.file_path ?? args.path, cwd);
   const lines = Array.isArray(meta?.lines) ? meta.lines : null;
   const range = lines?.length ? t.lines(lines[0].number, lines[lines.length - 1].number) : '';
   const lang = meta?.lang ?? extOf(path);
   return html`<${Row} icon=${html`<${IconFile} size=${14} />`} title=${running ? t.reading : t.read}
-      summary=${failed ? errorReason(result) : path} running=${running} error=${failed} path=${failed ? null : meta?.path ?? args.file_path}
+      summary=${failed ? errorReason(result) : path} running=${running} error=${failed} path=${failed ? null : meta?.path ?? args.file_path ?? args.path}
       badge=${range && !failed ? html`<span class="row-meta">${range}</span>` : null}
       open=${open} onToggle=${lines ? toggle : undefined}>
     ${lines ? html`<div class="code-panel"><${Clamp} lines=${lines} max=${18} render=${(ls) => html`<table class="code-lines"><tbody>
@@ -140,11 +142,13 @@ export function editHunks(item) {
   if (meta?.diffs?.length) return meta.diffs.map((d) => diffLines(d.oldText, d.newText));
   if (name === 'write') return [diffLines(null, args.content ?? '')];
   if (name === 'edit' && (args.old_string || args.new_string)) return [diffLines(args.old_string || null, args.new_string ?? '')];
+  // Pi's edit: `edits: [{oldText, newText}]`.
+  if (name === 'edit' && Array.isArray(args.edits)) return args.edits.map((e) => diffLines(e.oldText || null, e.newText ?? ''));
   return [];
 }
 
 /** Absolute or relative path an edit/write touched. */
-export const editPath = (item) => item.result?.meta?.path ?? item.args.file_path ?? item.result?.meta?.diffs?.[0]?.path ?? '';
+export const editPath = (item) => item.result?.meta?.path ?? item.args.file_path ?? item.args.path ?? item.result?.meta?.diffs?.[0]?.path ?? '';
 
 function EditRow({ item, cwd }) {
   const { args, result, name } = item;

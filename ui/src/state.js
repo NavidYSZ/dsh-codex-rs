@@ -470,8 +470,9 @@ export async function send(text, images, opts, { onSession, onCreate, sessionId 
   try {
     let id = sessionId ?? s.activeId;
     if (!id) {
-      ({ id } = await api.createSession(s.cwd, s.composer.preset));
-      await onCreate?.(id, { preset: s.composer.preset ?? s.info?.settings?.defaultPreset ?? 'standard' });
+      const engine = s.composer.engine ?? s.info?.settings?.defaultEngine ?? 'dsh';
+      ({ id } = await api.createSession(s.cwd, engine === 'pi' ? null : s.composer.preset, engine));
+      await onCreate?.(id, { preset: s.composer.preset ?? s.info?.settings?.defaultPreset ?? 'standard', engine });
       refreshSessions();
     }
     const following = navigation === openToken && store.get().activeId === s.activeId && store.get().view === s.view;

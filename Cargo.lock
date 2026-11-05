@@ -672,6 +672,7 @@ dependencies = [
  "dshx-llm",
  "dshx-macos",
  "dshx-mcp",
+ "dshx-pi",
  "dshx-plugins",
  "dshx-schedule",
  "dshx-server",
@@ -865,6 +866,26 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "dshx-pi"
+version = "0.3.0-alpha.3"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "dshx-core",
+ "dshx-session",
+ "dshx-tools",
+ "libc",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

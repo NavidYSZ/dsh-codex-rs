@@ -1,0 +1,94 @@
+{"_sent":{"id":"c1","type":"set_model","provider":"pi-faux","modelId":"faux-1"}}
+{"id":"c1","type":"response","command":"set_model","success":true,"data":{"id":"faux-1","provider":"pi-faux"}}
+{"_sent":{"id":"c2","type":"prompt","message":"write: notes2.txt"}}
+{"id":"c2","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"write: notes2.txt"}],"timestamp":1793902500523}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"write: notes2.txt"}],"timestamp":1793902500523}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":12,"cacheRead":0,"cacheWrite":1403,"totalTokens":1415,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902500528}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","contentIndex":0,"id":"tool:1793902500528:k2q04he4ul","toolName":"write"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"{\"path\":\"notes2."}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"txt\",\"conten"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"t\":\"hello\\n\""}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"}"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":0,"toolCall":{"type":"toolCall","id":"tool:1793902500528:k2q04he4ul","name":"write","arguments":{"path":"notes2.txt","content":"hello\n"}}}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"tool:1793902500528:k2q04he4ul","name":"write","arguments":{"path":"notes2.txt","content":"hello\n"}}],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":12,"cacheRead":0,"cacheWrite":1403,"totalTokens":1415,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1793902500528,"durationMs":1,"thinkingLevel":"medium"}}
+{"type":"tool_execution_start","toolCallId":"tool:1793902500528:k2q04he4ul","toolName":"write","args":{"path":"notes2.txt","content":"hello\n"}}
+{"type":"tool_execution_end","toolCallId":"tool:1793902500528:k2q04he4ul","toolName":"write","result":{"content":[{"type":"text","text":"Successfully wrote to notes2.txt"}]},"isError":false,"durationMs":15}
+{"type":"message_start","message":{"role":"toolResult","toolCallId":"tool:1793902500528:k2q04he4ul","toolName":"write","content":[{"type":"text","text":"Successfully wrote to notes2.txt"}],"isError":false,"durationMs":15,"timestamp":1793902500549}}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"tool:1793902500528:k2q04he4ul","toolName":"write","content":[{"type":"text","text":"Successfully wrote to notes2.txt"}],"isError":false,"durationMs":15,"timestamp":1793902500549}}
+{"type":"turn_end"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":13,"cacheRead":1403,"cacheWrite":28,"totalTokens":1444,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902500551}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Done with write:"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":" Successfull"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"y wrote to n"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"otes2.txt"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"Done with write: Successfully wrote to notes2.txt"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Done with write: Successfully wrote to notes2.txt"}],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":13,"cacheRead":1403,"cacheWrite":28,"totalTokens":1444,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902500551,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c3","type":"prompt","message":"edit: notes2.txt"}}
+{"id":"c3","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"edit: notes2.txt"}],"timestamp":1793902500556}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"edit: notes2.txt"}],"timestamp":1793902500556}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":18,"cacheRead":1431,"cacheWrite":21,"totalTokens":1470,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902500560}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","contentIndex":0,"id":"tool:1793902500560:lf2ky4w737f","toolName":"edit"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"{\"path\":\"notes2."}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"txt\",\"edits\":[{\""}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"oldText\":\"hello\",\"ne"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"wText\":\"bye\"}]}"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":0,"toolCall":{"type":"toolCall","id":"tool:1793902500560:lf2ky4w737f","name":"edit","arguments":{"path":"notes2.txt","edits":[{"oldText":"hello","newText":"bye"}]}}}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"tool:1793902500560:lf2ky4w737f","name":"edit","arguments":{"path":"notes2.txt","edits":[{"oldText":"hello","newText":"bye"}]}}],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":18,"cacheRead":1431,"cacheWrite":21,"totalTokens":1470,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1793902500560,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"tool_execution_start","toolCallId":"tool:1793902500560:lf2ky4w737f","toolName":"edit","args":{"path":"notes2.txt","edits":[{"oldText":"hello","newText":"bye"}]}}
+{"type":"tool_execution_end","toolCallId":"tool:1793902500560:lf2ky4w737f","toolName":"edit","result":{"content":[{"type":"text","text":"Successfully replaced 1 block(s) in notes2.txt."}],"details":{"diff":"-1 hello\n+1 bye","patch":"--- notes2.txt\n+++ notes2.txt\n@@ -1,1 +1,1 @@\n-hello\n+bye\n","firstChangedLine":1}},"isError":false,"durationMs":2}
+{"type":"message_start","message":{"role":"toolResult","toolCallId":"tool:1793902500560:lf2ky4w737f","toolName":"edit","content":[{"type":"text","text":"Successfully replaced 1 block(s) in notes2.txt."}],"details":{"diff":"-1 hello\n+1 bye","patch":"--- notes2.txt\n+++ notes2.txt\n@@ -1,1 +1,1 @@\n-hello\n+bye\n","firstChangedLine":1},"isError":false,"durationMs":2,"timestamp":1793902500566}}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"tool:1793902500560:lf2ky4w737f","toolName":"edit","content":[{"type":"text","text":"Successfully replaced 1 block(s) in notes2.txt."}],"details":{"diff":"-1 hello\n+1 bye","patch":"--- notes2.txt\n+++ notes2.txt\n@@ -1,1 +1,1 @@\n-hello\n+bye\n","firstChangedLine":1},"isError":false,"durationMs":2,"timestamp":1793902500566}}
+{"type":"turn_end"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":16,"cacheRead":1452,"cacheWrite":37,"totalTokens":1505,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902500574}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Done with ed"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"it: Successfully"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":" replaced 1 bloc"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"k(s) in notes2.txt."}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"Done with edit: Successfully replaced 1 block(s) in notes2.txt."}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Done with edit: Successfully replaced 1 block(s) in notes2.txt."}],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":16,"cacheRead":1452,"cacheWrite":37,"totalTokens":1505,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902500574,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c4","type":"prompt","message":"read: notes2.txt"}}
+{"id":"c4","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"read: notes2.txt"}],"timestamp":1793902500577}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"read: notes2.txt"}],"timestamp":1793902500577}}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":7,"cacheRead":1489,"cacheWrite":24,"totalTokens":1520,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902500582}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_start","contentIndex":0,"id":"tool:1793902500582:phcsnpbqto","toolName":"read"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"{\"path\":\"notes2."}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_delta","contentIndex":0,"delta":"txt\"}"}}
+{"type":"message_update","assistantMessageEvent":{"type":"toolcall_end","contentIndex":0,"toolCall":{"type":"toolCall","id":"tool:1793902500582:phcsnpbqto","name":"read","arguments":{"path":"notes2.txt"}}}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"tool:1793902500582:phcsnpbqto","name":"read","arguments":{"path":"notes2.txt"}}],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":7,"cacheRead":1489,"cacheWrite":24,"totalTokens":1520,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1793902500582,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"tool_execution_start","toolCallId":"tool:1793902500582:phcsnpbqto","toolName":"read","args":{"path":"notes2.txt"}}
+{"type":"tool_execution_end","toolCallId":"tool:1793902500582:phcsnpbqto","toolName":"read","result":{"content":[{"type":"text","text":"bye\n"}],"structuredContent":"bye\n"},"isError":false,"durationMs":2}
+{"type":"message_start","message":{"role":"toolResult","toolCallId":"tool:1793902500582:phcsnpbqto","toolName":"read","content":[{"type":"text","text":"bye\n"}],"isError":false,"durationMs":2,"timestamp":1793902500591}}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"tool:1793902500582:phcsnpbqto","toolName":"read","content":[{"type":"text","text":"bye\n"}],"isError":false,"durationMs":2,"timestamp":1793902500591}}
+{"type":"turn_end"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"assistant","content":[],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":5,"cacheRead":1513,"cacheWrite":15,"totalTokens":1533,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","timestamp":1793902500594}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Done with re"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"ad: bye"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"Done with read: bye"}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Done with read: bye"}],"api":"faux:1793902500505:mvjka5jz7ob","provider":"pi-faux","model":"faux-1","usage":{"input":0,"output":5,"cacheRead":1513,"cacheWrite":15,"totalTokens":1533,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1793902500594,"durationMs":0,"thinkingLevel":"medium"}}
+{"type":"turn_end"}
+{"type":"agent_end","willRetry":false}
+{"type":"agent_settled","aborted":false}
+{"_sent":{"id":"c5","type":"get_entries"}}
+{"id":"c5","type":"response","command":"get_entries","success":true,"data":{"entries":[],"leafId":"355b6b18"}}
+{"_sent":{"id":"c6","type":"get_state"}}

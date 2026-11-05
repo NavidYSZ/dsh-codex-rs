@@ -37,6 +37,9 @@ pub struct Config {
     /// Agent preset of new chats (`standard`, `ptc`, `minimal`); unset = `standard`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_preset: Option<String>,
+    /// Engine of new chats (`dsh`, `pi`); unset = `dsh`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_engine: Option<String>,
     pub codex: CodexConfig,
     /// MCP servers by name (the `mcp__<name>__<tool>` namespace).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -67,6 +70,7 @@ impl Default for Config {
             approval: "ask".into(),
             max_tokens: 256_000,
             default_preset: None,
+            default_engine: None,
             codex: CodexConfig::default(),
             mcp_servers: BTreeMap::new(),
             plugins: BTreeMap::new(),
@@ -483,6 +487,26 @@ pub struct CodexConfig {
     pub compaction: CompactionSettings,
     pub mobile: MobileConfig,
     pub hub: HubConfig,
+    pub pi: PiConfig,
+}
+
+/// `[codex.pi]`: the Pi engine's processes (one per active Pi chat).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct PiConfig {
+    /// At most this many Pi processes; a new one replaces the longest idle.
+    pub max_processes: usize,
+    /// An idle Pi process ends after this many seconds.
+    pub idle_secs: u64,
+}
+
+impl Default for PiConfig {
+    fn default() -> Self {
+        PiConfig {
+            max_processes: if cfg!(target_os = "macos") { 6 } else { 3 },
+            idle_secs: 600,
+        }
+    }
 }
 
 /// `[codex.hub]`: the Aether accounts hub this server keeps a relay

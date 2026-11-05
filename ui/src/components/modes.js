@@ -59,13 +59,117 @@ export function openModeGuide(id, from = 'new') {
   store.set({ modeGuide: { id, from, opener: document.activeElement } });
 }
 
+// ---- engines (DSH or Pi) ------------------------------------------------------
+
+/** A gear-like ring: the engine that runs a chat. */
+const IconEngine = ({ size = 16 } = {}) => html`<svg class="icon" width=${size} height=${size} viewBox="0 0 16 16" aria-hidden="true">
+  <circle cx="8" cy="8" r="2.4" ...${S}/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4 5 11M11 5l1.4-1.4" ...${S}/></svg>`;
+
+/** The server's engines; one (or none) means there is nothing to choose. */
+export function useEngines() {
+  return useStore(store, (s) => s.info?.engines ?? []);
+}
+
+/** The engine the next new chat starts with: the start-page pick, else the default. */
+export function useStagedEngine() {
+  const pick = useStore(store, (s) => s.composer.engine);
+  const fallback = useStore(store, (s) => s.info?.settings?.defaultEngine ?? 'dsh');
+  return pick ?? fallback;
+}
+
+/** The engine of the open chat (every chat without one is DSH). */
+export function useChatEngine() {
+  return useStore(store, (s) => s.header?.engine
+    ?? s.sessions.find((x) => x.id === s.activeId)?.engine ?? 'dsh');
+}
+
+const engineName = (id) => t.engines[id]?.name ?? id;
+
+/** A new chat with `engine`, in the open chat's folder (or without a project). */
+function newChatWithEngine(engine) {
+  const s = store.get();
+  const row = s.sessions.find((x) => x.id === s.activeId);
+  const cwd = row?.scratch ? '' : s.header?.cwd ?? row?.cwd ?? s.cwd;
+  newChat(cwd);
+  setComposer({ engine });
+}
+
+/** Start page: DSH or Pi for the new chat. */
+export function EngineChip() {
+  const engines = useEngines();
+  const staged = useStagedEngine();
+  const [open, setOpen] = useState(false);
+  const anchor = useRef(null);
+  if (engines.length < 2) return null;
+  return html`<span class="chip-wrap">
+    <button type="button" ref=${anchor} class="chip chip-plain chip-engine" aria-haspopup="menu" aria-expanded=${open}
+      title=${t.engineSeat} aria-label=${`${t.engine}: ${engineName(staged)}`} onClick=${() => setOpen((v) => !v)}>
+      <${IconEngine} size=${14} /><span class="chip-label">${engineName(staged)}</span>
+    </button>
+    <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} fixed class="menu-wide mode-menu">
+      <div class="menu-head">${t.engine}</div>
+      ${engines.map((e) => html`<${MenuItem} key=${e.id} checked=${e.id === staged} disabled=${!e.available}
+        hint=${e.available ? t.engines[e.id]?.hint ?? '' : t.engineUnavailable(e.reason ?? '')}
+        onClick=${() => { if (!e.available) return; setComposer({ engine: e.id }); setOpen(false); }}>${engineName(e.id)}</${MenuItem}>`)}
+    </${Menu}>
+  </span>`;
+}
+
+/** Top bar of a Pi chat: its engine and version, with a way to a new chat. */
+function EngineLabel() {
+  const engines = useEngines();
+  const version = useStore(store, (s) => s.header?.engineVersion ?? '');
+  const [open, setOpen] = useState(false);
+  const anchor = useRef(null);
+  return html`<span class="chip-wrap mode-label-wrap">
+    <button type="button" ref=${anchor} class="mode-label mode-label-engine" aria-haspopup="menu"
+      aria-expanded=${open} title=${t.engineOfChat} aria-label=${`${t.engine}: Pi`} onClick=${() => setOpen((v) => !v)}>
+      <${IconEngine} size=${13} /><span>Pi</span>
+    </button>
+    <${Menu} open=${open} onClose=${() => setOpen(false)} anchor=${anchor} side="bottom" align="start" fixed class="menu-wide mode-menu">
+      <div class="menu-head">${t.engineOfChat}</div>
+      <div class="mode-current">
+        <div class="mode-current-name">Pi${version ? ` · ${t.engineVersion(version)}` : ''}</div>
+        <div class="mode-current-text">${t.engines.pi.hint}. ${t.engineAccess}</div>
+        <div class="mode-current-note">${t.engineFixed}</div>
+      </div>
+      <div class="menu-sep" />
+      ${engines.filter((e) => e.available).map((e) => html`<${ActionItem} key=${e.id} icon=${html`<${IconEngine} size=${14} />`}
+        onClick=${() => { setOpen(false); newChatWithEngine(e.id); }}>${t.engineNewChat(engineName(e.id))}</${ActionItem}>`)}
+    </${Menu}>
+  </span>`;
+}
+
+/** Settings → defaults for new chats: the engine, and whether Pi can run. */
+export function EngineSetting() {
+  const engines = useEngines();
+  const value = useStore(store, (s) => s.info?.settings?.defaultEngine ?? 'dsh');
+  if (engines.length < 2) return null;
+  const pi = engines.find((e) => e.id === 'pi');
+  const status = pi ? (pi.available ? t.piReady(pi.version ?? '') : t.engineUnavailable(pi.reason ?? '')) : '';
+  return html`<div class="field">
+    <div class="field-text">
+      <div class="field-label">${t.engine}</div>
+      <div class="field-hint">${t.engines[value]?.hint ?? ''}${status ? html`<br />${t.piSetting}: ${status}` : null}</div>
+    </div>
+    <div class="field-control">
+      <div class="segmented" role="radiogroup" aria-label=${t.engine}>
+        ${engines.map((e) => html`<button type="button" key=${e.id} role="radio" aria-checked=${e.id === value} disabled=${!e.available && e.id !== value}
+          class=${cx('seg', e.id === value && 'is-on')} onClick=${() => updateSettings({ defaultEngine: e.id })}>${engineName(e.id)}</button>`)}
+      </div>
+    </div>
+  </div>`;
+}
+
 /** Start page: the mode of the new chat, beside the folder and access chips. */
 export function ModeChip() {
   const presets = usePresets();
   const staged = useStagedMode();
+  const engine = useStagedEngine();
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
-  if (presets.length < 2) return null;
+  // Modes belong to DSH; a Pi chat has none.
+  if (presets.length < 2 || engine === 'pi') return null;
   const current = modeText(staged, presets);
   return html`<span class="chip-wrap">
     <button type="button" ref=${anchor} class="chip chip-plain chip-mode" aria-haspopup="menu" aria-expanded=${open}
@@ -89,9 +193,11 @@ export function ModeChip() {
 export function ModeLabel() {
   const presets = usePresets();
   const mode = useChatMode();
+  const engine = useChatEngine();
   const loaded = useStore(store, (s) => !!s.header);
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
+  if (loaded && engine === 'pi') return html`<${EngineLabel} />`;
   if (presets.length < 2 || !loaded) return null;
   const current = modeText(mode, presets);
   return html`<span class="chip-wrap mode-label-wrap">

@@ -168,6 +168,24 @@ pub trait Backend: Send + Sync + 'static {
         }
         self.create_session(cwd).await
     }
+    /// [`Backend::create_session_with_preset`] with a chat engine (`dsh`,
+    /// `pi`); `None` = the configured default. Without engine support only
+    /// `dsh` is accepted.
+    async fn create_session_with_engine(
+        &self,
+        cwd: String,
+        preset: Option<String>,
+        engine: Option<String>,
+    ) -> anyhow::Result<String> {
+        if engine.as_deref().is_some_and(|e| e != "dsh") {
+            anyhow::bail!("chat engines are not supported");
+        }
+        self.create_session_with_preset(cwd, preset).await
+    }
+    /// The chat engines and whether they can run here (`GET /api/engines`).
+    async fn engines(&self) -> anyhow::Result<Value> {
+        Ok(json!([{ "id": "dsh", "name": "DSH", "available": true }]))
+    }
     /// `{header, events, status}`.
     async fn session(&self, id: &str) -> anyhow::Result<Value>;
     /// Events with `seq > after`, for WebSocket catch-up.
@@ -375,6 +393,7 @@ fn build(backend: Arc<dyn Backend>, token: String) -> (Router, AppState) {
     };
     let api = Router::new()
         .route("/info", get(info))
+        .route("/engines", get(engines))
         .route("/settings", put(update_settings))
         .route("/browser/status", get(browser_status))
         .route("/browser/test", post(browser_test))
@@ -636,6 +655,8 @@ struct CreateBody {
     cwd: Option<String>,
     #[serde(default)]
     preset: Option<String>,
+    #[serde(default)]
+    engine: Option<String>,
 }
 
 async fn create_session(
@@ -644,9 +665,13 @@ async fn create_session(
 ) -> ApiResult<Json<Value>> {
     let id = s
         .backend
-        .create_session_with_preset(body.cwd.unwrap_or_default(), body.preset)
+        .create_session_with_engine(body.cwd.unwrap_or_default(), body.preset, body.engine)
         .await?;
     Ok(Json(json!({ "id": id })))
+}
+
+async fn engines(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.engines().await?))
 }
 
 async fn update_session(

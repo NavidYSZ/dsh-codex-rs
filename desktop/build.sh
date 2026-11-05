@@ -62,6 +62,9 @@ fi
 echo "==> pinned Node.js runtime for PTC"
 python3 fetch-node.py
 
+echo "==> pinned Pi runtime for the Pi engine"
+python3 fetch-pi.py
+
 echo "==> Aether.app $VERSION ($BUILD)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers" build/tmp
@@ -72,6 +75,8 @@ xcrun swiftc -O -swift-version 5 -target arm64-apple-macos14.0 \
 cp "$BIN" "$APP/Contents/MacOS/dsh-codex"
 cp build/runtime/node "$APP/Contents/MacOS/node"
 cp build/runtime/NODE-LICENSE.txt "$APP/Contents/Resources/NODE-LICENSE.txt"
+# Pi runs on the bundled Node; dsh-codex finds it at ../Resources/pi.
+cp -R build/pi "$APP/Contents/Resources/pi"
 cp -R "$ROOT/helper/build/DSH Computer Use.app" "$APP/Contents/Helpers/"
 
 xcrun swiftc -O -swift-version 5 -target arm64-apple-macos14.0 -framework AppKit \
