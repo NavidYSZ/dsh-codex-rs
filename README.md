@@ -115,6 +115,41 @@ For example, the agent can read several files using `Promise.all`, filter the
 structured results, then `console.log` only the lines relevant to your task.
 The separate DSH `workflow` orchestration tool is not implemented.
 
+## Engines: DSH or Pi
+
+A chat runs on one of two engines, chosen when it starts (engine chip on the
+start page; default under Settings):
+
+| Engine | What runs |
+|---|---|
+| DSH | Aether's own Rust agent with the modes above. Every existing chat is DSH. |
+| Pi | The [Pi coding agent](https://github.com/earendil-works/pi) 1.5.0 (`read`, `bash`, `edit`, `write`) plus Aether's `todo_write`, one `pi --mode rpc` process per active chat. |
+
+A Pi chat looks like a DSH chat: streaming text and thinking, tool rows, the
+plan, steering and the queue, Stop, costs, compaction and status dots. It uses
+Aether's providers and keys (DeepSeek and every provider under Settings →
+Models); the keys reach Pi only in memory through its bridge, never through
+the environment or a file, and Pi's `bash` sees no variable whose name holds
+`KEY`, `TOKEN`, `SECRET` or `PASSWORD`. The whole Pi process runs inside the
+chat's access mode (`read-only`, `workspace-write` or full access); Pi asks
+for no per-call approvals, and blocked `write`/`edit` calls get DSH's
+sandbox text. Pi uses its own folder `$DSHX_HOME/pi/` (never `~/.pi`) and
+never loads extensions or settings from a project's `.pi/`; `AGENTS.md` still
+applies. Stop returns steers Pi had not taken yet to the queue; nothing
+continues by itself. If Pi crashes, the turn ends with the error and the next
+prompt restarts it on the same session; after an Aether restart Pi continues
+the chat from its own session file. Idle processes end after
+`[codex.pi] idle_secs` (600); at most `max_processes` run (6 on macOS, 3 on
+Linux).
+
+The Mac app ships the pinned Pi runtime (`Contents/Resources/pi/`) and runs it
+with the bundled Node. Elsewhere set `DSHX_PI` to a runtime folder made by
+`python3 desktop/fetch-pi.py <folder>` (or place it in
+`$DSHX_HOME/runtime/pi-1.5.0/`) and provide Node 22.19+ (`DSHX_NODE` or
+`PATH`). A `pi` on `PATH` is never used. Without a runtime, Settings shows why
+Pi is unavailable. Switching a running chat to the other engine, branching,
+goals, MCP connectors and the browser/computer tools in Pi chats come later.
+
 ## Messages while working
 
 By default, **Enter** steers a new message into the running task at its next
@@ -420,6 +455,7 @@ Sessions live in `~/.dsh-codex/sessions`, attachments in
 | `crates/dshx-browser` | Background Chrome over a DevTools pipe (`browser` tool) |
 | `crates/dshx-macos` | Swift-helper client, `computer` and `app` tools, mini window |
 | `crates/dshx-server` | Local HTTP/WebSocket server for the UI |
+| `crates/dshx-pi` | The Pi engine: process, RPC, event mapping, bridge (`extension/aether-bridge.ts`) |
 | `crates/dshx-hub` | Accounts hub (`aether-hub`): accounts, tiers, server enrolment, relay |
 | `crates/dsh-codex` | The binary |
 | `crates/dshx-testkit` | Scripted DeepSeek mock for tests |

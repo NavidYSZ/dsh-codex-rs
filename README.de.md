@@ -41,6 +41,42 @@ installiert lassen. Das originale DeepSeek Harness ist davon unabhängig.
   vertauschen. Fehlgeschlagene Sendungen behalten Text und Anhänge; ein
   Wiederholungsversuch derselben Sendung wird nicht doppelt ausgeführt.
 
+## Engines: DSH oder Pi
+
+Ein Chat läuft auf einer von zwei Engines, gewählt beim Anlegen (Engine-Chip
+auf der Startseite, Standard in den Einstellungen):
+
+- **DSH:** Aethers eigener Rust-Agent mit Standard, PTC und Minimal. Alle
+  bisherigen Chats sind DSH-Chats.
+- **Pi:** Der [Pi-Coding-Agent](https://github.com/earendil-works/pi) 1.5.0
+  (`read`, `bash`, `edit`, `write`) plus Aethers `todo_write`, ein
+  `pi --mode rpc`-Prozess je aktivem Chat.
+
+Ein Pi-Chat sieht aus wie ein DSH-Chat: Live-Text und Denken, Werkzeugzeilen,
+Plan, Steering und Warteschlange, Stopp, Kosten, Kompaktierung und
+Statuspunkte. Er nutzt Aethers Provider und Schlüssel (DeepSeek und alle unter
+**Einstellungen → Modelle**); die Schlüssel gelangen nur im Speicher über die
+Bridge zu Pi, nie über Umgebung oder Datei, und Pis `bash` sieht keine
+Variable mit `KEY`, `TOKEN`, `SECRET` oder `PASSWORD` im Namen. Der ganze
+Pi-Prozess läuft im Zugriffsmodus des Chats; Einzel-Freigaben gibt es nicht,
+geblockte `write`/`edit`-Aufrufe bekommen DSHs Sandbox-Text. Pi nutzt sein
+eigenes Verzeichnis `$DSHX_HOME/pi/` (nie `~/.pi`) und lädt keine
+Erweiterungen oder Einstellungen aus einem Projekt-`.pi/`; `AGENTS.md` wirkt
+trotzdem. Stopp legt noch nicht übernommene Steering-Nachrichten zurück in die
+Warteschlange; nichts läuft von selbst weiter. Stürzt Pi ab, endet der Turn
+mit dem Fehler, und der nächste Prompt startet Pi in derselben Sitzung neu.
+Untätige Prozesse enden nach `[codex.pi] idle_secs` (600); höchstens
+`max_processes` laufen (macOS 6, Linux 3).
+
+Die Mac-App bringt die gepinnte Pi-Laufzeit mit (`Contents/Resources/pi/`) und
+startet sie mit dem gebündelten Node. Sonst `DSHX_PI` auf einen mit
+`python3 desktop/fetch-pi.py <Ordner>` erzeugten Ordner setzen (oder ihn unter
+`$DSHX_HOME/runtime/pi-1.5.0/` ablegen) und Node 22.19+ bereitstellen
+(`DSHX_NODE` oder `PATH`). Ein `pi` aus `PATH` wird nie benutzt. Fehlt die
+Laufzeit, zeigen die Einstellungen den Grund. Wechsel eines laufenden Chats zur
+anderen Engine, Verzweigen, Ziele, MCP und Browser/Computer in Pi-Chats folgen
+später.
+
 ## Browser Use, HuntProxy und Kontext
 
 Unter **Einstellungen → Browser Use** lassen sich Browserpfad, Aktivierung und
