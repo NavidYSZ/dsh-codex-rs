@@ -152,7 +152,7 @@ client list; the link is shown once and never logged.
 
 | Method | Path | Body → Response |
 |---|---|---|
-| GET | `/api/mobile` | → `{enabled, port, addresses:[{ip, interface, kind:"lan"\|"tailscale"\|"public"\|"loopback"\|"other"}], certSha256, server:{id, name, hostname, platform, version}, clients:[Client]}`; `addresses` and `certSha256` only while the listener runs |
+| GET | `/api/mobile` | → `{enabled, port, configuredPort, addresses:[{ip, interface, kind:"lan"\|"tailscale"\|"public"\|"loopback"\|"other"}], certSha256, server:{id, name, hostname, platform, version}, clients:[Client], sshPair:{user, home, bin, port, unit}}`; `addresses` and `certSha256` only while the listener runs; `port` is the listening port while it runs (else the saved one), `configuredPort` always the saved one (0 = a free port at every start); `sshPair` is what `dsh-codex pair --ssh` needs about this server (`--remote-user`, `--remote-home`, `--remote-bin`, `--remote-port`, `--unit`), each `null` when unknown |
 | PUT | `/api/mobile` | `{enabled?, port?, name?}` → same shape; starts or stops the TLS listener at once and writes `[codex.mobile]`; a port in use → 400 |
 | POST | `/api/mobile/pair` | `{name?, transports?:["https","http"]}` → 201 `{client:Client, token, payload, link, qrSvg}`: the token appears exactly once; `payload` is §2.1 with the `https` transport when the listener runs (and `http` with the loopback URL when `transports` asks for it: dev only); `qrSvg` is an SVG string of `link` |
 | PATCH | `/api/mobile/clients/:id` | `{name}` → `Client` |

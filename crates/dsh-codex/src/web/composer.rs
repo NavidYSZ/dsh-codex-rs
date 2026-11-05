@@ -96,7 +96,7 @@ impl dshx_server::Composer for WebComposer {
                 query: query.q,
                 cwd,
                 preset,
-                session: chat.map(|(id, c)| (id, c.events)),
+                session: chat.map(|(id, c)| (id, c.header, c.events)),
                 model: query.model.filter(|m| !m.is_empty()),
                 goals,
             })
@@ -109,7 +109,7 @@ impl dshx_server::Composer for WebComposer {
         let b = self.backend()?;
         let chat = self.chat(id).await?;
         Ok(match chat.preset {
-            Preset::Standard | Preset::Ptc => b.runtime.mcp_picker(id, &chat.events),
+            Preset::Standard | Preset::Ptc => b.runtime.mcp_picker(id, &chat.header, &chat.events),
             Preset::Minimal => json!({ "active": [], "servers": [], "minimal": true }),
         })
     }

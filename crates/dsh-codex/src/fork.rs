@@ -43,8 +43,11 @@ pub fn fork_header(source: &SessionHeader) -> SessionHeader {
     header
         .extra
         .insert("parentSession".into(), json!(source.id));
-    if let Some(preset) = source.extra.get("agentPreset") {
-        header.extra.insert("agentPreset".into(), preset.clone());
+    // The branch keeps the source's mode and MCP preselection.
+    for key in ["agentPreset", crate::runtime::ondemand::PRESELECTED] {
+        if let Some(value) = source.extra.get(key) {
+            header.extra.insert(key.into(), value.clone());
+        }
     }
     header
 }

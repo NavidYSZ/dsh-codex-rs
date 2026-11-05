@@ -340,7 +340,10 @@ turns the server on or off for this chat (on the start page: for the chat the
 first prompt creates). `@name` in a prompt also turns a server on. Servers
 with `always = true` (**Preselected in new chats**, shown as *Default*) start
 in every new chat, and each chat can still switch them off: a switched-off
-server contributes neither tools nor instructions to that chat. Minimal mode
+server contributes neither tools nor instructions to that chat. A chat keeps
+the preselection it was created with, so changing the switch later leaves
+existing chats alone; only chats from before this was recorded that never
+chose a server themselves still follow it. Minimal mode
 has no MCP servers. Subagents and PTC programs only see the servers of their
 chat.
 

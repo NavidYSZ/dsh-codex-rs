@@ -214,8 +214,8 @@ impl Runtime {
     /// dsh's file-reference guidance (order 900) and the instructions of
     /// MCP servers new chats preselect (`always`, dsh order 3100). Servers a
     /// chat switches on bring their instructions with the activation note
-    /// instead; [`Runtime::chat_prompt_sections`] drops preselected servers
-    /// a chat switched off.
+    /// instead; [`Runtime::chat_prompt_sections`] keeps the servers that
+    /// chat was created with preselected and still offers.
     pub fn prompt_sections(&self) -> Vec<ExtraSection> {
         let config = self.config();
         let mut sections = vec![ExtraSection {
@@ -230,7 +230,7 @@ impl Runtime {
             text: browser::ROUTING.into(),
             literal: true,
         });
-        sections.extend(self.mcp_prompt_sections(&config, |_| true));
+        sections.extend(self.mcp_prompt_sections(|s| config.mcp_availability(s).always));
         sections
     }
 
@@ -247,10 +247,10 @@ impl Runtime {
         }
         let config = agent.config();
         let update = config.route.as_ref().and_then(|r| r.tool_update);
-        let (session, events) = (agent.session_id(), agent.events());
-        agent.set_tools(self.session_tools(&session, &config.cwd, &events, update));
+        let (session, header, events) = (agent.session_id(), agent.header(), agent.events());
+        agent.set_tools(self.session_tools(&session, &header, &config.cwd, &events, update));
         let mut sections = self.prompt_sections();
-        self.chat_prompt_sections(&session, &events, &mut sections);
+        self.chat_prompt_sections(&session, &header, &events, &mut sections);
         agent.update_config(|c| c.prompt.extra_sections = sections);
     }
 
@@ -342,18 +342,19 @@ impl Runtime {
     }
 
     /// The tools of one Standard session: the base set, the `skill` tool
-    /// while a skill is model-invocable, and the MCP tools the session's log
-    /// and pending choices select. On the addition-only route, tools the
-    /// session already declared stay declared.
+    /// while a skill is model-invocable, and the MCP tools the session's
+    /// header (its preselection), log and pending choices select. On the
+    /// addition-only route, tools the session already declared stay declared.
     pub fn session_tools(
         &self,
         session: &str,
+        header: &dshx_core::SessionHeader,
         cwd: &Path,
         events: &[SessionEvent],
         update: Option<dshx_agent::ToolUpdate>,
     ) -> ToolRegistry {
         let mut tools = self.base_tools();
-        let history = self.mcp_choices(session, events);
+        let history = self.mcp_choices(session, header, events);
         let keep = update == Some(dshx_agent::ToolUpdate::AdditionOnly);
         if self.model_skills(cwd) || (keep && history.declared.contains("skill")) {
             tools.register(Arc::new(SkillTool::new(self.skills.clone())));
@@ -364,6 +365,7 @@ impl Runtime {
             choices: &history.choices,
             declared: &history.declared,
             tool_update: update,
+            preselected: history.preselected.as_ref(),
         };
         for tool in self.mcp_tools(&selection) {
             tools.register(tool);
@@ -382,6 +384,7 @@ impl Runtime {
         match preset {
             Preset::Standard | Preset::Ptc => self.session_tools(
                 log.id(),
+                &log.header(),
                 &config.cwd,
                 &log.events(),
                 config.route.as_ref().and_then(|r| r.tool_update),
@@ -402,13 +405,18 @@ impl Runtime {
     }
 
     /// A new session for `cwd`; a chosen `preset` is recorded in the header
-    /// like dsh does (`agentPreset`) and stays for the session's life.
+    /// like dsh does (`agentPreset`) and stays for the session's life, like
+    /// the MCP servers it starts with preselected (`mcpPreselected`; none
+    /// for Minimal).
     pub fn create_session(&self, cwd: &str, preset: Option<Preset>) -> anyhow::Result<FileLog> {
         let mut header = SessionStore::new_header(cwd);
         if let Some(preset) = preset {
             header
                 .extra
                 .insert("agentPreset".into(), preset.id().into());
+        }
+        if preset != Some(Preset::Minimal) {
+            ondemand::record_preselection(&mut header, &self.preselected_servers());
         }
         Ok(self.store.create_with_header(header)?)
     }
@@ -466,12 +474,18 @@ impl Runtime {
         approver: Arc<dyn Approver>,
         observer: Option<Arc<dyn AgentObserver>>,
     ) -> Agent {
-        let recorded = dshx_session::agent_preset(&log.header(), &log.events());
+        let header = log.header();
+        let recorded = dshx_session::agent_preset(&header, &log.events());
         let preset = Preset::of_session(recorded.as_deref());
         config.apply_preset(preset);
         if preset != Preset::Minimal {
             let events = log.events();
-            self.chat_prompt_sections(log.id(), &events, &mut config.prompt.extra_sections);
+            self.chat_prompt_sections(
+                log.id(),
+                &header,
+                &events,
+                &mut config.prompt.extra_sections,
+            );
         }
         let tools = self.tools_for(preset, log.as_ref(), &config);
         let agent = Agent::new(
@@ -496,6 +510,7 @@ impl Runtime {
                 agent.add_pre_step_hook(Arc::new(ondemand::McpHook {
                     runtime: me.clone(),
                     session: agent.session_id(),
+                    preselected: ondemand::preselection(&header),
                 }));
             }
             self.subagents.attach(&agent);
