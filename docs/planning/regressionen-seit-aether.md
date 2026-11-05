@@ -1,8 +1,8 @@
 # Fehler seit der Umbenennung zu Aether
 
 **Status:** Umgesetzt (Build und Installation siehe unten)
-**Stand:** 2026-11-05, 19:18 Uhr
-**Commits:** Teil A `a7ff89f` (Merge `6c438ce`), Teil B `f4ee709`, `3572491`, `fbccaf8` (Merge `7051bee`)
+**Stand:** 2026-11-05, 19:48 Uhr
+**Commits:** Teil A `a7ff89f` (Merge `6c438ce`), Teil B `f4ee709`, `3572491`, `fbccaf8` (Merge `7051bee`), Folgefehler `a485d78`, `fd7580f`
 
 ## Ziel
 
@@ -69,6 +69,22 @@ undatierte SSH-Meldungen „channel open failed“, Fehler von DeepSeek, HY4
 ## Umsetzung
 
 Siehe die beiden Teil-Dateien. Zusätzlich bei Teil B gefunden und behoben: Die Kopplungsseite verglich `info.platform` mit `darwin`, der Server meldet aber `macos`, sodass jeder Mac als „hinter SSH“ galt.
+
+### Nachtrag 2026-11-05, 19:20–19:46 Uhr
+
+- **Folgefehler aus B2:** Der neue Header-Schlüssel `mcpPreselected` war im
+  v4-Header-Codec (`crates/dshx-session/src/format.rs`,
+  `HEADER_OPTIONAL_KEYS`, `encode_header_line`, `decode_header_line`) nicht
+  erlaubt. Dadurch scheiterte jedes Anlegen eines Standard- oder PTC-Chats mit
+  HTTP 400. Entdeckt beim VPS-Rollout (VPS 5 zurückgerollt) und in der CI
+  (`cli::headless_text_json_and_resume`). Behoben in `a485d78`: Codec schreibt
+  und liest die Liste, mit Rundlauf-Test.
+- **Tab-Reihenfolge:** `Target.getTargets` liefert zuletzt genutzte Tabs
+  zuerst; Tab-Nummern verschoben sich bei jedem neuen Vordergrund-Tab. Behoben
+  in `fd7580f` (stabile Reihenfolge des ersten Sehens); Ursache des in der CI
+  gescheiterten Chrome-Tests.
+- Neue Kopf-Schlüssel (z. B. für die Pi-Engine) müssen künftig an allen drei
+  Stellen in `format.rs` freigeschaltet werden.
 
 ## Prüfung
 

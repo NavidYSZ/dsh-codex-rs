@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix: browser tab numbers stay stable. Chrome lists tabs most recently
+  used first, so opening a tab in your Chrome renumbered all of them; tabs
+  now keep the order they were first seen in, new ones go last.
 - Fix: only one `dsh-codex web` server runs per data directory. A second
   one (for example a leftover check started next to the app) held chat locks
   and kept working unseen; it now exits with the PID of the running server.
