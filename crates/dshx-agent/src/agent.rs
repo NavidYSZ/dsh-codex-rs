@@ -345,6 +345,9 @@ impl Agent {
         let tools_state = tool_state.clone().downcast::<dshx_tools::ToolState>().ok();
         if let Some(s) = &tools_state {
             s.set_model(config.model.clone());
+            // A resumed session keeps what it read (read-before-write) and
+            // knows the jobs of its earlier processes.
+            journal.read(|events, _| s.restore(events));
         }
         let inner = Inner {
             config: Mutex::new(config),
@@ -950,6 +953,10 @@ impl Agent {
             state.jobs().shutdown(Some(&id));
             state.shells().close(Some(&id));
         }
+        // Their settlements (`job/settled`, cause teardown) reach the log
+        // before the forwarder stops; a restart can then tell the model the
+        // job ended instead of calling its id unknown.
+        crate::jobs::finish(&self.inner).await;
     }
 }
 
@@ -2167,6 +2174,8 @@ impl Inner {
                 s = llm.stream(request, cancel.child_token()) => s,
             };
             let mut interrupted = false;
+            // Whether observers saw any output of this attempt.
+            let mut visible = false;
             loop {
                 tokio::select! {
                     biased;
@@ -2176,7 +2185,7 @@ impl Inner {
                         if cancel.is_cancelled() { interrupted = true; break; }
                         acc.push(now_ms(), &chunk);
                         asm.push(&chunk);
-                        self.emit_delta(turn, step, &chunk);
+                        visible |= self.emit_delta(turn, step, &chunk);
                     }
                 }
             }
@@ -2223,6 +2232,7 @@ impl Inner {
                         step,
                         &provider,
                         failure,
+                        visible,
                         &mut retries,
                         &mut retry_id,
                         cancel,
@@ -2277,7 +2287,8 @@ impl Inner {
         }
     }
 
-    fn emit_delta(&self, turn: u64, step: u64, chunk: &StreamChunk) {
+    /// Forwards a chunk to the observers; whether it showed them anything.
+    fn emit_delta(&self, turn: u64, step: u64, chunk: &StreamChunk) -> bool {
         let (index, kind, text) = match chunk {
             StreamChunk::TextDelta { index, text } => (*index, DeltaKind::Text, text),
             StreamChunk::ReasoningDelta { index, text } => (*index, DeltaKind::Reasoning, text),
@@ -2287,9 +2298,9 @@ impl Inner {
                 ..
             } if !name.is_empty() => {
                 self.observer.on_tool_call(turn, step, *index, name);
-                return;
+                return true;
             }
-            _ => return,
+            _ => return false,
         };
         self.observer.on_delta(&StreamDelta {
             turn,
@@ -2298,6 +2309,7 @@ impl Inner {
             block_type: kind,
             text: text.clone(),
         });
+        !text.is_empty()
     }
 
     /// dsh `agent/request-error` listeners: image offload, llm-retry, then
@@ -2309,6 +2321,7 @@ impl Inner {
         step: u64,
         provider: &str,
         failure: &LlmFailure,
+        visible: bool,
         retries: &mut u32,
         retry_id: &mut Option<String>,
         cancel: &CancellationToken,
@@ -2322,7 +2335,7 @@ impl Inner {
             }
         }
         let policy = self.config.lock().unwrap().retry.clone();
-        if let Some(delay) = policy.decide(failure, *retries) {
+        if let Some(delay) = policy.decide_attempt(failure, *retries, visible) {
             *retries += 1;
             let id = retry_id.get_or_insert_with(dshx_core::new_id).clone();
             let data = policy.event_data(&id, turn, step, provider, *retries, delay, failure);

@@ -29,6 +29,13 @@ use crate::user::UserChrome;
 const USER_CONNECT_WAIT: Duration = Duration::from_secs(60);
 /// How long an unanswered connection attempt stays open for the next call.
 const USER_CONNECT_KEEP: Duration = Duration::from_secs(5 * 60);
+/// How long the first attach looks for the tab the user is looking at.
+const VISIBLE_TAB_BUDGET: Duration = Duration::from_secs(3);
+
+/// The first probe answer that found a visible document.
+fn first_visible(answers: &[Option<bool>]) -> Option<usize> {
+    answers.iter().position(|a| *a == Some(true))
+}
 
 /// How the background browser runs.
 #[derive(Debug, Clone)]
@@ -111,6 +118,9 @@ struct PageState {
     user: Option<(&'static str, Option<String>)>,
     /// Tabs this tool opened; the user's own tabs are never navigated away.
     owned: HashSet<String>,
+    /// Attached mode: the browser whose "Allow remote debugging?" prompt a
+    /// call is waiting for right now (holding the ops lock).
+    allow_wait: Option<&'static str>,
 }
 
 #[derive(Default)]
@@ -235,10 +245,42 @@ impl Browser {
     }
 
     /// Stops the screencast until the next action (another browser of the
-    /// same tool takes over the mini window).
+    /// same tool takes over the mini window). Never waits: this browser may
+    /// be busy with another chat's action, or with a user-Chrome connection
+    /// waiting up to a minute for "Allow". Its frames stop reaching the mini
+    /// window at once (`casting` is off); Chrome is told to stop streaming
+    /// when the ops lock is free, else its next action takes over again.
     pub async fn pause_cast(&self) {
-        let mut ctl = self.lock().await;
-        ctl.stop_cast().await;
+        if !self.inner.mini.enabled() {
+            return;
+        }
+        let session = {
+            let mut st = self.inner.shared.st();
+            if !std::mem::replace(&mut st.casting, false) {
+                return;
+            }
+            st.page.as_ref().map(|p| p.session_id.clone())
+        };
+        let Some(session) = session else {
+            return;
+        };
+        if let Ok(ops) = self.inner.ops.try_lock()
+            && let Some(p) = ops.proc.as_ref()
+        {
+            p.cdp.post("Page.stopScreencast", json!({}), Some(session));
+        }
+    }
+
+    /// While a call waits for the user to allow the connection to their
+    /// browser, a second call gets this answer at once instead of waiting.
+    pub fn waiting_for_allow(&self) -> Option<String> {
+        let name = self.inner.shared.st().allow_wait?;
+        // Only while that call still holds the lock (it may just have ended).
+        self.inner
+            .ops
+            .try_lock()
+            .is_err()
+            .then(|| allow_prompt(name))
     }
 
     pub fn options(&self) -> &BrowserOptions {
@@ -271,6 +313,67 @@ impl Browser {
 
     pub(crate) async fn lock(&self) -> Ctl<'_> {
         Ctl::lock(&self.inner).await
+    }
+}
+
+/// Whether the document of `target` is visible: attach, ask, detach.
+async fn tab_visible(cdp: &Cdp, target: &str) -> bool {
+    let Ok(res) = cdp
+        .send(
+            "Target.attachToTarget",
+            json!({ "targetId": target, "flatten": true }),
+            None,
+            DEFAULT_TIMEOUT,
+        )
+        .await
+    else {
+        return false;
+    };
+    let Some(session) = res["sessionId"].as_str().map(str::to_owned) else {
+        return false;
+    };
+    let state = cdp
+        .send(
+            "Runtime.evaluate",
+            json!({ "expression": "document.visibilityState", "returnByValue": true }),
+            Some(&session),
+            Duration::from_secs(3),
+        )
+        .await
+        .ok()
+        .and_then(|r| r["result"]["value"].as_str().map(str::to_owned));
+    let _ = cdp
+        .send(
+            "Target.detachFromTarget",
+            json!({ "sessionId": session }),
+            None,
+            DEFAULT_TIMEOUT,
+        )
+        .await;
+    state.as_deref() == Some("visible")
+}
+
+/// What a call answers while the user's browser asks "Allow remote debugging?".
+fn allow_prompt(name: &str) -> String {
+    format!(
+        "{name} is showing \"Allow remote debugging?\" and waits for the user. Ask the user to click Allow in {name}, then call the browser tool once more: that call takes over this pending connection. Do not retry in a loop, and never connect to the browser's DevTools port yourself (curl, WebSocket/CDP scripts, Puppeteer, Playwright, project helpers): every new connection makes {name} ask again."
+    )
+}
+
+/// Marks a call waiting for "Allow" (see [`Browser::waiting_for_allow`])
+/// until dropped, also when the call itself is dropped.
+struct AllowWait(Arc<Shared>);
+
+impl AllowWait {
+    fn start(shared: &Arc<Shared>, name: &'static str) -> AllowWait {
+        shared.st().allow_wait = Some(name);
+        AllowWait(shared.clone())
+    }
+}
+
+impl Drop for AllowWait {
+    fn drop(&mut self) {
+        self.0.st().allow_wait = None;
     }
 }
 
@@ -350,10 +453,12 @@ impl Events {
                 st.loading = None;
             }
             "Page.screencastFrame" if on_page => {
+                // Paused (the other browser has the mini window): ack only.
+                let casting = st.casting;
                 drop(st);
                 let ack = json!({ "sessionId": ev.params["sessionId"] });
                 cdp.post("Page.screencastFrameAck", ack, ev.session_id);
-                if let Some(data) = ev.params["data"].as_str() {
+                if casting && let Some(data) = ev.params["data"].as_str() {
                     self.forward_frame(data.to_owned());
                 }
             }
@@ -577,41 +682,42 @@ impl<'a> Ctl<'a> {
         self.attach(&target_id).await
     }
 
-    /// The tab the user sees: the first page whose document is visible.
+    /// The tab the user sees: the first page (in list order) whose document
+    /// is visible. All tabs are asked at once and the answer waits at most
+    /// [`VISIBLE_TAB_BUDGET`]: frozen or discarded tabs can take the whole
+    /// attach timeout. `None` lets the caller take the first page.
     async fn visible_tab(&self, tabs: &[Tab]) -> Option<String> {
-        for tab in tabs.iter().take(40) {
-            let Ok(res) = self
-                .browser_send(
-                    "Target.attachToTarget",
-                    json!({ "targetId": tab.target_id, "flatten": true }),
-                )
-                .await
-            else {
-                continue;
-            };
-            let Some(session) = res["sessionId"].as_str().map(str::to_owned) else {
-                continue;
-            };
-            let state = self
-                .cdp()
-                .ok()?
-                .send(
-                    "Runtime.evaluate",
-                    json!({ "expression": "document.visibilityState", "returnByValue": true }),
-                    Some(&session),
-                    Duration::from_secs(3),
-                )
-                .await
-                .ok()
-                .and_then(|r| r["result"]["value"].as_str().map(str::to_owned));
-            let _ = self
-                .browser_send("Target.detachFromTarget", json!({ "sessionId": session }))
-                .await;
-            if state.as_deref() == Some("visible") {
-                return Some(tab.target_id.clone());
+        let cdp = self.cdp().ok()?;
+        let tabs: Vec<String> = tabs.iter().take(40).map(|t| t.target_id.clone()).collect();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        for (index, target) in tabs.iter().enumerate() {
+            // Each probe runs to its end on its own, detaching what it
+            // attached, also after this call stopped waiting.
+            let (cdp, target, tx) = (cdp.clone(), target.clone(), tx.clone());
+            tokio::spawn(async move {
+                let _ = tx.send((index, tab_visible(&cdp, &target).await));
+            });
+        }
+        drop(tx);
+        let mut answers: Vec<Option<bool>> = vec![None; tabs.len()];
+        let deadline = tokio::time::sleep(VISIBLE_TAB_BUDGET);
+        tokio::pin!(deadline);
+        loop {
+            tokio::select! {
+                _ = &mut deadline => break,
+                answer = rx.recv() => {
+                    let Some((index, visible)) = answer else { break };
+                    answers[index] = Some(visible);
+                    // Decided once every tab before the first visible one answered.
+                    if let Some(i) = first_visible(&answers)
+                        && answers[..i].iter().all(Option::is_some)
+                    {
+                        return Some(tabs[i].clone());
+                    }
+                }
             }
         }
-        None
+        first_visible(&answers).map(|i| tabs[i].clone())
     }
 
     /// The current tab is one the user opened (attached mode): "open" takes
@@ -694,11 +800,11 @@ impl<'a> Ctl<'a> {
                 bail!("no connection attempt");
             };
             let name = attempt.found.name;
-            let Ok(joined) = tokio::time::timeout(USER_CONNECT_WAIT, &mut attempt.task).await
-            else {
-                bail!(
-                    "{name} is showing \"Allow remote debugging?\" and waits for the user. Ask the user to click Allow in {name}, then call the browser tool once more: that call takes over this pending connection. Do not retry in a loop, and never connect to the browser's DevTools port yourself (curl, WebSocket/CDP scripts, Puppeteer, Playwright, project helpers): every new connection makes {name} ask again."
-                );
+            let waiting = AllowWait::start(&self.inner.shared, name);
+            let joined = tokio::time::timeout(USER_CONNECT_WAIT, &mut attempt.task).await;
+            drop(waiting);
+            let Ok(joined) = joined else {
+                bail!("{}", allow_prompt(name));
             };
             let found = attempt.found.clone();
             self.ops.connecting = None;

@@ -47,8 +47,16 @@ async fn real_tools_answer_dsh_reference_calls_identically() {
             "<path>{c}/a.txt</path>\n<type>file</type>\n<content>\n1: hello a\n\n(End of file - total 1 lines)\n</content>"
         )
     );
+    // Plus the observed file version (dsh-codex), which a restart restores.
+    let mut meta = results[0].data["meta"].clone();
+    assert!(
+        meta.as_object_mut()
+            .unwrap()
+            .remove(dshx_tools::fs::VERSION_META_KEY)
+            .is_some_and(|v| v.is_string())
+    );
     assert_eq!(
-        results[0].data["meta"],
+        meta,
         json!({"path": format!("{c}/a.txt"), "offset": 1, "lines": [{"number": 1, "text": "hello a"}], "totalLines": 1})
     );
     assert_eq!(text_of_result(&results[1]), "hi\n");
@@ -60,6 +68,41 @@ async fn real_tools_answer_dsh_reference_calls_identically() {
         of_kind(&h.log, "todo/write")[0].data,
         json!({"todos": [{"content": "Do it", "status": "in_progress"}, {"content": "Then that", "status": "pending"}]})
     );
+    validate(&h.log);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn dispose_logs_the_teardown_of_running_jobs() {
+    let h = harness(
+        vec![
+            tool_calls(
+                M,
+                &[(
+                    "c1",
+                    "bash",
+                    "{\"command\": \"sleep 30\", \"description\": \"bg\", \"run_in_background\": true}",
+                )],
+            ),
+            text(M, "started"),
+        ],
+        real_tools(),
+        |_, _| {},
+    );
+    h.agent
+        .run_turn(vec![ContentBlock::text("start a job")])
+        .await
+        .unwrap();
+    h.agent.dispose().await;
+    let settled = of_kind(&h.log, "job/settled");
+    assert_eq!(settled.len(), 1, "{:?}", kinds(&h.log));
+    assert_eq!(settled[0].data["cause"], "teardown");
+    assert_eq!(settled[0].data["status"], "killed");
+    // The next process knows the job ended instead of calling it unknown.
+    let id = settled[0].data["jobId"].as_str().unwrap();
+    let state = dshx_tools::ToolState::new();
+    state.restore(&h.log.events());
+    let ended = state.ended_job(id).expect("a restored job");
+    assert_eq!(ended.status.as_deref(), Some("killed"));
     validate(&h.log);
 }
 

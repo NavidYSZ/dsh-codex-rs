@@ -178,6 +178,10 @@ cargo build --locked --release -p dsh-codex
 ./target/release/dsh-codex web
 ```
 
+One `dsh-codex web` serves a data directory (`~/.dsh-codex` or `$DSHX_HOME`) at
+a time: a second server refuses to start and names the PID of the running one.
+Give test or install-check servers their own `DSHX_HOME`.
+
 PTC outside the app requires **Node.js 22.18 or newer** on PATH, or an explicit
 `DSHX_NODE` executable path. Restricted PTC execution also requires a working
 OS sandbox (`sandbox-exec` on macOS or bubblewrap on Linux); it fails with an
@@ -303,6 +307,8 @@ queued, and Goal state/counters are restored from the journal. Delegated
 subagents and one-shot CLI runs skip this final checkpoint.
 Stop cancels compaction and prevents automatic Goal continuation. `off` leaves
 pressure compaction near the context limit enabled. Minimal chats never compact.
+A checkpoint is asked to stay within about 3,000 words and is capped at 16,384
+output tokens; one cut off at that cap is retried once with the full reserve.
 
 Reminders live in `~/.dsh-codex/storages/schedule.json`. The web server
 exposes them, the session goal and the Team under `/api/schedules`,

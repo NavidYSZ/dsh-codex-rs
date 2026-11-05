@@ -226,7 +226,8 @@ pub struct CompactionConfig {
     pub retain_tokens: Option<u64>,
     /// Summarizer model; `None` = the latest routed request model.
     pub summarization_model: Option<String>,
-    /// Summary output cap; `None` = `headroom_tokens`.
+    /// Summary output cap; `None` = at most 16 384 tokens first, the whole
+    /// `headroom_tokens` when that truncates (dsh: always the headroom).
     pub max_tokens: Option<u32>,
     pub compaction_retries: u32,
     pub max_overflow_retries: u32,

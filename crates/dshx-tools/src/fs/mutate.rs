@@ -7,8 +7,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
-    Info, Target, checked_target, hunk_diffs, lock_target, probe, resolve, resolve_mode,
-    write_atomic,
+    Info, Target, VERSION_META_KEY, checked_target, hunk_diffs, lock_target, probe, resolve,
+    resolve_mode, write_atomic,
 };
 use crate::args::{self, fail};
 use crate::schemas::upstream_schema;
@@ -31,10 +31,19 @@ fn stale(message: String) -> ToolError {
     fail(format!("{message} — re-read the file, then retry"))
 }
 
-fn record_present(state: &ToolState, target: &Target) {
-    if let Ok(Some(info)) = probe(&target.key) {
-        state.observe(&target.key, Observation::Present(info.version));
+/// Records the version just written; returns it for the result's `meta`.
+fn record_present(state: &ToolState, target: &Target) -> Option<String> {
+    let info = probe(&target.key).ok().flatten()?;
+    state.observe(&target.key, Observation::Present(info.version.clone()));
+    Some(info.version)
+}
+
+/// `meta` plus the observed version (restored after a restart).
+fn with_version(mut meta: Value, version: Option<String>) -> Value {
+    if let (Some(map), Some(version)) = (meta.as_object_mut(), version) {
+        map.insert(VERSION_META_KEY.into(), version.into());
     }
+    meta
 }
 
 /// dsh `readTextForDiff`: LF-normalized text, or `None` for large/binary/invalid files.
@@ -130,7 +139,7 @@ impl Tool for WriteTool {
         })
         .await
         .map_err(|e| fail(e.to_string()))??;
-        record_present(state, &target);
+        let version = record_present(state, &target);
         let path = target.process_path();
         let operation = if existing.is_some() {
             "update"
@@ -151,7 +160,10 @@ impl Tool for WriteTool {
             format!("<path>{path}</path>\n<type>file</type>\n<content>\n{verb} file\n</content>");
         Ok(ToolOutput {
             value: Some(json!({"path": path, "operation": operation})),
-            meta: Some(json!({"operation": operation, "path": path, "diffs": diffs})),
+            meta: Some(with_version(
+                json!({"operation": operation, "path": path, "diffs": diffs}),
+                version,
+            )),
             ..ToolOutput::text(text)
         })
     }
@@ -301,7 +313,7 @@ impl Tool for EditTool {
         })
         .await
         .map_err(|e| fail(e.to_string()))??;
-        record_present(state, &target);
+        let version = record_present(state, &target);
         let path = target.process_path();
         let text = if replace_all {
             format!("The file {path} has been updated. All occurrences were successfully replaced.")
@@ -310,7 +322,10 @@ impl Tool for EditTool {
         };
         Ok(ToolOutput {
             value: Some(json!({"path": path})),
-            meta: Some(json!({"path": path, "diffs": hunk_diffs(&path, &before, &after)})),
+            meta: Some(with_version(
+                json!({"path": path, "diffs": hunk_diffs(&path, &before, &after)}),
+                version,
+            )),
             ..ToolOutput::text(text)
         })
     }

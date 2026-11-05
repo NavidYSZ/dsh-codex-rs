@@ -331,7 +331,7 @@ impl Tool for ReadTool {
                 .map_err(|e| fail(e.to_string()))??;
         let path = target.process_path();
         let text = format_read_output(&path, offset, &window);
-        state.observe(&target.key, Observation::Present(info.version));
+        state.observe(&target.key, Observation::Present(info.version.clone()));
         let lines: Vec<Value> = window
             .lines
             .iter()
@@ -345,6 +345,7 @@ impl Tool for ReadTool {
         if let Some(lang) = lang_for_path(&path) {
             meta.insert("lang".into(), json!(lang));
         }
+        meta.insert(super::VERSION_META_KEY.into(), json!(info.version));
         let value = json!({"path": path, "offset": offset, "lines": lines, "totalLines": window.total_lines});
         Ok(ToolOutput {
             value: Some(value),

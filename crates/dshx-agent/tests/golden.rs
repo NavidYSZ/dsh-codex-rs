@@ -438,6 +438,8 @@ async fn replay(name: &str, setup: impl FnOnce(&std::path::Path)) {
             log.clone(),
             |c, _| {
                 c.retry.random = Arc::new(|| 0.5);
+                // dsh caps the summary at the whole headroom.
+                c.compaction.max_tokens = Some(c.compaction.headroom_tokens as u32);
             },
         );
         h.agent

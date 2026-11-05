@@ -8,13 +8,23 @@ use std::sync::{Arc, Mutex, Weak};
 use dshx_core::{ContentBlock, Message, MessageSource, Role};
 use dshx_tools::{JobEvent, ToolState};
 use serde_json::json;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio_util::sync::CancellationToken;
 
 use crate::agent::{Agent, Inner, Target};
+
+type Feed = Arc<tokio::sync::Mutex<Option<UnboundedReceiver<JobEvent>>>>;
 
 /// Job events forwarded from the registry, waiting for the loop to log them.
 #[derive(Default)]
 pub(crate) struct JobQueue {
     events: Mutex<VecDeque<JobEvent>>,
+    /// The registry's feed. The forwarder holds it while it runs; [`finish`]
+    /// takes what is left once the forwarder stopped.
+    feed: Feed,
+    /// Stops the forwarder; only [`finish`] cancels it, after the session's
+    /// jobs were torn down, so their settlements still reach the log.
+    stop: CancellationToken,
 }
 
 /// Starts the forwarder for this agent's session (no-op outside a runtime).
@@ -22,26 +32,69 @@ pub(crate) fn start(inner: &Arc<Inner>, state: &Arc<ToolState>) {
     let Ok(handle) = tokio::runtime::Handle::try_current() else {
         return;
     };
-    let mut rx = state.jobs().subscribe();
+    let Ok(mut slot) = inner.jobs.feed.try_lock() else {
+        return;
+    };
+    *slot = Some(state.jobs().subscribe());
+    drop(slot);
+    let feed = inner.jobs.feed.clone();
+    let stop = inner.jobs.stop.clone();
     let weak: Weak<Inner> = Arc::downgrade(inner);
-    let lifetime = inner.lifetime.clone();
     handle.spawn(async move {
+        let mut feed = feed.lock().await;
         loop {
+            let Some(rx) = feed.as_mut() else { return };
             let event = tokio::select! {
+                biased;
+                _ = stop.cancelled() => None,
                 e = rx.recv() => e,
-                _ = lifetime.cancelled() => None,
             };
             let Some(event) = event else { return };
             let Some(inner) = weak.upgrade() else { return };
             inner.jobs.events.lock().unwrap().push_back(event);
             let idle = inner.state.lock().unwrap().running.is_none();
             if idle {
-                // Nobody drains while idle: log now and wake for notices.
+                // Nobody drains while idle: log now and wake for notices,
+                // unless the agent is being disposed.
                 let messages = drain(&inner).await;
-                wake(&inner, messages);
+                if !inner.lifetime.is_cancelled() {
+                    wake(&inner, messages);
+                }
             }
         }
     });
+}
+
+/// Disposal, after the session's jobs were torn down: stops the forwarder
+/// and logs every event still queued or in the feed (the teardown
+/// settlements among them). Delivers no notices: the session is closing.
+pub(crate) async fn finish(inner: &Arc<Inner>) {
+    inner.jobs.stop.cancel();
+    // Waits for the forwarder to finish the event it is logging.
+    if let Some(mut rx) = inner.jobs.feed.lock().await.take() {
+        let mut queue = inner.jobs.events.lock().unwrap();
+        while let Ok(event) = rx.try_recv() {
+            queue.push_back(event);
+        }
+    }
+    let session = inner.journal.id();
+    let events: Vec<JobEvent> = inner.jobs.events.lock().unwrap().drain(..).collect();
+    for event in events.iter().filter(|e| owned_by(e, &session)) {
+        if let Some(e) = event.session_event()
+            && let Err(err) = inner.append(e).await
+        {
+            tracing::warn!("job event not logged: {err:#}");
+        }
+    }
+}
+
+fn owned_by(event: &JobEvent, session: &str) -> bool {
+    let owner = match event {
+        JobEvent::Registered { job }
+        | JobEvent::Settled { job, .. }
+        | JobEvent::Removed { job } => job.owner.as_deref(),
+    };
+    owner == Some(session)
 }
 
 /// Opens one turn per notice (dsh `followup` on an idle owner).
@@ -82,12 +135,7 @@ pub(crate) async fn drain(inner: &Arc<Inner>) -> Vec<Message> {
     let events: Vec<JobEvent> = inner.jobs.events.lock().unwrap().drain(..).collect();
     let mut wake = Vec::new();
     for event in events {
-        let owner = match &event {
-            JobEvent::Registered { job }
-            | JobEvent::Settled { job, .. }
-            | JobEvent::Removed { job } => job.owner.clone(),
-        };
-        if owner.as_deref() != Some(session.as_str()) {
+        if !owned_by(&event, &session) {
             continue;
         }
         if let Some(e) = event.session_event()
