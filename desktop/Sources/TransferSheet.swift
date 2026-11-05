@@ -898,7 +898,10 @@ final class TransferSheet: NSObject, NSComboBoxDelegate, NSTextFieldDelegate {
             var written: Int64 = 0
             var sent: Int64 = 0
             var targetRoot = plan.existing?.root ?? plan.targetPath
-            if plan.sendCount > 0 {
+            // A missing target is created by the import, also from an empty
+            // archive (an empty source, or a sync without changes).
+            let createsEmpty = plan.existing == nil && plan.sendCount == 0
+            if plan.sendCount > 0 || createsEmpty {
                 step = "Export"
                 progress("Export von \(sourceName) …")
                 let (file, handle) = try TransferSpool.create()
@@ -975,7 +978,9 @@ final class TransferSheet: NSObject, NSComboBoxDelegate, NSTextFieldDelegate {
             }
 
             let seconds = max(1, Int(Date().timeIntervalSince(started).rounded()))
-            var lines = [plan.sendCount == 0
+            var lines = [createsEmpty
+                ? "Leeren Ordner „\(targetRoot)“ auf \(targetName) angelegt."
+                : plan.sendCount == 0
                 ? "Das Ziel ist bereits aktuell."
                 : "\(written) Einträge (\(size(sent))) in \(seconds) s nach „\(targetRoot)“ auf \(targetName) übertragen und geprüft."]
             if deleted > 0 { lines.append("\(deleted) zusätzliche Einträge am Ziel gelöscht.") }

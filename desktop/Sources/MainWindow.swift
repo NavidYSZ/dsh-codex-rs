@@ -448,9 +448,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
     }
 
     private func bridgeState(for id: String) -> [String: Any] {
-        let local = manager.instance(id)?.kind == .local
-        return [
+        let instance = manager.instance(id)
+        let local = instance?.kind == .local
+        var state: [String: Any] = [
             "version": appVersion,
+            // For commands the page shows to run on this Mac (`dsh-codex pair --ssh`).
+            "cliPath": Bundle.main.path(forAuxiliaryExecutable: "dsh-codex") ?? "",
             "current": id,
             "instances": manager.instances.map { instance -> [String: Any] in
                 var row: [String: Any] = [
@@ -474,6 +477,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKNaviga
                 "fullScreen": window?.styleMask.contains(.fullScreen) ?? false,
             ],
         ]
+        // The SSH host and config of this page's own SSH instance, for the same commands.
+        if let instance, instance.kind == .ssh {
+            state["ssh"] = [
+                "host": instance.host ?? "",
+                "config": ((instance.sshConfig ?? "") as NSString).expandingTildeInPath,
+            ]
+        }
+        return state
     }
 
     private func json(_ value: Any) -> String {

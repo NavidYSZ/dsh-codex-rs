@@ -41,6 +41,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let event = NSAppleEventManager.shared().currentAppleEvent
         let sender = event?.attributeDescriptor(forKeyword: keySenderPIDAttr)?.int32Value
         appLog.note("quit requested\(sender.map { " by pid \($0)" } ?? "")")
+        // Stopping the local servers aborts their turns and background jobs:
+        // ask first when they are busy. An unreachable server counts as idle.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let work = await QuitCheck.run(self.manager)
+            if !work.isEmpty {
+                appLog.note("quit: \(work.chats.count) running chats, \(work.jobCount) background jobs")
+                guard self.confirmQuit(work) else {
+                    appLog.note("quit cancelled")
+                    self.terminating = false
+                    NSApp.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+            }
+            self.shutDown()
+        }
+        return .terminateLater
+    }
+
+    /// Stops every connection, then lets the app quit.
+    private func shutDown() {
         var replied = false
         let reply = {
             guard !replied else { return }
@@ -50,7 +71,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         manager.stopAll { reply() }
         // Never hang on quit: local servers get SIGKILL after 6 s anyway.
         DispatchQueue.main.asyncAfter(deadline: .now() + 8) { reply() }
-        return .terminateLater
+    }
+
+    /// "N Chats arbeiten noch": true = quit anyway. Return cancels.
+    private func confirmQuit(_ work: QuitCheck.Work) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = work.headline
+        alert.informativeText = work.details
+        let quit = alert.addButton(withTitle: "Beenden")
+        let cancel = alert.addButton(withTitle: "Abbrechen")
+        quit.hasDestructiveAction = true
+        quit.keyEquivalent = ""
+        cancel.keyEquivalent = "\r"
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     func applicationWillTerminate(_ notification: Notification) { appLog.flush() }
@@ -284,5 +319,137 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menu.addItem(top)
         }
         return menu
+    }
+}
+
+/// Before the app stops its local servers: which chats there still run a
+/// turn (`GET /api/sessions`, status `running`/`waiting-approval`) and which
+/// have background jobs alive (`job/registered` since the server started
+/// without `job/settled`, from the logs of chats changed since then). Every
+/// request has a short limit; what does not answer in time counts as idle,
+/// so quitting never hangs on a server.
+enum QuitCheck {
+    struct Work: Sendable {
+        /// "„Title“ (instance)" of chats with a running turn.
+        var chats: [String] = []
+        /// "„Title“ (instance)" and the number of live jobs.
+        var jobs: [(String, Int)] = []
+
+        var jobCount: Int { jobs.reduce(0) { $0 + $1.1 } }
+        var isEmpty: Bool { chats.isEmpty && jobs.isEmpty }
+
+        mutating func merge(_ other: Work) {
+            chats += other.chats
+            jobs += other.jobs
+        }
+
+        var headline: String {
+            let chatText = chats.count == 1 ? "1 Chat arbeitet noch" : "\(chats.count) Chats arbeiten noch"
+            switch (chats.isEmpty, jobs.isEmpty) {
+            case (false, true): return chatText
+            case (true, false): return jobCount == 1 ? "1 Hintergrundjob läuft noch" : "\(jobCount) Hintergrundjobs laufen noch"
+            default: return chatText + ", " + (jobCount == 1 ? "1 Hintergrundjob läuft" : "\(jobCount) Hintergrundjobs laufen")
+            }
+        }
+
+        var details: String {
+            var lines = chats.prefix(6).map { "• \($0)" }
+            if chats.count > 6 { lines.append("• … und \(chats.count - 6) weitere") }
+            lines += jobs.prefix(6).map { "• \($0.0): \($0.1 == 1 ? "1 Hintergrundjob" : "\($0.1) Hintergrundjobs")" }
+            if jobs.count > 6 { lines.append("• … und \(jobs.count - 6) weitere Chats mit Hintergrundjobs") }
+            lines.append("")
+            lines.append("Beim Beenden brechen laufende Antworten ab und Hintergrundjobs werden beendet.")
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    /// Limit of each request; the list and the log reads run one after the other.
+    private static let limit: TimeInterval = 1.5
+    /// Logs read per server at most (the chats changed last).
+    private static let maxLogs = 20
+
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = limit
+        config.timeoutIntervalForResource = limit
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.connectionProxyDictionary = [:]
+        return URLSession(configuration: config)
+    }()
+
+    /// The busy work of every connected local instance (only those stop on quit).
+    @MainActor
+    static func run(_ manager: InstanceManager) async -> Work {
+        let targets: [(String, InstanceAPI, Date)] = manager.instances.compactMap { instance in
+            guard instance.kind == .local,
+                  let connection = manager.existingConnection(instance.id) as? LocalConnection,
+                  let api = InstanceAPI(connection) else { return nil }
+            return (instance.name, api, connection.startedAt)
+        }
+        guard !targets.isEmpty else { return Work() }
+        return await withTaskGroup(of: Work.self) { group in
+            for (name, api, since) in targets {
+                group.addTask { await check(name, api, since: since) }
+            }
+            var total = Work()
+            for await work in group { total.merge(work) }
+            return total
+        }
+    }
+
+    private static func json(_ api: InstanceAPI, _ path: String) async -> Any? {
+        guard let (data, response) = try? await session.data(for: api.request("GET", path)),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func check(_ instance: String, _ api: InstanceAPI, since: Date) async -> Work {
+        guard let rows = await json(api, "/api/sessions") as? [[String: Any]] else { return Work() }
+        let sinceMs = since.timeIntervalSince1970 * 1000
+        let number = { (v: Any?) in (v as? NSNumber)?.doubleValue ?? 0 }
+        let label = { (row: [String: Any]) -> String in
+            let title = (row["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Chat ohne Titel"
+            return "„\(title)“ (\(instance))"
+        }
+        var work = Work()
+        var candidates: [(id: String, name: String, updated: Double)] = []
+        for row in rows {
+            let status = row["status"] as? String ?? ""
+            if status == "running" || status == "waiting-approval" {
+                work.chats.append(label(row))
+            } else if let id = row["id"] as? String, number(row["updatedAt"]) >= sinceMs {
+                // A job registration is an event: only chats changed since the start can own one.
+                candidates.append((id, label(row), number(row["updatedAt"])))
+            }
+        }
+        let probes = candidates.sorted { $0.updated > $1.updated }.prefix(maxLogs)
+        work.jobs = await withTaskGroup(of: (String, Int).self) { group in
+            for probe in probes {
+                group.addTask {
+                    let id = probe.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? probe.id
+                    let body = await json(api, "/api/sessions/\(id)") as? [String: Any]
+                    return (probe.name, liveJobs(body?["events"] as? [[String: Any]] ?? [], sinceMs: sinceMs))
+                }
+            }
+            var found: [(String, Int)] = []
+            for await (name, count) in group where count > 0 { found.append((name, count)) }
+            return found
+        }
+        return work
+    }
+
+    /// Jobs this server process registered in a log and did not settle yet.
+    private static func liveJobs(_ events: [[String: Any]], sinceMs: Double) -> Int {
+        var live = Set<String>()
+        for event in events {
+            guard let type = event["type"] as? String,
+                  let id = (event["data"] as? [String: Any])?["jobId"] as? String else { continue }
+            if type == "job/registered", ((event["time"] as? NSNumber)?.doubleValue ?? 0) >= sinceMs {
+                live.insert(id)
+            } else if type == "job/settled" {
+                live.remove(id)
+            }
+        }
+        return live.count
     }
 }
