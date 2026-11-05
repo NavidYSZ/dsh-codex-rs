@@ -86,4 +86,3 @@ pub(crate) fn select(index: &str, value_json: &str) -> String {
 /// Selects the focused field's content before typing over it ("clear": true).
 pub(crate) const SELECT_ACTIVE: &str = r#"(() => { const el = document.activeElement; if (!el) return;
           if (typeof el.select === 'function') el.select(); else document.execCommand('selectAll'); })()"#;
-
