@@ -114,7 +114,9 @@ pub fn needs_ignorable_for_dsh_0_2_0(kind: &str) -> bool {
 
 /// Optional event envelope keys beside `type`, `seq`, `time`, `data`.
 const EVENT_OPTIONAL_KEYS: &[&str] = &["ignorable", "sourceEventSeqs", "surfaceOp"];
-const HEADER_OPTIONAL_KEYS: &[&str] = &["parentSession", "origin", "agentPreset"];
+/// `mcpPreselected` (Aether, not dsh): the MCP servers a chat was created
+/// with preselected, a list of server names.
+const HEADER_OPTIONAL_KEYS: &[&str] = &["parentSession", "origin", "agentPreset", "mcpPreselected"];
 
 // --- paths ---
 
@@ -248,6 +250,9 @@ pub fn encode_header_line(header: &SessionHeader) -> Result<String> {
     if let Some(v) = header.extra.get("agentPreset") {
         line.insert("agentPreset".into(), v.clone());
     }
+    if let Some(v) = header.extra.get("mcpPreselected") {
+        line.insert("mcpPreselected".into(), v.clone());
+    }
     Ok(Value::Object(line).to_string())
 }
 
@@ -326,6 +331,9 @@ pub fn decode_header_line(line: &[u8]) -> Result<SessionHeader> {
         if let Some(v) = obj.get(*key) {
             let ok = match *key {
                 "origin" => v.as_str() == Some("subagent"),
+                "mcpPreselected" => v
+                    .as_array()
+                    .is_some_and(|list| list.iter().all(Value::is_string)),
                 _ => v.is_string(),
             };
             if !ok {
@@ -576,6 +584,21 @@ mod tests {
         assert!(decode_seq_ranges(&value, 15).is_err());
         assert!(decode_seq_ranges(&serde_json::json!([1, 1]), 5).is_err());
         assert!(decode_seq_ranges(&serde_json::json!([[4, 2]]), 5).is_err());
+    }
+
+    #[test]
+    fn header_keeps_the_mcp_preselection() {
+        let line = r#"{"type":"session","version":4,"id":"s","createdAt":1,"cwd":"/w","isSeeded":false,"delegationDepth":0,"agentPreset":"ptc","mcpPreselected":["huntproxy"]}"#;
+        let header = decode_header_line(line.as_bytes()).unwrap();
+        assert_eq!(
+            header.extra["mcpPreselected"],
+            serde_json::json!(["huntproxy"])
+        );
+        assert_eq!(encode_header_line(&header).unwrap(), line);
+        let empty = line.replace(r#"["huntproxy"]"#, "[]");
+        assert!(decode_header_line(empty.as_bytes()).is_ok());
+        let bad = line.replace(r#"["huntproxy"]"#, r#""huntproxy""#);
+        assert!(decode_header_line(bad.as_bytes()).is_err());
     }
 
     #[test]
