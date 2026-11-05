@@ -70,6 +70,9 @@ pub struct SessionSummary {
     /// sessions that recorded none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preset: Option<String>,
+    /// Header `engine` (`pi`); `None` = DSH.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
 }
 
 /// Where a session lives on disk.
@@ -539,5 +542,10 @@ pub fn summarize(parsed: &ParsedLog) -> SessionSummary {
             .and_then(Value::as_str)
             .map(str::to_owned),
         preset: agent_preset(header, &parsed.events),
+        engine: header
+            .extra
+            .get("engine")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
     }
 }
