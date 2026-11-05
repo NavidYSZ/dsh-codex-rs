@@ -1,8 +1,8 @@
 # Fehler seit der Umbenennung zu Aether
 
-**Status:** In Arbeit
-**Stand:** 2026-11-05, 19:20 Uhr
-**Commits:** –
+**Status:** Umgesetzt (Build und Installation siehe unten)
+**Stand:** 2026-11-05, 19:18 Uhr
+**Commits:** Teil A `a7ff89f` (Merge `6c438ce`), Teil B `f4ee709`, `3572491`, `fbccaf8` (Merge `7051bee`)
 
 ## Ziel
 
@@ -22,7 +22,7 @@ Chrome-Fenster und zeigte zwei Vorschauen (`6d9aa81`), Chrome-Freigabe-Schleife
 (`300253d`), Seitenleiste öffnete auf Diff (`b54484c`, siehe
 [seitenleiste-werkzeuge.md](seitenleiste-werkzeuge.md)).
 
-Ohne Codeänderung erledigt (2026-11-05, 19:15 Uhr): Ein verwaister zweiter
+Ohne Codeänderung erledigt (2026-11-05, ca. 18:45 Uhr): Ein verwaister zweiter
 Server (`dsh-codex web --port 0 --ready-file /tmp/aether-ready.json`, seit
 01:51 Uhr, Build-117-Code, gestartet von einer Installationsprüfung) hielt die
 Sperre auf dem Bugbounty-Hauptchat und lief dort um 13:37 Uhr eine Goal-Runde
@@ -68,7 +68,7 @@ undatierte SSH-Meldungen „channel open failed“, Fehler von DeepSeek, HY4
 
 ## Umsetzung
 
-Siehe die beiden Teil-Dateien.
+Siehe die beiden Teil-Dateien. Zusätzlich bei Teil B gefunden und behoben: Die Kopplungsseite verglich `info.platform` mit `darwin`, der Server meldet aber `macos`, sodass jeder Mac als „hinter SSH“ galt.
 
 ## Prüfung
 

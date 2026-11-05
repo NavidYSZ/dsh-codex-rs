@@ -29,10 +29,10 @@ geplant, was gebaut und was offen ist.
 | Datei | Vorhaben | Status |
 |---|---|---|
 | [seitenleiste-werkzeuge.md](seitenleiste-werkzeuge.md) | Rechte Seitenleiste mit Browser und Dateien statt Diff | Umgesetzt |
-| [engine-pi.md](engine-pi.md) | Umschaltbare Engine: DSH oder Pi-Agent | Geplant |
-| [regressionen-seit-aether.md](regressionen-seit-aether.md) | Fehler seit der Umbenennung zu Aether (Übersicht) | In Arbeit |
-| [regressionen-server-und-agent.md](regressionen-server-und-agent.md) | Teil A: Server, Agent, Werkzeuge | In Arbeit |
-| [regressionen-oberflaeche-und-mac.md](regressionen-oberflaeche-und-mac.md) | Teil B: Oberfläche und Mac-App | In Arbeit |
+| [engine-pi.md](engine-pi.md) | Umschaltbare Engine: DSH oder Pi-Agent | In Arbeit (MVP) |
+| [regressionen-seit-aether.md](regressionen-seit-aether.md) | Fehler seit der Umbenennung zu Aether (Übersicht) | Umgesetzt |
+| [regressionen-server-und-agent.md](regressionen-server-und-agent.md) | Teil A: Server, Agent, Werkzeuge | Umgesetzt |
+| [regressionen-oberflaeche-und-mac.md](regressionen-oberflaeche-und-mac.md) | Teil B: Oberfläche und Mac-App | Umgesetzt |
 
 ## Bereits umgesetzt (vor diesem Ordner)
 

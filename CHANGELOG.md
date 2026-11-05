@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- Fix: only one `dsh-codex web` server runs per data directory. A second
+  one (for example a leftover check started next to the app) held chat locks
+  and kept working unseen; it now exits with the PID of the running server.
+- Fix: quitting the Mac app while chats or background jobs are running asks
+  first (“N Chats arbeiten noch”) instead of aborting them.
+- Fix: background jobs that run while Aether stops are logged as ended, and
+  after a restart `job_output`/`job_kill` say so instead of “unknown job”.
+- Fix: files read before a restart can be edited afterwards; `chmod` after
+  `write` no longer makes the next edit fail with “file changed since it was
+  read”.
+- Fix: a model stream that closes before any output is retried instead of
+  ending the turn (and a Goal) with an error.
+- Fix: compaction summaries are capped at 16k output tokens (retried once
+  with the full reserve when cut off) and asked to stay concise, so slow
+  models no longer take minutes for a 40k-token summary.
+- Fix: a pending “Allow remote debugging?” prompt in your Chrome no longer
+  stalls browser calls of other chats, and the first attach probes tabs in
+  parallel with a 3 s budget instead of one by one.
+- Fix: “Preselected in new chats” for MCP servers now only affects chats
+  created afterwards; each new chat records its preselection. Older chats
+  keep their previous behaviour.
+- Fix: start-page connector picks are dropped for Minimal chats and the
+  list reloads on every visit; the pairing QR code is withdrawn when the
+  listener or port changes; a random port (0) can be saved; the SSH pairing
+  command shows the bundled CLI path and the instance's user, home and unit;
+  Macs are no longer treated as SSH-only servers on the pairing page; the
+  “Your own Chrome” card only shows on macOS; the device rename field gets
+  focus; transferring an empty folder creates it at the target.
+
 - Fix: the side panel opens on Browser and Files again instead of the diff.
   Browser is always there (it shows the chat's browser, Computer or app
   work, or a short note until the agent uses them) and is where the panel
