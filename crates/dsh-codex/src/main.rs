@@ -9,6 +9,7 @@ mod instance_lock;
 mod jsonrpc;
 mod live;
 mod pair;
+mod pi;
 mod presets;
 mod runtime;
 mod sdk;

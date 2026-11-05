@@ -140,6 +140,66 @@ impl Runtime {
         }
     }
 
+    /// The Pi engine's provider registrations (`pi.registerProvider`): the
+    /// DeepSeek key over Pi's built-in `deepseek`, and every provider route
+    /// as `aether-<id>` with its models. Keys go only into the bridge.
+    pub(crate) fn pi_providers(&self) -> Vec<Value> {
+        // Pi reads `$NAME` and a leading `!` specially; `$$` and `$!` escape them.
+        let literal = |key: &str| {
+            let escaped = key.replace('$', "$$");
+            if escaped.starts_with('!') {
+                format!("${escaped}")
+            } else {
+                escaped
+            }
+        };
+        let mut out = Vec::new();
+        if let Some(key) = self.api_key.get() {
+            out.push(json!({"name": "deepseek", "apiKey": literal(&key)}));
+        }
+        for client in self.router.routes() {
+            let spec = client.spec();
+            let key =
+                env_value(spec.api_key_env.as_deref()).or_else(|| self.stored_key(&spec.id).get());
+            let models: Vec<Value> = spec
+                .models
+                .iter()
+                .map(|m| {
+                    let cost = m.cost.as_ref().map_or(
+                        json!({"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}),
+                        |c| json!({"input": c.input, "output": c.output, "cacheRead": c.cache_read_price(), "cacheWrite": c.cache_write_price()}),
+                    );
+                    json!({
+                        "id": m.id, "name": m.name, "reasoning": !m.efforts.is_empty(),
+                        "input": m.input, "contextWindow": m.context_window,
+                        "maxTokens": m.max_tokens, "cost": cost,
+                    })
+                })
+                .collect();
+            let headers: Map<String, Value> = spec
+                .headers
+                .iter()
+                .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+                .collect();
+            let mut row = json!({
+                "name": format!("aether-{}", spec.id),
+                "baseUrl": spec.base_url,
+                "api": spec.api.as_str(),
+                "models": models,
+            });
+            if !headers.is_empty() {
+                row["headers"] = Value::Object(headers);
+            }
+            row["apiKey"] = match key {
+                Some(k) => literal(&k).into(),
+                // Pi wants some key; an endpoint without one ignores it.
+                None => "none".into(),
+            };
+            out.push(row);
+        }
+        out
+    }
+
     /// Whether any route can take a prompt.
     pub fn any_model_ready(&self) -> bool {
         self.api_key_configured()

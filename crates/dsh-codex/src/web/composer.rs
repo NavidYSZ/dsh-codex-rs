@@ -34,6 +34,15 @@ impl WebComposer {
     /// The live log of an open chat, else the stored one.
     async fn chat(&self, id: &str) -> anyhow::Result<Chat> {
         let b = self.backend()?;
+        if let Some(c) = b.pi.open_chat(id) {
+            let log = c.log();
+            return Ok(Chat {
+                header: log.header(),
+                events: log.events(),
+                preset: Preset::Standard,
+                cwd: c.cwd().to_path_buf(),
+            });
+        }
         if let Some(s) = b.open.lock().await.get(id).cloned() {
             return Ok(Chat {
                 header: s.log.header(),
@@ -107,6 +116,9 @@ impl dshx_server::Composer for WebComposer {
     /// offers no MCP server (`minimal: true`).
     async fn session_mcp(&self, id: &str) -> anyhow::Result<Value> {
         let b = self.backend()?;
+        if b.pi.is_pi(id)? {
+            return Ok(json!({ "active": [], "servers": [], "minimal": true, "engine": "pi" }));
+        }
         let chat = self.chat(id).await?;
         Ok(match chat.preset {
             Preset::Standard | Preset::Ptc => b.runtime.mcp_picker(id, &chat.header, &chat.events),
@@ -116,6 +128,7 @@ impl dshx_server::Composer for WebComposer {
 
     async fn set_session_mcp(&self, id: &str, server: &str, on: bool) -> anyhow::Result<Value> {
         let b = self.backend()?;
+        anyhow::ensure!(!b.pi.is_pi(id)?, "MCP servers are not part of Pi chats yet");
         let chat = self.chat(id).await?;
         anyhow::ensure!(
             chat.preset != Preset::Minimal,
@@ -130,6 +143,9 @@ impl dshx_server::Composer for WebComposer {
 
     async fn compact(&self, id: &str) -> anyhow::Result<Value> {
         let b = self.backend()?;
+        if b.pi.is_pi(id)? {
+            return b.pi.compact(id).await;
+        }
         let s = b.session_handle(id, &Overrides::default()).await?;
         anyhow::ensure!(
             s.agent.config().preset != Preset::Minimal,
@@ -154,6 +170,9 @@ impl dshx_server::Composer for WebComposer {
 
     async fn update_queue(&self, id: &str, item: &str, body: Value) -> anyhow::Result<()> {
         let b = self.backend()?;
+        if b.pi.is_pi(id)? {
+            return b.pi.update_queue(id, item, &body).await;
+        }
         let Some(s) = b.open.lock().await.get(id).cloned() else {
             anyhow::bail!("queued item is no longer pending");
         };

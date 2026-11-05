@@ -672,6 +672,7 @@ dependencies = [
  "dshx-llm",
  "dshx-macos",
  "dshx-mcp",
+ "dshx-pi",
  "dshx-plugins",
  "dshx-schedule",
  "dshx-server",

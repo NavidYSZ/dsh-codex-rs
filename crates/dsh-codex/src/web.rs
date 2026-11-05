@@ -135,6 +135,8 @@ pub struct WebBackend {
     browser_checks: Arc<tokio::sync::Semaphore>,
     /// The accounts hub's relay while it runs (`/api/info.hub`).
     hub: Mutex<Option<crate::hub::Relay>>,
+    /// Chats run by the Pi engine (header `engine: "pi"`); DSH chats never go there.
+    pi: Arc<crate::pi::PiEngine>,
 }
 
 impl WebBackend {
@@ -145,6 +147,7 @@ impl WebBackend {
         let usage = Arc::new(UsageIndex::load(&runtime.home));
         runtime.live.enable_viewers();
         WebBackend {
+            pi: crate::pi::PiEngine::new(runtime.clone(), tx.clone()),
             approvals: Arc::new(Approvals {
                 pending: Mutex::new(HashMap::new()),
                 tx: tx.clone(),
@@ -166,6 +169,7 @@ impl WebBackend {
         for s in sessions {
             self.runtime.close_agent(&s.agent).await;
         }
+        self.pi.close_all().await;
     }
 
     /// The live session, opening (and repairing) it from disk on first use.
@@ -181,6 +185,8 @@ impl WebBackend {
         if self.runtime.store.locate(id)?.is_none() {
             return Err(NotFound(id.to_owned()).into());
         }
+        // A Pi chat never reaches the DSH agent.
+        anyhow::ensure!(!self.pi.is_pi(id)?, "this chat runs on the Pi engine");
         let log: Arc<dyn SessionLog> = Arc::new(self.runtime.store.resume(id).await?);
         let cwd = PathBuf::from(log.header().cwd);
         let s = self.start_agent(id, log, cwd, overrides);
@@ -242,7 +248,8 @@ impl WebBackend {
         let config = self.runtime.config();
         let (browser, app, computer) = self.runtime.tool_flags();
         // Models of every provider, `id` = model reference, grouped by `providers`.
-        let (models, providers) = self.runtime.info_models();
+        let (mut models, providers) = self.runtime.info_models();
+        crate::pi::tag_models(&mut models, self.pi.test_model_row());
         let effort = config
             .reasoning_effort
             .clone()
@@ -259,6 +266,7 @@ impl WebBackend {
                 "sandbox": config.sandbox,
                 "approval": config.approval,
                 "defaultPreset": crate::presets::default_of(&config).id(),
+                "defaultEngine": config.default_engine.as_deref().unwrap_or("dsh"),
                 "compaction": {
                     "mode": config.codex.compaction.mode,
                     "thresholdTokens": config.codex.compaction.threshold_tokens,
@@ -269,6 +277,7 @@ impl WebBackend {
                 },
             },
             "presets": crate::presets::catalog(),
+            "engines": self.pi.engines(),
             "apiKeyConfigured": self.runtime.any_model_ready(),
             "tools": { "browser": browser, "app": app, "computer": computer },
             "automation": self.runtime.automation.features(),
@@ -288,6 +297,25 @@ impl WebBackend {
         std::fs::create_dir_all(&self.runtime.home)?;
         std::fs::write(&self.workspaces_file, serde_json::to_vec_pretty(list)?)?;
         Ok(())
+    }
+
+    /// A new Pi chat, in `cwd` or (empty) a private chat folder.
+    async fn create_pi_session(&self, cwd: String) -> anyhow::Result<String> {
+        let scratch = cwd.trim().is_empty();
+        let dir = if scratch {
+            self.chats.new_chat_dir()?
+        } else {
+            PathBuf::from(&cwd)
+                .canonicalize()
+                .map_err(|e| anyhow::anyhow!("{cwd}: {e}"))?
+        };
+        anyhow::ensure!(dir.is_dir(), "{} is not a folder", dir.display());
+        let id = self.pi.create(&dir)?;
+        if !scratch {
+            let _ = self.add_workspace(dir.display().to_string()).await;
+        }
+        let _ = self.chats.update(&id, &json!({ "seen": true }), now_ms());
+        Ok(id)
     }
 }
 
@@ -366,7 +394,11 @@ impl Backend for WebBackend {
             .get("compaction")
             .map(|p| parse_compaction(p, &self.runtime.config().codex.compaction))
             .transpose()?;
+        let engine = crate::pi::parse_engine(patch.get("defaultEngine"))?;
         self.runtime.update_config(|c| {
+            if let Some(e) = &engine {
+                c.default_engine = (e != "dsh").then(|| e.clone());
+            }
             if let Some(browser) = &browser {
                 c.codex.browser = browser.clone();
             }
@@ -391,6 +423,7 @@ impl Backend for WebBackend {
         })?;
         // Open chats follow at once; Minimal chats never compact.
         if let Some(s) = &compaction {
+            self.pi.set_compaction(s).await;
             let turn_end = crate::runtime::turn_end_compaction(s);
             for open in self.open.lock().await.values() {
                 if open.agent.config().preset != Preset::Minimal {
@@ -480,6 +513,9 @@ impl Backend for WebBackend {
             if let Some(s) = open.get(&r.id) {
                 v["status"] = json!(s.status.lock().unwrap().clone());
             }
+            if let Some(status) = self.pi.status(&r.id) {
+                v["status"] = json!(status);
+            }
             self.chats.decorate(&mut v);
             out.push(v);
         }
@@ -524,7 +560,38 @@ impl Backend for WebBackend {
         Ok(id)
     }
 
+    async fn create_session_with_engine(
+        &self,
+        cwd: String,
+        preset: Option<String>,
+        engine: Option<String>,
+    ) -> anyhow::Result<String> {
+        // A chosen preset means DSH; otherwise the configured default.
+        let engine = match (engine, &preset) {
+            (Some(e), _) => e,
+            (None, Some(_)) => "dsh".into(),
+            (None, None) => self
+                .runtime
+                .config()
+                .default_engine
+                .unwrap_or_else(|| "dsh".into()),
+        };
+        match engine.as_str() {
+            "dsh" => self.create_session_with_preset(cwd, preset).await,
+            "pi" => self.create_pi_session(cwd).await,
+            other => anyhow::bail!("unknown chat engine {other:?} (dsh or pi)"),
+        }
+    }
+
+    async fn engines(&self) -> anyhow::Result<Value> {
+        Ok(self.pi.engines())
+    }
+
     async fn fork_session(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        anyhow::ensure!(
+            !self.pi.is_pi(id)?,
+            "branching a Pi chat is not supported yet"
+        );
         let turn = body
             .get("turn")
             .and_then(Value::as_u64)
@@ -582,6 +649,9 @@ impl Backend for WebBackend {
     }
 
     async fn session_root(&self, id: &str) -> anyhow::Result<PathBuf> {
+        if let Some(c) = self.pi.open_chat(id) {
+            return Ok(c.cwd().to_path_buf());
+        }
         if let Some(s) = self.open.lock().await.get(id) {
             return Ok(s.cwd.clone());
         }
@@ -604,6 +674,12 @@ impl Backend for WebBackend {
     }
 
     async fn session(&self, id: &str) -> anyhow::Result<Value> {
+        if let Some(c) = self.pi.open_chat(id) {
+            let log = c.log();
+            return Ok(
+                json!({ "header": log.header(), "events": log.events(), "status": c.status() }),
+            );
+        }
         if let Some(s) = self.open.lock().await.get(id) {
             let status = s.status.lock().unwrap().clone();
             return Ok(
@@ -622,6 +698,10 @@ impl Backend for WebBackend {
         id: &str,
         after: Option<u64>,
     ) -> anyhow::Result<Vec<SessionEvent>> {
+        if let Some(c) = self.pi.open_chat(id) {
+            let events = c.log().events().into_iter();
+            return Ok(events.filter(|e| after.is_none_or(|a| e.seq > a)).collect());
+        }
         let events = match self.open.lock().await.get(id) {
             Some(s) => s.log.events(),
             None => {
@@ -638,6 +718,9 @@ impl Backend for WebBackend {
     }
 
     async fn status(&self, id: &str) -> Option<String> {
+        if let Some(status) = self.pi.status(id) {
+            return Some(status);
+        }
         let open = self.open.lock().await;
         Some(
             open.get(id)
@@ -646,6 +729,9 @@ impl Backend for WebBackend {
     }
 
     async fn prompt(&self, id: &str, request: PromptRequest) -> anyhow::Result<()> {
+        if self.pi.is_pi(id)? {
+            return self.pi.prompt(id, request).await;
+        }
         if let Some(message_id) = &request.message_id {
             anyhow::ensure!(
                 !message_id.is_empty()
@@ -717,6 +803,9 @@ impl Backend for WebBackend {
     }
 
     async fn cancel(&self, id: &str) -> anyhow::Result<()> {
+        if self.pi.open_chat(id).is_some() {
+            return self.pi.cancel(id).await;
+        }
         let s = self.open.lock().await.get(id).cloned();
         if let Some(s) = s {
             self.approvals.cancel_session(id);
@@ -726,6 +815,9 @@ impl Backend for WebBackend {
     }
 
     async fn delete_session(&self, id: &str) -> anyhow::Result<()> {
+        if self.pi.is_pi(id).unwrap_or(false) {
+            self.pi.forget(id).await;
+        }
         crate::automation::session_deleted(&self.runtime, id).await;
         if let Some(s) = self.open.lock().await.remove(id) {
             self.runtime.close_agent(&s.agent).await;
@@ -811,6 +903,7 @@ impl Backend for WebBackend {
     }
 
     async fn goal_command(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        anyhow::ensure!(!self.pi.is_pi(id)?, "goals are not part of Pi chats yet");
         let s = self.session_handle(id, &Overrides::default()).await?;
         anyhow::ensure!(
             s.agent.config().preset != dshx_agent::Preset::Minimal,
@@ -849,6 +942,16 @@ impl Backend for WebBackend {
     }
 
     async fn session_stats(&self, id: &str, from_turn: Option<u64>) -> anyhow::Result<Value> {
+        // A Pi chat: its window comes from `request/context`; Pi compacts itself.
+        if let Some((events, window)) = self.pi.stats_input(id)? {
+            let runtime = self.runtime.clone();
+            return tokio::task::spawn_blocking(move || {
+                let prices = usage::price_book_at(&runtime.home, &runtime.config(), now_ms());
+                let stats = usage::session_stats(&events, &prices, None, window, from_turn);
+                Ok(serde_json::to_value(stats)?)
+            })
+            .await?;
+        }
         // The chat's own compaction: an open agent's, else its preset's.
         let (events, cwd, compaction) = match self.open.lock().await.get(id) {
             Some(s) => (

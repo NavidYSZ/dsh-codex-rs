@@ -495,6 +495,9 @@ impl Inner {
             self.append(events).await;
             self.flush().await;
             self.env.pool.set_busy(&self.id, false);
+            if st.process.is_none() {
+                self.env.pool.release(&self.id);
+            }
             self.set_status("error", Some(message));
             return;
         }
@@ -579,6 +582,10 @@ impl Inner {
             .await
         {
             let tail = process.stderr_tail(1500);
+            if let Some(r) = st.process.take() {
+                r.bridge.stop();
+                r.process.kill(Duration::from_secs(2)).await;
+            }
             anyhow::bail!(
                 "Pi did not start: {e:#}{}",
                 if tail.is_empty() {
