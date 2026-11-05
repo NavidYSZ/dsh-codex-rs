@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t, lang } from '../i18n.js';
-import { api, store, openPlugins } from '../state.js';
+import { api, store, openPlugins, isMacPlatform } from '../state.js';
 import { useStore } from '../store.js';
 import {
   absoluteBrowserPath, availableBrowserTools, BROWSER_CHECKS, browserConfig, browserConfigKey, browserDiagnosticKey, browserProbePassed, browserServer,
@@ -184,7 +184,7 @@ function BackgroundBrowser() {
       ${status?.restartRequired && !loading ? html`<p class="bu-notice" role="status"><${IconAlert} size=${14} />${b.restart}</p>` : null}
       <p class="bu-note">${b.profileHint}</p>
     </div>
-    ${status?.userChrome ? html`<${UserChrome} info=${status.userChrome} />` : null}
+    ${status?.userChrome && isMacPlatform(info?.platform) ? html`<${UserChrome} info=${status.userChrome} />` : null}
     <div class="bu-test">
       <div class="bu-test-heading"><h3>${b.testHeading}</h3>
         <button type="button" class="btn btn-small" disabled=${locked || loading || !!loadError || dirty || !saved.enabled} onClick=${test}>

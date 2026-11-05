@@ -252,21 +252,46 @@ async function loadMcp(id) {
  */
 export const stagedMcp = createStore({ servers: null, picks: {} });
 
-async function loadStaged() {
-  try {
-    const list = await api.mcpServers();
-    stagedMcp.set({ servers: rowsOf(list, (s) => s.always === true) });
-  } catch { stagedMcp.set((m) => ({ servers: m.servers ?? [] })); }
+/** Picks that still change something: servers `rows` lists, in another state than `current` (default: the preselection). */
+const livePicks = (picks, rows, current = (s) => s.preselected) => Object.fromEntries(Object.entries(picks)
+  .filter(([name, on]) => rows.some((s) => s.name === name && current(s) !== on)));
+
+let staging = null;
+/**
+ * (Re)loads the start page's rows (each visit of the start page, each time
+ * the picker opens there); picks for servers that left or that now match
+ * the preselection go.
+ */
+function loadStaged() {
+  staging ??= (async () => {
+    try {
+      const rows = rowsOf(await api.mcpServers(), (s) => s.always === true);
+      stagedMcp.set((m) => ({ servers: rows, picks: livePicks(m.picks, rows) }));
+    } catch { stagedMcp.set((m) => ({ servers: m.servers ?? [] })); } finally { staging = null; }
+  })();
+  return staging;
 }
 
 const stagedRows = (m) => (m.servers ?? []).map((s) => (s.name in m.picks ? { ...s, selected: m.picks[s.name] } : s));
 
-/** Applies the start page's switches to the chat its first prompt just created. */
-export async function applyStagedMcp(id) {
+/**
+ * Applies the start page's switches to the chat its first prompt just
+ * created: none for Minimal (it has no MCP servers), and only for servers the
+ * new chat still lists with another state than the one picked.
+ */
+export async function applyStagedMcp(id, { preset } = {}) {
   const { picks, servers } = stagedMcp.get();
   stagedMcp.set({ picks: {} });
-  for (const [name, on] of Object.entries(picks)) {
-    if (on === (servers ?? []).find((s) => s.name === name)?.preselected) continue;
+  if (!Object.keys(picks).length || preset === 'minimal') return;
+  // What the new chat offers now, else (older servers) the start page's rows.
+  let rows = servers ?? [];
+  let current = (s) => s.preselected;
+  try {
+    const chat = await api.sessionMcp(id);
+    if (chat?.minimal) return;
+    if (Array.isArray(chat?.servers)) { rows = chat.servers; current = (s) => s.selected; }
+  } catch { /* keep the start page's rows */ }
+  for (const [name, on] of Object.entries(livePicks(picks, rows, current))) {
     try { await api.setSessionMcp(id, name, on); } catch { notify(t.cnApplyFailed(name), 'error'); }
   }
 }
@@ -333,7 +358,8 @@ function useConnectors() {
   const staged = useStore(stagedMcp, (m) => m);
   const chatMode = useChatMode();
   const stagedMode = useStagedMode();
-  useEffect(() => { if (!id && stagedMcp.get().servers == null) loadStaged(); }, [id]);
+  // Every visit of the start page: servers or their preselection may have changed.
+  useEffect(() => { if (!id) loadStaged(); }, [id]);
   return useMemo(() => {
     if (id) {
       const minimal = chat.minimal || chatMode === 'minimal';
