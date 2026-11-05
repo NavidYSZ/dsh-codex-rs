@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a second chat engine: the Pi coding agent (pinned 1.5.0). Pick DSH or
+  Pi when starting a chat, or set a default in Settings. A Pi chat streams
+  text and thinking, shows its tool rows, plan, usage, cost and compaction
+  in the normal transcript, steers or queues follow-ups, and Stop really
+  stops. It uses Aether's providers (keys reach Pi only in memory; its
+  `bash` sees no key-like variables) and runs inside the chat's access mode.
+  The Mac app bundles the Pi runtime with its Node. Existing and new DSH
+  chats are unchanged. Switching a chat between engines, Aether's browser,
+  computer and MCP tools in Pi chats, goals and iOS badges follow later.
 - Fix: browser tab numbers stay stable. Chrome lists tabs most recently
   used first, so opening a tab in your Chrome renumbered all of them; tabs
   now keep the order they were first seen in, new ones go last.

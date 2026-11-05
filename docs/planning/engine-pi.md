@@ -2,7 +2,7 @@
 
 - **Status:** `In Arbeit` – Phase 0 und 1 (MVP) `Umgesetzt`, Phasen 2–5 `Geplant`
 - **Stand:** 2026-11-05 19:50 (Europe/Berlin)
-- **Commits:** `64a3eb7`, `6a87fc2`, `04be314`, `679c0c9`, `f4d2526`, `b0a70d2`, `3868d75`, `b50599c` (Branch `worktree-agent-a233e76e410e23a51` auf `codex-app` `a485d78`)
+- **Commits:** `64a3eb7`, `6a87fc2`, `04be314`, `679c0c9`, `f4d2526`, `b0a70d2`, `3868d75`, `b50599c` (zusammengeführt in `codex-app` als Merge `858d458`)
 
 ## 1. Ziel
 
