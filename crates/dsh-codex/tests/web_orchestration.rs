@@ -64,6 +64,14 @@ fn script(r: &RecordedRequest) -> Reply {
     }
     let (last_user, results) = history(r);
     let last_user = last_user.unwrap_or_default();
+    if last_user.starts_with("<orchestration_complete>") {
+        assert_eq!(
+            last_view(&results).unwrap()["phase"],
+            "complete",
+            "a plan must never tell the model that the run is complete"
+        );
+        return Reply::text("Finished with notes.md and report.md as evidence.");
+    }
     if last_user.starts_with("<orchestration_task>") {
         // Real file writes in the isolated workspace; dependency two reads
         // the first artifact before writing its own.
@@ -506,4 +514,147 @@ async fn enabling_orchestration_supports_a_chat_opened_while_disabled() {
         })
         .await;
     assert_eq!(blocked["orchestration"]["roundsStarted"], 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stop_cancels_workers_while_the_planner_is_idle() {
+    let mock = MockDeepSeek::start().await;
+    let seen = Arc::new(AtomicBool::new(false));
+    let worker_seen = seen.clone();
+    mock.set_responder(move |r| {
+        if history(r)
+            .0
+            .is_some_and(|s| s.starts_with("<orchestration_task>"))
+        {
+            worker_seen.store(true, Ordering::SeqCst);
+            Reply::stream()
+                .text("slow worker")
+                .delay(Duration::from_secs(1))
+                .into()
+        } else {
+            script(r)
+        }
+    });
+    let home = tempfile::tempdir().unwrap();
+    let ws = tempfile::tempdir().unwrap();
+    let server = start(&mock, home.path());
+    let (_, created) = server
+        .call(
+            reqwest::Method::POST,
+            "/sessions",
+            Some(json!({"cwd": ws.path()})),
+        )
+        .await;
+    let id = created["id"].as_str().unwrap();
+    let path = format!("/sessions/{id}/orchestration");
+    let (status, view) = server
+        .call(
+            reqwest::Method::POST,
+            &path,
+            Some(json!({
+                "action": "create", "objective": "Produce notes.md and report.md", "criteria": [
+                    {"id": "notes", "criterion": "notes.md lists the sources"},
+                    {"id": "report", "criterion": "report.md summarizes them"},
+                ],
+            })),
+        )
+        .await;
+    assert_eq!(status, 200, "{view}");
+    server
+        .until("a running background worker", &path, |v| {
+            seen.load(Ordering::SeqCst)
+                && v["orchestration"]["tasks"]
+                    .as_array()
+                    .is_some_and(|ts| ts.iter().any(|t| t["status"] == "running"))
+        })
+        .await;
+    let (status, _) = server
+        .call(
+            reqwest::Method::POST,
+            &format!("/sessions/{id}/cancel"),
+            None,
+        )
+        .await;
+    assert_eq!(status, 202);
+    let stopped = server
+        .until("worker cancellation", &path, |v| {
+            v["orchestration"]["activation"] == "disarmed"
+                && v["orchestration"]["tasks"]
+                    .as_array()
+                    .is_some_and(|ts| ts.iter().any(|t| t["status"] == "failed"))
+        })
+        .await;
+    assert_eq!(stopped["orchestration"]["workersDispatched"], 1);
+    assert_eq!(stopped["orchestration"]["roundsStarted"], 1);
+    assert!(!ws.path().join("report.md").exists());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stop_after_a_plan_prevents_worker_dispatch() {
+    let mock = MockDeepSeek::start().await;
+    let planned = Arc::new(AtomicBool::new(false));
+    let seen = planned.clone();
+    mock.set_responder(move |r| {
+        let (prompt, results) = history(r);
+        if prompt.is_some_and(|s| s.starts_with("<orchestration_round>"))
+            && last_view(&results).is_some_and(|v| v["planVersion"] == 1)
+        {
+            seen.store(true, Ordering::SeqCst);
+            Reply::stream()
+                .text("plan committed")
+                .delay(Duration::from_secs(1))
+                .into()
+        } else {
+            script(r)
+        }
+    });
+    let home = tempfile::tempdir().unwrap();
+    let ws = tempfile::tempdir().unwrap();
+    let server = start(&mock, home.path());
+    let (_, created) = server
+        .call(
+            reqwest::Method::POST,
+            "/sessions",
+            Some(json!({"cwd": ws.path()})),
+        )
+        .await;
+    let id = created["id"].as_str().unwrap();
+    let path = format!("/sessions/{id}/orchestration");
+    let (status, view) = server
+        .call(
+            reqwest::Method::POST,
+            &path,
+            Some(json!({
+                "action": "create", "objective": "Produce notes.md and report.md", "criteria": [
+                    {"id": "notes", "criterion": "notes.md lists the sources"},
+                    {"id": "report", "criterion": "report.md summarizes them"},
+                ],
+            })),
+        )
+        .await;
+    assert_eq!(status, 200, "{view}");
+    server
+        .until("the saved plan before the answer ends", &path, |v| {
+            planned.load(Ordering::SeqCst) && v["orchestration"]["planVersion"] == 1
+        })
+        .await;
+    assert_eq!(
+        server
+            .call(
+                reqwest::Method::POST,
+                &format!("/sessions/{id}/cancel"),
+                None
+            )
+            .await
+            .0,
+        202
+    );
+    let stopped = server
+        .until("a paused run after Stop", &path, |v| {
+            v["orchestration"]["phase"] == "paused"
+        })
+        .await;
+    assert_eq!(stopped["orchestration"]["activation"], "disarmed");
+    assert_eq!(stopped["orchestration"]["workersDispatched"], 0);
+    assert!(!ws.path().join("notes.md").exists());
 }

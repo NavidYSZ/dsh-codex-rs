@@ -569,7 +569,7 @@ impl OrchestrationTool {
             _ => return Err(invalid("action must be plan, complete or blocked")),
         };
         let mut out = output(json!({"orchestration": view.to_json()}));
-        if round.is_some() {
+        if round.is_some() && action != "plan" {
             let blocked = (action == "blocked").then(|| {
                 let reason = args["blocked_reason"].as_object();
                 reason

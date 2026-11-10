@@ -482,6 +482,9 @@ impl OrchestratorService {
     pub(crate) fn set_activation(&self, entry: &Entry, activation: Activation) {
         let changed = {
             let mut st = entry.state.lock().unwrap();
+            if activation == Activation::Disarmed {
+                st.driver.cancel_workers();
+            }
             let changed = st.activation != activation;
             st.activation = activation;
             changed

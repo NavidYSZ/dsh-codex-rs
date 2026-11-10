@@ -437,6 +437,9 @@ invalid contracts, plans or incomplete evidence never enter the journal.
   `needs-input` is for a user dependency. The round cap blocks with
   `round-limit`. Pausing, cancelling, clearing and terminal updates cancel
   outstanding workers; a host shutdown stops all run drivers.
+  Stop cancels background workers even while the planner is idle; an
+  aborted planner round pauses before its saved plan can dispatch. A plan
+  update never emits the completion/blocked closing-message instruction.
 - The durable phases are `active`, `paused`, `blocked`, `complete`,
   `cancelled`. Activation is process-local: reattaching after restart
   restores the journal **disarmed**. Explicit Resume rearms an active run

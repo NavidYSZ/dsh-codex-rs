@@ -431,7 +431,9 @@ async fn on_status(entry: &Arc<Entry>, service: &Weak<OrchestratorService>, stat
                     v.state.run.phase == Phase::Active
                         && v.activation == Activation::Armed
                         && v.state.run.id == a.run_id
-                        && v.state.run.revision == a.revision
+                        // A plan may advance the revision inside this very
+                        // round. Stop still pauses it before any dispatch.
+                        && v.state.rounds_started <= a.round
                 }) {
                     entry.state.lock().unwrap().driver.attempt = None;
                     let session = entry.session_id();
@@ -464,6 +466,30 @@ fn ready(entry: &Entry) -> bool {
 /// One drive pass: flush settlements, then dispatch, then at most one round.
 async fn drive(service: &Arc<OrchestratorService>, entry: &Arc<Entry>) -> Result<(), String> {
     if !ready(entry) {
+        return Ok(());
+    }
+    // The log can report an aborted round before its Idle observer edge.
+    // Do not clear that reservation and dispatch its plan in between.
+    let cancelled = entry
+        .state
+        .lock()
+        .unwrap()
+        .driver
+        .attempt
+        .clone()
+        .filter(|a| a.cancelled);
+    if let Some(attempt) = cancelled {
+        if let Some(view) = entry.view().map_err(|e| e.message)?
+            && view.state.run.id == attempt.run_id
+            && view.state.run.phase == Phase::Active
+            && view.activation == Activation::Armed
+        {
+            service
+                .pause(&entry.session_id(), &view.reference(), Initiator::Host)
+                .await
+                .map_err(|e| e.message)?;
+        }
+        entry.state.lock().unwrap().driver.attempt = None;
         return Ok(());
     }
     let checkpoint = std::mem::take(&mut entry.state.lock().unwrap().driver.needs_checkpoint);
@@ -604,6 +630,15 @@ async fn dispatch_one(
     if !view.state.tasks.contains_key(task_id) {
         return Err(format!("task \"{task_id}\" vanished from the plan"));
     }
+    {
+        let mut st = entry.state.lock().unwrap();
+        if st.activation != Activation::Armed {
+            return Ok(());
+        }
+        // Stop can run synchronously while spawn awaits. Publish its token
+        // first so even that child is covered by cancellation.
+        st.driver.workers.insert(task_id.to_owned(), token.clone());
+    }
     match service
         .spawn_worker(entry, &view.state, task_id, token.clone())
         .await
@@ -621,17 +656,11 @@ async fn dispatch_one(
                 .await
             {
                 token.cancel(); // the child runs unmanaged; stop it
+                entry.state.lock().unwrap().driver.workers.remove(task_id);
                 return Err(format!(
                     "recording the dispatch of \"{task_id}\" failed: {e}"
                 ));
             }
-            entry
-                .state
-                .lock()
-                .unwrap()
-                .driver
-                .workers
-                .insert(task_id.to_owned(), token);
             let tx = entry.settlements_tx.clone();
             let task_id = task_id.to_owned();
             let run_id = view.state.run.id.clone();
@@ -649,6 +678,7 @@ async fn dispatch_one(
             Ok(())
         }
         Err(e) => {
+            entry.state.lock().unwrap().driver.workers.remove(task_id);
             // A refused spawn never dispatched; record the failure from
             // `pending` so the planner can replan.
             let update = crate::fold::TaskUpdate {

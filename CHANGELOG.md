@@ -30,6 +30,8 @@
   Resume. Invalid live changes are rejected before journaling, and late
   worker settlements cannot alter a replacement run. Integration coverage
   includes real worker file writes and dependency reads against a mock model.
+  Stop also cancels workers while the planner is idle and prevents dispatch
+  after an aborted planner round. Only terminal updates ask for a closing message.
 
 - Add a second chat engine: the Pi coding agent (pinned 1.5.0). Pick DSH or
   Pi when starting a chat, or set a default in Settings. A Pi chat streams
