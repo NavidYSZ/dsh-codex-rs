@@ -176,7 +176,7 @@ let openToken = 0;
 
 const EMPTY_SESSION = {
   header: null, events: [], status: 'idle', statusError: null, deltas: null, approval: null, live: null, liveHidden: null,
-  goal: null, team: null, goalForm: false,
+  goal: null, team: null, goalForm: false, orchestration: null, orchForm: false,
 };
 
 /** Another chat: file tabs and the diff belong to the old one; its live work is not known yet. */
@@ -247,6 +247,7 @@ export async function openSession(id, { fresh = false, replace = false } = {}) {
     store.set({ header: data.header, events: data.events ?? [], status: data.status ?? 'idle' });
     markSeen(id);
     loadGoal(id);
+    loadOrchestration(id);
     loadTeam(id);
     const events = data.events ?? [];
     const after = events.length ? events[events.length - 1].seq : -1;
@@ -290,6 +291,7 @@ function onMessage(id, m) {
     case 'approval': store.set({ approval: m }); break;
     case 'live': onLive(m); break;
     case 'goal': store.set({ goal: m.goal ?? null }); break;
+    case 'orchestration': store.set({ orchestration: m.orchestration ?? null }); break;
     default: break;
   }
 }
@@ -370,6 +372,28 @@ async function loadGoal(id) {
     const { goal } = await api.goal(id);
     if (store.get().activeId === id) store.set({ goal: goal ?? null });
   } catch { /* no goal support */ }
+}
+
+async function loadOrchestration(id) {
+  if (!automation().orchestration) return;
+  try {
+    const { orchestration } = await api.orchestration(id);
+    if (store.get().activeId === id) store.set({ orchestration: orchestration ?? null });
+  } catch { /* no orchestration support */ }
+}
+
+/** `{action: create|pause|resume|cancel|clear, objective?, criteria?, limits?}` */
+export async function orchestrationCommand(body) {
+  const id = store.get().activeId;
+  if (!id) return false;
+  try {
+    const { orchestration } = await api.orchestrationCommand(id, body);
+    if (store.get().activeId === id) store.set({ orchestration: orchestration ?? null });
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
 }
 
 /** `{action: create|edit|pause|resume|clear, objective?, maxGoalRounds?}` */

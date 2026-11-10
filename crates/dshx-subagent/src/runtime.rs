@@ -164,7 +164,7 @@ struct Registry {
 
 /// Terminal facts of one one-shot run (dsh `SubagentResult`).
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct RunResult {
+pub struct RunResult {
     pub output: Vec<Value>,
     pub stop_reason: &'static str,
     /// Infrastructure failure (the run's promise rejected in dsh).
@@ -172,7 +172,7 @@ pub(crate) struct RunResult {
 }
 
 /// A published one-shot child.
-pub(crate) struct OneShot {
+pub struct OneShot {
     pub child_id: String,
     pub cancel: CancellationToken,
     pub result: oneshot::Receiver<RunResult>,
@@ -970,6 +970,28 @@ impl SubagentRuntime {
             },
         )
         .await
+    }
+
+    /// dsh `subagents.start(spec)` (one-shot) for host services (the
+    /// orchestrator): `parent_id` must be an attached live agent. The
+    /// returned [`OneShot`] settles with the child's final output.
+    pub async fn start_one_shot_child(
+        &self,
+        parent_id: &str,
+        provider: &'static str,
+        label: &str,
+        prompt: &str,
+        max_depth: Option<u32>,
+        cancel: CancellationToken,
+    ) -> Result<OneShot, SubagentError> {
+        let parent = self.live(parent_id).ok_or_else(|| {
+            SubagentError::new(
+                "UNAUTHORIZED",
+                format!("agent \"{parent_id}\" is not live in this runtime"),
+            )
+        })?;
+        self.start_one_shot(&parent, provider, label, prompt, max_depth, cancel)
+            .await
     }
 
     /// dsh `subagents.startContinuable(spec)` for host services (Agent

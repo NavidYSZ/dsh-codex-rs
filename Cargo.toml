@@ -25,6 +25,7 @@ dshx-plugins = { path = "crates/dshx-plugins" }
 dshx-goal = { path = "crates/dshx-goal" }
 dshx-schedule = { path = "crates/dshx-schedule" }
 dshx-team = { path = "crates/dshx-team" }
+dshx-orchestrator = { path = "crates/dshx-orchestrator" }
 dshx-hub = { path = "crates/dshx-hub" }
 dshx-pi = { path = "crates/dshx-pi" }
 

@@ -10,6 +10,9 @@ use dshx_agent::Agent;
 use dshx_core::ToolRegistry;
 use dshx_core::config::Config;
 use dshx_goal::{GoalCommand, GoalService, GoalSettings};
+use dshx_orchestrator::{
+    ContractInput, Criterion, OrchestrationCommand, OrchestratorService, OrchestratorSettings,
+};
 use dshx_schedule::{Retention, ScheduleService, SessionResolver, TimeContextHook};
 use dshx_server::{NotFound, StreamMessage};
 use dshx_subagent::{SessionFactory, SubagentRuntime};
@@ -24,6 +27,8 @@ pub struct Automation {
     pub goals: Option<Arc<GoalService>>,
     pub teams: Option<Arc<TeamService>>,
     pub time_context: Option<Arc<TimeContextHook>>,
+    orchestration: Arc<OrchestratorService>,
+    orchestration_on: AtomicBool,
     schedules: OnceLock<Arc<ScheduleService>>,
     drive_goals: AtomicBool,
 }
@@ -46,6 +51,10 @@ impl Automation {
                 sessions,
             )
         });
+        let orchestration = OrchestratorService::new(
+            OrchestratorSettings::from_config(&codex.orchestration),
+            subagents.clone(),
+        );
         let time_context = codex.time_context_enabled().then(|| {
             TimeContextHook::new(
                 codex.time_context.time_zone.as_deref(),
@@ -65,9 +74,23 @@ impl Automation {
             goals,
             teams,
             time_context,
+            orchestration,
+            orchestration_on: AtomicBool::new(codex.orchestration.enabled),
             schedules: OnceLock::new(),
             drive_goals: AtomicBool::new(false),
         }
+    }
+
+    /// The orchestrator service while orchestration runs are on.
+    pub fn orchestrator(&self) -> Option<&Arc<OrchestratorService>> {
+        self.orchestration_on
+            .load(Ordering::SeqCst)
+            .then_some(&self.orchestration)
+    }
+
+    /// Orchestration runs on or off for new prompts and newly opened chats.
+    pub fn set_orchestration_enabled(&self, on: bool) {
+        self.orchestration_on.store(on, Ordering::SeqCst);
     }
 
     pub fn schedules(&self) -> Option<&Arc<ScheduleService>> {
@@ -99,6 +122,11 @@ impl Automation {
                 tools.register(tool);
             }
         }
+        if let Some(orchestration) = self.orchestrator() {
+            for tool in dshx_orchestrator::orchestrator_tools(orchestration) {
+                tools.register(tool);
+            }
+        }
         if let Some(schedules) = self.schedules.get() {
             for tool in dshx_schedule::schedule_tools(schedules) {
                 tools.register(tool);
@@ -110,7 +138,9 @@ impl Automation {
     pub fn child_tools(parent: &ToolRegistry) -> ToolRegistry {
         let mut tools = ToolRegistry::new();
         for tool in parent.iter() {
-            if !dshx_schedule::TOOL_NAMES.contains(&tool.schema().name.as_str()) {
+            if !dshx_schedule::TOOL_NAMES.contains(&tool.schema().name.as_str())
+                && !dshx_orchestrator::TOOL_NAMES.contains(&tool.schema().name.as_str())
+            {
                 tools.register(tool.clone());
             }
         }
@@ -119,6 +149,9 @@ impl Automation {
 
     /// Hooks of a top-level agent; call after every other pre-step hook.
     pub fn attach_root(&self, agent: &Agent) {
+        if let Some(orchestration) = self.orchestrator() {
+            orchestration.attach(agent, self.drive_goals.load(Ordering::SeqCst));
+        }
         if let Some(goals) = &self.goals {
             goals.attach(agent, self.drive_goals.load(Ordering::SeqCst));
         }
@@ -142,6 +175,7 @@ impl Automation {
 
     /// Releases what [`Automation::attach_root`] registered.
     pub async fn close(&self, session_id: &str) {
+        self.orchestration.detach(session_id).await;
         if let Some(goals) = &self.goals {
             goals.detach(session_id).await;
         }
@@ -176,6 +210,7 @@ impl Automation {
     }
 
     pub async fn shutdown(&self) {
+        self.orchestration.shutdown().await;
         if let Some(s) = self.schedules.get() {
             s.dispose().await;
         }
@@ -191,11 +226,31 @@ impl Automation {
             "schedules": self.schedules.get().is_some(),
             "timeContext": self.time_context.is_some(),
             "team": self.teams.is_some(),
+            "orchestration": self.orchestration_on.load(Ordering::SeqCst),
         })
     }
 
     /// Forwards goal notices and `schedule/changed` into a UI stream.
     pub fn forward(&self, tx: broadcast::Sender<StreamMessage>) {
+        {
+            let mut rx = self.orchestration.subscribe();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                loop {
+                    match rx.recv().await {
+                        Ok(n) => {
+                            let _ = tx.send(StreamMessage::Orchestration {
+                                session_id: n.session_id,
+                                orchestration: n.orchestration,
+                            });
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(broadcast::error::RecvError::Closed) => return,
+                    }
+                }
+            });
+        }
+
         if let Some(goals) = &self.goals {
             let mut rx = goals.subscribe();
             let tx = tx.clone();
@@ -283,6 +338,82 @@ pub async fn goal_command(runtime: &Runtime, id: &str, body: &Value) -> anyhow::
         .command(id, command, body.get("maxGoalRounds"))
         .await?;
     Ok(json!({"goal": view.map(|v| v.to_json())}))
+}
+
+fn orchestrator(runtime: &Runtime) -> anyhow::Result<&Arc<OrchestratorService>> {
+    runtime
+        .automation
+        .orchestrator()
+        .ok_or_else(|| NotFound("orchestration".into()).into())
+}
+
+fn parse_criteria(v: &Value) -> anyhow::Result<Vec<Criterion>> {
+    let list = v.as_array().filter(|a| !a.is_empty()).ok_or_else(|| {
+        anyhow::anyhow!("criteria must be a non-empty array of id/criterion objects")
+    })?;
+    let mut out = Vec::with_capacity(list.len());
+    for c in list {
+        let id = c["id"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && s.len() <= 64 && !s.chars().any(char::is_whitespace))
+            .ok_or_else(|| {
+                anyhow::anyhow!("criterion.id must be a short handle without whitespace")
+            })?;
+        let criterion = c["criterion"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("criterion.criterion must be a non-empty string"))?;
+        out.push(Criterion {
+            id: id.to_owned(),
+            criterion: criterion.to_owned(),
+        });
+    }
+    Ok(out)
+}
+
+/// `GET /api/sessions/:id/orchestration`.
+pub fn orchestration(runtime: &Runtime, id: &str) -> anyhow::Result<Value> {
+    let service = orchestrator(runtime)?;
+    let view = if service.is_attached(id) {
+        service.get(id)?
+    } else {
+        dshx_orchestrator::stored_orchestration(&stored_events(runtime, id)?)?
+    };
+    Ok(json!({"orchestration": view.map(|v| v.to_json())}))
+}
+
+/// `POST /api/sessions/:id/orchestration` on an open session.
+pub async fn orchestration_command(
+    runtime: &Runtime,
+    id: &str,
+    body: &Value,
+) -> anyhow::Result<Value> {
+    let service = orchestrator(runtime)?;
+    let command = match body["action"].as_str().unwrap_or_default() {
+        "create" => {
+            let objective = body["objective"]
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("create requires a non-empty objective"))?;
+            OrchestrationCommand::Create(ContractInput {
+                objective: objective.to_owned(),
+                criteria: parse_criteria(&body["criteria"])?,
+                limits: service.settings().parse_limits(&body["limits"])?,
+            })
+        }
+        "pause" => OrchestrationCommand::Pause,
+        "resume" => OrchestrationCommand::Resume,
+        "cancel" => OrchestrationCommand::Cancel,
+        "clear" => OrchestrationCommand::Clear,
+        other => anyhow::bail!(
+            "unknown orchestration action {other:?}: use create, pause, resume, cancel or clear"
+        ),
+    };
+    let view = service.command(id, command).await?;
+    Ok(json!({"orchestration": view.map(|v| v.to_json())}))
 }
 
 /// `GET /api/schedules`.

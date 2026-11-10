@@ -156,7 +156,7 @@ async fn web_serves_goals_schedules_and_teams() {
     let info = server.get("/info").await;
     assert_eq!(
         info["automation"],
-        json!({"goals": true, "schedules": true, "timeContext": true, "team": true})
+        json!({"goals": true, "schedules": true, "timeContext": true, "team": true, "orchestration": true})
     );
     let (_, created) = server
         .call(

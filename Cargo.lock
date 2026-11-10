@@ -672,6 +672,7 @@ dependencies = [
  "dshx-llm",
  "dshx-macos",
  "dshx-mcp",
+ "dshx-orchestrator",
  "dshx-pi",
  "dshx-plugins",
  "dshx-schedule",
@@ -866,6 +867,27 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "dshx-orchestrator"
+version = "0.3.0-alpha.3"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "dshx-agent",
+ "dshx-core",
+ "dshx-llm",
+ "dshx-session",
+ "dshx-subagent",
+ "dshx-testkit",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -322,7 +322,32 @@ max_members = 8
 max_tasks = 256
 max_pending_messages_per_member = 64
 max_message_bytes = 65536
+
+[codex.orchestration]                  # Aether's own orchestration runs (see below)
+enabled = true
+default_max_rounds = 8
+default_max_parallel = 3
+default_max_workers = 12
+blocked_after_consecutive_rounds = 3
 ```
+
+### Orchestration runs
+
+Orchestration is Aether's own mode for larger multi-step work (not a DSH
+port): a run is a durable contract in the chat's session log — one
+objective, acceptance criteria and budgets. The agent plans in reserved
+rounds (`update_orchestration`, action `plan`) with versioned,
+dependency-ordered task lists; worker one-shot subagents are dispatched
+automatically after each planner turn (`max_parallel` concurrent,
+`max_workers` total, joins enforced in code). Completion must cite
+concrete evidence for **every** criterion (`checks`); `block` ends the run
+with a code (`needs-input` when only the user can unblock). Start one from
+the composer's **+ → Start orchestration** menu (one criterion per line) or
+`POST /api/sessions/:id/orchestration`; pause/resume/cancel/clear are
+one click. Partial limits inherit configured defaults. After a restart,
+the run is restored from the session log and waits for **Resume** before
+continuing. Available in DSH Standard/PTC chats; Pi and Minimal do not
+support orchestration runs yet.
 
 When a chat condenses older history (Settings → Context in the
 web UI; open chats follow a change at once):
@@ -449,6 +474,7 @@ Sessions live in `~/.dsh-codex/sessions`, attachments in
 | `crates/dshx-subagent` | In-process subagents (`subagent`, `subagent_fork`, `send_message`, …) |
 | `crates/dshx-goal` | Goals (`get_goal`, `create_goal`, `update_goal`) and the goal-round driver |
 | `crates/dshx-schedule` | Reminders (`schedule_*`), their store and delivery, the request clock |
+| `crates/dshx-orchestrator` | Orchestration runs: planner rounds, worker dispatch, evidence-checked completion |
 | `crates/dshx-team` | Agent Teams: teammates, Team mailbox, shared task board |
 | `crates/dshx-mcp` | MCP client (stdio and Streamable HTTP), OAuth logins, connector catalog |
 | `crates/dshx-plugins` | Plugin manifests, plugin MCP servers, marketplaces |

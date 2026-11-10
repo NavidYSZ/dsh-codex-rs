@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { html, cx } from '../html.js';
 import { t } from '../i18n.js';
 import { useStore } from '../store.js';
-import { store, api, openPlugins, toast, ask } from '../state.js';
+import { store, api, openPlugins, toast, ask, updateSettings } from '../state.js';
 import { IconRefresh, IconTrash, IconPlus } from '../icons.js';
 import { PageShell, Tabs, useLoad, Toggle, Pill } from './page.js';
 import { Logo, MoreMenu, useAction, statusPill, useLoginWait, PageToast, usePluginFocus, connectorText, connectorCategory } from './plugin-kit.js';
@@ -144,6 +144,42 @@ function AddMarketDialog({ onClose, onAdded }) {
   </${Dialog}>`;
 }
 
+// ---- built-in bundles -----------------------------------------------------------
+
+/** The dsh automation bundles that ship with the app, as switchable cards. */
+const BUNDLES = [
+  { key: 'orchestration', setting: 'orchestration', color: '#4f6bed', name: () => t.bundleOrch, desc: () => t.bundleOrchDesc },
+];
+
+function BuiltInCard({ b, on }) {
+  const [busy, setBusy] = useState(false);
+  const flip = async (next) => {
+    setBusy(true);
+    await updateSettings({ [b.setting]: { enabled: next } });
+    setBusy(false);
+  };
+  return html`<div class=${cx('plug-card', !on && 'is-off')} data-bundle=${b.key}>
+    <${Logo} color=${b.color} name=${b.name()} />
+    <div class="plug-text">
+      <div class="plug-name">${b.name()}<span class="plug-meta">${t.skillSource.bundled}</span></div>
+      <div class="plug-desc">${b.desc()}</div>
+      ${on && b.open ? html`<div class="plug-parts"><button type="button" class="link-btn" onClick=${b.open}>${t.openJobs}</button></div>` : null}
+    </div>
+    <div class="plug-side"><${Toggle} on=${on} label=${b.name()} disabled=${busy} onChange=${flip} /></div>
+  </div>`;
+}
+
+/** Shown when the server reports its automation switches (`/api/info` `automation`). */
+function BuiltInSection() {
+  const automation = useStore(store, (s) => s.info?.automation);
+  if (!automation) return null;
+  return html`<section class="page-section">
+    <h2 class="section-title">${t.builtIn}</h2>
+    <p class="plug-meta mcp-lead">${t.builtInLead}</p>
+    <div class="plug-grid">${BUNDLES.map((b) => html`<${BuiltInCard} key=${b.key} b=${b} on=${!!automation[b.key]} />`)}</div>
+  </section>`;
+}
+
 function PluginsTab() {
   const plugins = useLoad(() => api.plugins());
   const markets = useLoad(() => api.marketplaces());
@@ -174,6 +210,7 @@ function PluginsTab() {
       <p class="plug-meta mcp-lead">${t.marketsLead}</p>
       <button type="button" class="btn btn-small btn-primary" onClick=${() => setAdding(true)}><${IconPlus} size=${14} />${t.addMarketplace}</button>
     </div>
+    <${BuiltInSection} />
     <section class="page-section">
       <h2 class="section-title">${t.installed}</h2>
       ${installed.length ? html`<div class="plug-grid">${installed.map((p) => html`<${PluginCard} key=${p.id} p=${p} busy=${busy} run=${run} focused=${p.id === focused} />`)}</div>`

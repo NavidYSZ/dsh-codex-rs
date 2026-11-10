@@ -182,6 +182,22 @@ nimmt nur Pfade im Benutzerordner und in seinen Projektordnern an, schreibt
 nie durch einen Symlink und lehnt Archiveinträge mit `..` oder absoluten
 Pfaden ab. API: [docs/aether/TRANSFER.md](docs/aether/TRANSFER.md).
 
+## Orchestrierung (Artex-Modus)
+
+Für größere Aufträge hat jeder Standard-Chat einen Orchestrierungsmodus: Ein
+**Lauf** ist ein belastbarer Vertrag im Session-Log — ein Ziel, Akzeptanzkriterien
+und Budgets. Der Agent plant in reservierten Runden (`update_orchestration`,
+Aktion `plan`) versionierte, abhängig geordnete Aufgabenlisten; **Worker**
+(Einweg-Subagenten) werden nach jeder Planerrunde automatisch lossgeschickt —
+Parallelisierung und Joins erzwingt der Code. Abgeschlossen
+wird nur mit **Belegen je Kriterium** (`checks`); `block` beendet den Lauf mit
+Kennung (`needs-input`, wenn nur der Nutzer weiterhelfen kann). Starten über
+**+ → Orchestrierung starten** im Composer (ein Kriterium pro Zeile) oder
+`POST /api/sessions/:id/orchestration`. Nach einem Neustart wird der Lauf
+aus dem Session-Log wiederhergestellt und wartet auf **Fortsetzen**.
+Verfügbar in DSH-Chats mit Standard/PTC; Pi und Minimal unterstützen den
+Modus noch nicht. Details in der [englischen README](README.md).
+
 ## Unterschied zum alten Repository
 
 [NavidYSZ/dsh-codex](https://github.com/NavidYSZ/dsh-codex) enthält das ältere
