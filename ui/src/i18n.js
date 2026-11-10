@@ -155,8 +155,7 @@ const EN = {
   goalPlaceholder: 'What should the agent achieve? It keeps working in rounds until it is done.',
   goalMaxRounds: 'Max rounds', goalStart: 'Start goal', goalSave: 'Save', confirmClearGoal: 'Remove this goal?',
   // orchestration
-  builtIn: 'Built in', builtInLead: 'Parts of the agent that ship with the app. A switch takes effect at once; open chats follow with their next prompt.',
-  builtIn: 'Built in', customTag: 'Custom', modelCount: (n) => (n === 1 ? '1 model' : `${n} models`),
+  builtInLead: 'Parts of the agent that ship with the app. A switch takes effect at once; open chats follow with their next prompt.',
   orch: 'Orchestration', setOrch: 'Start orchestration',
   orchPhase: { active: 'Orchestration running', inactive: 'Orchestration inactive', paused: 'Orchestration paused', blocked: 'Orchestration blocked' },
   orchRounds: (r, m) => `Round ${r}/${m}`, orchWorkers: (u, m) => `Workers ${u}/${m}`,
@@ -863,8 +862,7 @@ const DE = {
   goalPlaceholder: 'Was soll der Agent erreichen? Er arbeitet in Runden weiter, bis es geschafft ist.',
   goalMaxRounds: 'Max. Runden', goalStart: 'Ziel starten', goalSave: 'Speichern', confirmClearGoal: 'Dieses Ziel entfernen?',
   // Orchestrierung
-  builtIn: 'Integriert', builtInLead: 'Teile des Agenten, die mit der App kommen. Ein Schalter wirkt sofort; offene Chats folgen mit ihrem nächsten Prompt.',
-  builtIn: 'Eingebaut', customTag: 'Eigene', modelCount: (n) => (n === 1 ? '1 Modell' : `${n} Modelle`),
+  builtInLead: 'Teile des Agenten, die mit der App kommen. Ein Schalter wirkt sofort; offene Chats folgen mit ihrem nächsten Prompt.',
   orch: 'Orchestrierung', setOrch: 'Orchestrierung starten',
   orchPhase: { active: 'Orchestrierung läuft', inactive: 'Orchestrierung inaktiv', paused: 'Orchestrierung pausiert', blocked: 'Orchestrierung blockiert' },
   orchRounds: (r, m) => `Runde ${r}/${m}`, orchWorkers: (u, m) => `Worker ${u}/${m}`,

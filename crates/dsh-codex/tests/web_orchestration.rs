@@ -442,3 +442,68 @@ async fn clearing_running_workers_does_not_settle_into_the_next_run() {
     assert_eq!(done["orchestration"]["workersDispatched"], 2);
     assert_eq!(done["orchestration"]["id"], new["orchestration"]["id"]);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn enabling_orchestration_supports_a_chat_opened_while_disabled() {
+    let mock = MockDeepSeek::start().await;
+    mock.set_responder(|_| Reply::text("Progress."));
+    let home = tempfile::tempdir().unwrap();
+    let ws = tempfile::tempdir().unwrap();
+    let server = start(&mock, home.path());
+    let (status, info) = server
+        .call(
+            reqwest::Method::PUT,
+            "/settings",
+            Some(json!({"orchestration": {"enabled": false}})),
+        )
+        .await;
+    assert_eq!(status, 200, "{info}");
+    assert_eq!(info["automation"]["orchestration"], false);
+    let (status, created) = server
+        .call(
+            reqwest::Method::POST,
+            "/sessions",
+            Some(json!({"cwd": ws.path()})),
+        )
+        .await;
+    assert_eq!(status, 200, "{created}");
+    let id = created["id"].as_str().unwrap();
+    let (status, _) = server
+        .call(
+            reqwest::Method::POST,
+            &format!("/sessions/{id}/prompt"),
+            Some(json!({"text": "Open this chat"})),
+        )
+        .await;
+    assert_eq!(status, 202);
+    server
+        .until("the first reply", &format!("/sessions/{id}"), |v| {
+            v["status"] == "idle"
+                && v["events"].as_array().is_some_and(|es| {
+                    es.iter()
+                        .any(|e| e["type"] == "turn/end" || e["kind"] == "turn/end")
+                })
+        })
+        .await;
+    let path = format!("/sessions/{id}/orchestration");
+    assert_eq!(server.call(reqwest::Method::GET, &path, None).await.0, 404);
+    let (status, info) = server
+        .call(
+            reqwest::Method::PUT,
+            "/settings",
+            Some(json!({"orchestration": {"enabled": true}})),
+        )
+        .await;
+    assert_eq!(status, 200, "{info}");
+    let (status, view) = server.call(reqwest::Method::POST, &path, Some(json!({
+        "action": "create", "objective": "Continue in this chat", "limits": {"maxRounds": 1},
+        "criteria": [{"id": "done", "criterion": "Do the work"}],
+    }))).await;
+    assert_eq!(status, 200, "{view}");
+    let blocked = server
+        .until("a planner round in the already-open chat", &path, |v| {
+            v["orchestration"]["phase"] == "blocked"
+        })
+        .await;
+    assert_eq!(blocked["orchestration"]["roundsStarted"], 1);
+}

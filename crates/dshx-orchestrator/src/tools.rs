@@ -55,7 +55,7 @@ fn schema(name: &str) -> ToolSchema {
                         "limits": {
                             "type": "object",
                             "properties": {
-                                "maxRounds": {"type": "integer", "minimum": 1, "description": "Planner-round cap (default 8)."},
+                                "maxRounds": {"type": "integer", "minimum": 1, "maximum": 10000, "description": "Planner-round cap (configured default, normally 8)."},
                                 "maxParallel": {"type": "integer", "minimum": 1, "maximum": 8, "description": "Concurrent workers (default 3)."},
                                 "maxWorkers": {"type": "integer", "minimum": 1, "maximum": 64, "description": "Total worker dispatches (default 12)."}
                             },
