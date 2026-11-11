@@ -20,7 +20,7 @@ const closeOrchForm = () => store.set({ orchForm: false });
 /** One criterion per line; ids are slugified (collision-safe). */
 function criteriaInput(text) {
   const used = new Set();
-  return text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 16).map((criterion, i) => {
+  return text.split('\n').map((l) => l.trim()).filter(Boolean).map((criterion, i) => {
     let id = criterion.toLowerCase().normalize('NFKD')
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || `c${i + 1}`;
     while (used.has(id)) id = `${id}-${i + 1}`;
