@@ -159,6 +159,8 @@ class HttpApi {
   // Goals, schedules and Agent Teams.
   goal(id) { return this.req('GET', `/api/sessions/${enc(id)}/goal`); }
   goalCommand(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/goal`, body); }
+  orchestration(id) { return this.req('GET', `/api/sessions/${enc(id)}/orchestration`); }
+  orchestrationCommand(id, body) { return this.req('POST', `/api/sessions/${enc(id)}/orchestration`, body); }
   schedules() { return this.req('GET', '/api/schedules'); }
   updateSchedule(id, body) { return this.req('PUT', `/api/schedules/${enc(id)}`, body); }
   deleteSchedule(id) { return this.req('DELETE', `/api/schedules/${enc(id)}`); }
@@ -648,6 +650,7 @@ class FixtureApi {
   connectors() { return fixtureExt.connectors(); }
   async schedules() { return []; }
   async goal() { return { goal: null }; }
+  async orchestration() { return { orchestration: null }; }
   async team() { throw new ApiError(404, 'team'); }
 
   /** The fixture's `stats` came from the server's stats route; turns appear once they end. */

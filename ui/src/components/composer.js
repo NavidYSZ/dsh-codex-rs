@@ -12,6 +12,7 @@ import {
 } from '../icons.js';
 import { Menu, MenuItem, ActionItem } from './common.js';
 import { GoalBar, openGoalForm } from './goal.js';
+import { OrchBar, IconFlow, openOrchForm } from './orchestration.js';
 import { PlanBar } from './plan.js';
 import { ModeChip, EngineChip, useChatMode, useStagedMode, useChatEngine, useStagedEngine } from './modes.js';
 import { ProjectMenu } from './folders.js';
@@ -134,6 +135,7 @@ export function Composer({ hero, tx }) {
   const stagedEngine = useStagedEngine();
   const pi = (hero ? stagedEngine : chatEngine) === 'pi';
   const goals = !!info?.automation?.goals && !!activeId && chatMode !== 'minimal' && !pi;
+  const orchestration = !!info?.automation?.orchestration && !!activeId && chatMode !== 'minimal' && !pi;
   useEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -191,13 +193,15 @@ export function Composer({ hero, tx }) {
     <div class="composer-foot">
       <span class="chip-wrap">
         <button type="button" ref=${plusAnchor} class="icon-btn add" aria-label=${t.attach} title=${t.attach} aria-haspopup="menu"
-          onClick=${() => (goals ? setPlus((v) => !v) : file.current?.click())}>
+          onClick=${() => (goals || orchestration ? setPlus((v) => !v) : file.current?.click())}>
           <${IconPlus} size=${18} />
         </button>
         <${Menu} open=${plus} onClose=${() => setPlus(false)} anchor=${plusAnchor} side="top" align="start" class="menu-actions">
           <${ActionItem} icon=${html`<${IconImage} size=${14} />`} onClick=${() => { setPlus(false); file.current?.click(); }}>${t.attachFile}</${ActionItem}>
-          <${ActionItem} icon=${html`<svg class="icon" width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>`}
-            onClick=${() => { setPlus(false); openGoalForm(); }}>${t.setGoal}</${ActionItem}>
+          ${goals ? html`<${ActionItem} icon=${html`<svg class="icon" width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>`}
+            onClick=${() => { setPlus(false); openGoalForm(); }}>${t.setGoal}</${ActionItem}>` : null}
+          ${orchestration ? html`<${ActionItem} icon=${html`<${IconFlow} />`}
+            onClick=${() => { setPlus(false); openOrchForm(); }}>${t.setOrch}</${ActionItem}>` : null}
         </${Menu}>
       </span>
       <input ref=${file} type="file" multiple hidden
@@ -282,7 +286,7 @@ export function ComposerSeat({ hero, tx }) {
     <div class="column seat-column">
       <${Banners} tx=${tx} sel=${sel} />
       ${approval ? html`<${ApprovalCard} approval=${approval} />` : null}
-      ${hero ? null : html`<${GoalBar} />`}
+      ${hero ? null : html`<${GoalBar} /><${OrchBar} />`}
       ${hero ? null : html`<${PlanBar} tx=${tx} />`}
       <${ComposerExtras} />
       ${hero ? html`<${HeroTray} sel=${sel} />` : null}

@@ -403,6 +403,60 @@ goal and Team tools also checked against captured request headers).
   continuable children (explicit child id, two-block prompt without return guidance, peer messages
   steered with `source: {kind: "team-message", ...}`), the system prompt gets `team:policy` (600).
 
+### 5.10 Orchestration runs: `dshx-orchestrator` (Aether feature)
+
+One run per top-level Standard/PTC session records an immutable objective,
+1–16 acceptance criteria and limits in version-1 `orchestration/change`
+events. This is Aether's own mode, separate from the upstream `workflow`
+tool. The strict replay fold also validates live changes before append;
+invalid contracts, plans or incomplete evidence never enter the journal.
+
+- `[codex.orchestration] enabled = true` by default. Defaults are
+  `default_max_rounds = 8`, `default_max_parallel = 3`,
+  `default_max_workers = 12`, `blocked_after_consecutive_rounds = 3`.
+  A partial `limits` object overrides only supplied fields. Bounds:
+  `maxRounds` 1–10,000, `maxParallel` 1–8, `maxWorkers` 1–64.
+- `create_orchestration`, `get_orchestration`, `update_orchestration`
+  operate on the caller's root session. Creation needs direct human input;
+  update actions `plan`, `complete`, `blocked` also accept the run's exact
+  reserved planner round. Updates compare `run_id` and `revision`.
+  Workers never receive these tools. The literal policy section
+  `tools:orchestration` has order 2450; Minimal omits it and the tools.
+- An active, armed run queues one `<orchestration_round>` after an idle
+  checkpoint, with source `{kind:"orchestration", runId, revision, round}`.
+  Only that reservation admits a round. Versioned plans have 1–32 tasks,
+  at most eight dependencies per task, unique single-use ids and no cycles.
+  The host dispatches ready tasks as one-shot children via
+  `SubagentRuntime::start_one_shot_child`; joins, parallelism and the total
+  worker budget are enforced in code. Settlements preserve child ids and
+  summaries and cannot cross into a replacement run.
+- Completion needs exactly one nonempty `checks[].evidence` list per
+  criterion (`criterionId`). These are references supplied by the planner;
+  coverage is validated, while factual artifact verification remains the
+  planner's responsibility. `blocked` needs a lower-kebab-case reason;
+  `needs-input` is for a user dependency. The round cap blocks with
+  `round-limit`. Pausing, cancelling, clearing and terminal updates cancel
+  outstanding workers; a host shutdown stops all run drivers.
+  Stop cancels background workers even while the planner is idle; an
+  aborted planner round pauses before its saved plan can dispatch. A plan
+  update never emits the completion/blocked closing-message instruction.
+- The durable phases are `active`, `paused`, `blocked`, `complete`,
+  `cancelled`. Activation is process-local: reattaching after restart
+  restores the journal **disarmed**. Explicit Resume rearms an active run
+  or resumes a paused/blocked run; an exhausted budget requires a new run.
+  No model call occurs merely from reading a stored run.
+- The composer’s + menu opens the objective/criteria form; the run bar
+  shows rounds, worker count, criteria and task statuses with
+  pause/resume/cancel/clear. The Plugins switch controls availability.
+  Pi and Minimal reject run commands with HTTP 400.
+
+Verification: `crates/dshx-orchestrator/tests/lifecycle.rs` covers partial
+limits, rejection before persistence and restart/resume. The REST integration
+test `crates/dsh-codex/tests/web_orchestration.rs` runs the real host and
+workers against a mock model, writes `notes.md`, reads it in a dependent
+worker, writes `report.md`, completes with evidence and exercises the round
+cap, input validation and worker tool isolation.
+
 ## 6. UI ↔ server protocol
 
 Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI then sends
@@ -437,6 +491,8 @@ Server binds 127.0.0.1, random token; the opened URL is `/?token=…`, the UI th
 | GET | `/api/attachments/:id` | → image bytes |
 | GET | `/api/sessions/:id/goal` | → `{goal: GoalView \| null}`; `GoalView` = `{id, revision, objective, phase, maxGoalRounds, blockedReason?, roundsStarted, createdAt, updatedAt, activation}` |
 | POST | `/api/sessions/:id/goal` | `{action: "create"\|"edit"\|"pause"\|"resume"\|"clear", objective?, maxGoalRounds?}` (dsh `/goal`) → `{goal}`; refused transitions → 400 |
+| GET | `/api/sessions/:id/orchestration` | → `{orchestration: RunView \| null}`; view = `{id, revision, objective, criteria:[{id, criterion}], limits:{maxRounds,maxParallel,maxWorkers}, phase, blockedReason?, roundsStarted, workersDispatched, planVersion, tasks:[{id,description,dependsOn,status,planVersion,childId?,summary?,stopReason?}], checks?, createdAt, updatedAt, activation}` |
+| POST | `/api/sessions/:id/orchestration` | `{action:"create"\|"pause"\|"resume"\|"cancel"\|"clear", objective?, criteria?, limits?}` → `{orchestration}`; create requires objective/criteria; partial limits inherit configured defaults; invalid input/transitions → 400; disabled/unknown session → 404 |
 | GET | `/api/schedules` | → `[{...record, sessionId, status: "active"\|"inactive", lastDelivery?}]` by `scheduledAt` |
 | GET | `/api/sessions/:id/schedules` | → active reminder views `[{...record, state: "scheduled"\|"overdue", deliveryMode: "host"}]` |
 | PUT | `/api/schedules/:id` | `{title?, prompt?, at?\|every_seconds?\|daily?\|weekly?\|cron?}` (`schedule_update` fields) → view; invalid/ended/conflict → 400, unknown → 404 |
@@ -540,12 +596,13 @@ WebSocket messages (JSON):
 - `{"kind":"approval","sessionId","callId","tool","summary","justification"}` — pending approval.
 - `{"kind":"goal","sessionId","goal":GoalView|null}` — goal or activation changed (session clients
   and the session-less sidebar feed).
+- `{"kind":"orchestration","sessionId","orchestration":RunView|null}` — run, board or activation changed; null after clear.
 - `{"kind":"schedule-changed"}` — a task was created, updated, delivered or deleted; to every client.
 - `{"kind":"live","sessionId", tool, args?, active, ended, activity?, place?, width?, height?, cursor?:{x,y,click},
   image?:base64 JPEG, attachment?:ImageAttachmentRef, meta?, error?, time}` — live view of browser/computer work of
   that session (merged state, at most 4 frames/s), sent from `Backend::live` on its own channel; the latest one also
   follows the backlog. Never persisted; a lagging client just misses frames.
-- `/api/info` additionally carries `automation: {goals, schedules, timeContext, team}`,
+- `/api/info` additionally carries `automation: {goals, schedules, timeContext, team, orchestration}`,
   `settings.defaultPreset`, `presets: [{id, name, description, help: {intro, explanation, usage}}]`
   (English; help in Markdown from dsh's agent-preset guide; the UI localizes by `id`) and
   `ui: {workDetails: "compact"|"standard"|"detailed"|"verbose", performanceUsage: "compact"|"detailed",

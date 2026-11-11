@@ -395,7 +395,18 @@ impl Backend for WebBackend {
             .map(|p| parse_compaction(p, &self.runtime.config().codex.compaction))
             .transpose()?;
         let engine = crate::pi::parse_engine(patch.get("defaultEngine"))?;
+        let orchestration = patch
+            .get("orchestration")
+            .and_then(|v| v.get("enabled"))
+            .map(|v| {
+                v.as_bool()
+                    .ok_or_else(|| anyhow::anyhow!("orchestration.enabled must be true or false"))
+            })
+            .transpose()?;
         self.runtime.update_config(|c| {
+            if let Some(on) = orchestration {
+                c.codex.orchestration.enabled = on;
+            }
             if let Some(e) = &engine {
                 c.default_engine = (e != "dsh").then(|| e.clone());
             }
@@ -421,6 +432,9 @@ impl Backend for WebBackend {
                 c.approval = a.to_owned();
             }
         })?;
+        if let Some(on) = orchestration {
+            self.runtime.automation.set_orchestration_enabled(on);
+        }
         // Open chats follow at once; Minimal chats never compact.
         if let Some(s) = &compaction {
             self.pi.set_compaction(s).await;
@@ -905,6 +919,30 @@ impl Backend for WebBackend {
 
     async fn goal(&self, id: &str) -> anyhow::Result<Value> {
         crate::automation::goal(&self.runtime, id)
+    }
+
+    async fn orchestration(&self, id: &str) -> anyhow::Result<Value> {
+        crate::automation::orchestration(&self.runtime, id)
+    }
+
+    async fn orchestration_command(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        anyhow::ensure!(
+            !self.pi.is_pi(id)?,
+            "orchestration runs are not part of Pi chats yet"
+        );
+        let s = self.session_handle(id, &Overrides::default()).await?;
+        anyhow::ensure!(
+            s.agent.config().preset != dshx_agent::Preset::Minimal,
+            "orchestration runs are not part of Minimal mode; start a Standard chat"
+        );
+        self.runtime.refresh_agent(&s.agent, &s.tools_version);
+        // A chat may have opened while the Plugins switch was off.
+        if let Some(service) = self.runtime.automation.orchestrator()
+            && !service.is_attached(id)
+        {
+            service.attach(&s.agent, true);
+        }
+        crate::automation::orchestration_command(&self.runtime, id, &body).await
     }
 
     async fn goal_command(&self, id: &str, body: Value) -> anyhow::Result<Value> {

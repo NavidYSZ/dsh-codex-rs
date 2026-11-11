@@ -484,10 +484,43 @@ pub struct CodexConfig {
     #[serde(rename = "time_context", alias = "timeContext")]
     pub time_context: TimeContextConfig,
     pub team: TeamConfig,
+    pub orchestration: OrchestrationConfig,
     pub compaction: CompactionSettings,
     pub mobile: MobileConfig,
     pub hub: HubConfig,
     pub pi: PiConfig,
+}
+
+/// Orchestration runs (an Aether feature): planner rounds plus
+/// dependency-ordered worker dispatch, one per session, opt-out.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct OrchestrationConfig {
+    pub enabled: bool,
+    /// Round cap of a run created without explicit limits.
+    #[serde(alias = "defaultMaxRounds")]
+    pub default_max_rounds: u32,
+    /// Concurrent workers of a run created without explicit limits.
+    #[serde(alias = "defaultMaxParallel")]
+    pub default_max_parallel: u32,
+    /// Total worker dispatches of a run created without explicit limits.
+    #[serde(alias = "defaultMaxWorkers")]
+    pub default_max_workers: u32,
+    /// Rounds a run must reach before the model may report `blocked`.
+    #[serde(alias = "blockedAfterConsecutiveRounds")]
+    pub blocked_after_consecutive_rounds: u32,
+}
+
+impl Default for OrchestrationConfig {
+    fn default() -> Self {
+        OrchestrationConfig {
+            enabled: true,
+            default_max_rounds: 8,
+            default_max_parallel: 3,
+            default_max_workers: 12,
+            blocked_after_consecutive_rounds: 3,
+        }
+    }
 }
 
 /// `[codex.pi]`: the Pi engine's processes (one per active Pi chat).

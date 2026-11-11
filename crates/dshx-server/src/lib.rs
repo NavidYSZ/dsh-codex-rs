@@ -88,6 +88,13 @@ pub enum StreamMessage {
     /// Some scheduled task was created, changed, delivered or deleted
     /// (dsh `schedule/changed`); reload `/api/schedules`.
     ScheduleChanged,
+    /// The current orchestration run of a session changed (phase, plan,
+    /// tasks or activation); `orchestration` is `null` once cleared.
+    Orchestration {
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        orchestration: Option<Value>,
+    },
 }
 
 impl StreamMessage {
@@ -98,7 +105,8 @@ impl StreamMessage {
             | StreamMessage::Status { session_id, .. }
             | StreamMessage::Approval { session_id, .. }
             | StreamMessage::Live { session_id, .. }
-            | StreamMessage::Goal { session_id, .. } => session_id,
+            | StreamMessage::Goal { session_id, .. }
+            | StreamMessage::Orchestration { session_id, .. } => session_id,
             StreamMessage::ScheduleChanged => "",
         }
     }
@@ -274,6 +282,17 @@ pub trait Backend: Send + Sync + 'static {
         let _ = (id, body);
         Err(NotFound("goals".into()).into())
     }
+    /// `{orchestration: RunView | null}` of a session.
+    async fn orchestration(&self, id: &str) -> anyhow::Result<Value> {
+        let _ = id;
+        Err(NotFound("orchestration".into()).into())
+    }
+    /// `{action: "create"|"pause"|"resume"|"cancel"|"clear", objective?,
+    /// criteria?, limits?}` → `{orchestration}`.
+    async fn orchestration_command(&self, id: &str, body: Value) -> anyhow::Result<Value> {
+        let _ = (id, body);
+        Err(NotFound("orchestration".into()).into())
+    }
     /// Every scheduled task with its session binding (dsh `catalog`).
     async fn schedules(&self) -> anyhow::Result<Value> {
         Err(NotFound("schedules".into()).into())
@@ -417,6 +436,10 @@ fn build(backend: Arc<dyn Backend>, token: String) -> (Router, AppState) {
         .route("/attachments/{id}", get(load_attachment))
         // Automation: goals, schedules, Agent Teams.
         .route("/sessions/{id}/goal", get(goal).post(goal_command))
+        .route(
+            "/sessions/{id}/orchestration",
+            get(orchestration).post(orchestration_command),
+        )
         .route("/sessions/{id}/schedules", get(session_schedules))
         .route("/sessions/{id}/team", get(team))
         .route("/sessions/{id}/stats", get(session_stats))
@@ -877,6 +900,21 @@ async fn goal_command(
     Ok(Json(s.backend.goal_command(&id, body).await?))
 }
 
+async fn orchestration(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.orchestration(&id).await?))
+}
+
+async fn orchestration_command(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    Ok(Json(s.backend.orchestration_command(&id, body).await?))
+}
+
 async fn schedules(State(s): State<AppState>) -> ApiResult<Json<Value>> {
     Ok(Json(s.backend.schedules().await?))
 }
@@ -1046,7 +1084,7 @@ async fn pump(
                     let wanted = match &session {
                         _ if matches!(msg, StreamMessage::ScheduleChanged) => true,
                         Some(id) => msg.session_id() == id,
-                        None => matches!(msg, StreamMessage::Status { .. } | StreamMessage::Approval { .. } | StreamMessage::Goal { .. }),
+                        None => matches!(msg, StreamMessage::Status { .. } | StreamMessage::Approval { .. } | StreamMessage::Goal { .. } | StreamMessage::Orchestration { .. }),
                     };
                     if !wanted {
                         continue;

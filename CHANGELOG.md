@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- **Orchestration runs (an Aether feature, ARTEX-inspired)**: a new mode for
+  larger multi-step work in any Standard chat. A run is a durable contract in
+  the session's event log (`orchestration/change`, strict replay fold): one
+  objective, up to 16 acceptance criteria and budgets (`maxRounds`, default 8;
+  `maxParallel`, default 3; `maxWorkers`, default 12). Planner rounds arrive
+  as reserved `<orchestration_round>` prompts; the model submits versioned,
+  dependency-ordered plan versions (`update_orchestration`, action `plan`).
+  After each planner turn the runtime dispatches ready tasks (dependencies
+  all completed) to one-shot subagent workers through the existing
+  `SubagentRuntime` pool — dispatch, join rules, parallel and worker budgets
+  are enforced in code, not by prompt. Every dispatch and settlement is a
+  durable event (worker child session recorded as the evidence chain);
+  interrupted workers are recovered as `failed(interrupted)` on restart.
+  Completion requires one check per criterion with cited evidence
+  (`checks`); `blocked` ends a run with a lower-kebab-case code
+  (`needs-input` when the user must answer), plus `pause`/`resume`/
+  `cancel`/`clear` over REST. New crate `crates/dshx-orchestrator`, an additive public
+  `SubagentRuntime::start_one_shot_child`, three model tools
+  (`create_orchestration`, `get_orchestration`, `update_orchestration`,
+  workers never see them), a prompt section (order 2450), stream messages
+  and `GET/POST /api/sessions/:id/orchestration`, a Plugins-page switch
+  (`[codex.orchestration]`, on by default), and an orchestration bar in the
+  web UI (criteria checklist, task board with status chips, live over the
+  existing stream; German and English). Start it from the composer's +
+  menu. Partial limits retain configured defaults; restored runs wait for
+  Resume. Invalid live changes are rejected before journaling, and late
+  worker settlements cannot alter a replacement run. Integration coverage
+  includes real worker file writes and dependency reads against a mock model.
+  Stop also cancels workers while the planner is idle and prevents dispatch
+  after an aborted planner round. Only terminal updates ask for a closing message.
+
 - Add a second chat engine: the Pi coding agent (pinned 1.5.0). Pick DSH or
   Pi when starting a chat, or set a default in Settings. A Pi chat streams
   text and thinking, shows its tool rows, plan, usage, cost and compaction

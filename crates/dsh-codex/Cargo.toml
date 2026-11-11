@@ -24,6 +24,7 @@ dshx-plugins.workspace = true
 dshx-goal.workspace = true
 dshx-schedule.workspace = true
 dshx-team.workspace = true
+dshx-orchestrator.workspace = true
 # The Pi coding agent as a second chat engine.
 dshx-pi.workspace = true
 # The Aether accounts hub: `dsh-codex hub enroll` and the relay of `web`.

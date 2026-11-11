@@ -230,6 +230,14 @@ impl Runtime {
             text: browser::ROUTING.into(),
             literal: true,
         });
+        if self.automation.orchestrator().is_some() {
+            sections.push(ExtraSection {
+                name: "tools:orchestration".into(),
+                order: 2450,
+                text: dshx_orchestrator::POLICY.into(),
+                literal: true,
+            });
+        }
         sections.extend(self.mcp_prompt_sections(|s| config.mcp_availability(s).always));
         sections
     }
