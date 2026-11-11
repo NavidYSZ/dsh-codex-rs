@@ -454,7 +454,7 @@ async fn clearing_running_workers_does_not_settle_into_the_next_run() {
 #[tokio::test(flavor = "multi_thread")]
 async fn enabling_orchestration_supports_a_chat_opened_while_disabled() {
     let mock = MockDeepSeek::start().await;
-    mock.set_responder(|_| Reply::text("Progress."));
+    mock.set_responder(script);
     let home = tempfile::tempdir().unwrap();
     let ws = tempfile::tempdir().unwrap();
     let server = start(&mock, home.path());
@@ -503,17 +503,26 @@ async fn enabling_orchestration_supports_a_chat_opened_while_disabled() {
         )
         .await;
     assert_eq!(status, 200, "{info}");
-    let (status, view) = server.call(reqwest::Method::POST, &path, Some(json!({
-        "action": "create", "objective": "Continue in this chat", "limits": {"maxRounds": 1},
-        "criteria": [{"id": "done", "criterion": "Do the work"}],
-    }))).await;
+    let (status, view) = server
+        .call(
+            reqwest::Method::POST,
+            &path,
+            Some(json!({
+                "action": "create", "objective": "Produce notes.md and report.md", "criteria": [
+                    {"id": "notes", "criterion": "notes.md lists the sources"},
+                    {"id": "report", "criterion": "report.md summarizes them"},
+                ],
+            })),
+        )
+        .await;
     assert_eq!(status, 200, "{view}");
-    let blocked = server
-        .until("a planner round in the already-open chat", &path, |v| {
-            v["orchestration"]["phase"] == "blocked"
+    let completed = server
+        .until("the complete loop in the already-open chat", &path, |v| {
+            v["orchestration"]["phase"] == "complete"
         })
         .await;
-    assert_eq!(blocked["orchestration"]["roundsStarted"], 1);
+    assert_eq!(completed["orchestration"]["workersDispatched"], 2);
+    assert!(ws.path().join("report.md").is_file());
 }
 
 #[tokio::test(flavor = "multi_thread")]

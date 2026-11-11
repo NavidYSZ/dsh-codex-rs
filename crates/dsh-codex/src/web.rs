@@ -935,6 +935,7 @@ impl Backend for WebBackend {
             s.agent.config().preset != dshx_agent::Preset::Minimal,
             "orchestration runs are not part of Minimal mode; start a Standard chat"
         );
+        self.runtime.refresh_agent(&s.agent, &s.tools_version);
         // A chat may have opened while the Plugins switch was off.
         if let Some(service) = self.runtime.automation.orchestrator()
             && !service.is_attached(id)
